@@ -30,13 +30,13 @@ type Loader func(Context) ([]Item, error)
 // RootItems returns the top-level menu entries.
 func RootItems() []Item {
 	return []Item{
-		{ID: "process", Label: "Process"},
-		{ID: "clipboard", Label: "Clipboard"},
-		{ID: "keybinding", Label: "Keybinding"},
-		{ID: "command", Label: "Command"},
-		{ID: "pane", Label: "Pane"},
-		{ID: "window", Label: "Window"},
-		{ID: "session", Label: "Session"},
+		{ID: "process", Label: "process"},
+		{ID: "clipboard", Label: "clipboard"},
+		{ID: "keybinding", Label: "keybinding"},
+		{ID: "command", Label: "command"},
+		{ID: "pane", Label: "pane"},
+		{ID: "window", Label: "window"},
+		{ID: "session", Label: "session"},
 	}
 }
 

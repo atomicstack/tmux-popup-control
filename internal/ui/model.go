@@ -125,6 +125,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.loading {
 				return m, nil
 			}
+			if current := m.currentLevel(); current != nil {
+				current.setFilter("")
+			}
 			current := m.currentLevel()
 			if current == nil || len(current.items) == 0 {
 				return m, nil
@@ -204,8 +207,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the current menu state.
 func (m *Model) View() string {
 	lines := make([]styledLine, 0, 16)
-	statusLines := m.statusBanner()
-	lines = append(lines, statusLines...)
 	if m.loading {
 		label := m.pendingLabel
 		if label == "" {
@@ -217,7 +218,6 @@ func (m *Model) View() string {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: fmt.Sprintf("Loading %s...", label), style: loadingStyle})
 	} else if current := m.currentLevel(); current != nil {
-		lines = append(lines, styledLine{})
 		if len(current.items) == 0 {
 			msg := "(no entries)"
 			if current.filter != "" {
@@ -509,18 +509,6 @@ func filterItems(items []menu.Item, query string) []menu.Item {
 	return cloneItems(filtered)
 }
 
-func (m *Model) statusBanner() []styledLine {
-	warn, msg := m.hasBackendIssue()
-	if warn {
-		lines := []styledLine{{text: "✖ Backend error", style: warningIconStyle}}
-		if msg != "" {
-			lines = append(lines, styledLine{text: msg, style: warningTextStyle})
-		}
-		return lines
-	}
-	return []styledLine{{text: "✔", style: okIconStyle}}
-}
-
 func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	current := m.currentLevel()
 	if current == nil {
@@ -530,8 +518,7 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	text := current.filter
 	prompt := lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("> ")
 	if text == "" {
-		placeholder := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("(type to search)")
-		return prompt + placeholder + cursor, nil
+		return prompt + cursor, nil
 	}
 	return prompt + text + cursor, nil
 }
