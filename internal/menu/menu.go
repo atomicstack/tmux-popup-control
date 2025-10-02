@@ -21,6 +21,7 @@ type Level struct {
 // Context carries runtime data needed by loader functions.
 type Context struct {
 	SocketPath string
+	Sessions   []string
 }
 
 // Loader populates submenu entries on demand.

@@ -5,8 +5,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -36,45 +38,49 @@ var (
 	infoStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("111")))
 	footerStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("241")))
 	filterStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("150")))
+	warningIconStyle  = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true))
+	warningTextStyle  = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("208")))
 )
 
 func newLevel(id, title string, items []menu.Item) *level {
-	full := cloneItems(items)
-	return &level{
-		id:     id,
-		title:  title,
-		items:  cloneItems(full),
-		full:   full,
-		filter: "",
-	}
+	l := &level{id: id, title: title}
+	l.updateItems(items)
+	return l
 }
 
 // Model implements the Bubble Tea model for the tmux popup menu.
 type Model struct {
-	stack        []*level
-	loading      bool
-	pendingID    string
-	pendingLabel string
-	errMsg       string
-	infoMsg      string
-	width        int
-	height       int
-	fixedWidth   bool
-	fixedHeight  bool
-	ctx          menu.Context
+	stack          []*level
+	loading        bool
+	pendingID      string
+	pendingLabel   string
+	errMsg         string
+	infoMsg        string
+	width          int
+	height         int
+	fixedWidth     bool
+	fixedHeight    bool
+	ctx            menu.Context
+	backend        *backend.Watcher
+	backendState   map[backend.Kind]error
+	windows        []tmux.Window
+	panes          []tmux.Pane
+	backendLastErr string
 
 	categoryLoaders map[string]menu.Loader
 	actionLoaders   map[string]menu.Loader
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int) *Model {
-	root := newLevel("root", "", menu.RootItems())
+func NewModel(socketPath string, width, height int, watcher *backend.Watcher) *Model {
+	root := newLevel("root", "Main Menu", menu.RootItems())
 	m := &Model{
 		stack:           []*level{root},
 		ctx:             menu.Context{SocketPath: socketPath},
 		categoryLoaders: menu.CategoryLoaders(),
 		actionLoaders:   menu.ActionLoaders(),
+		backend:         watcher,
+		backendState:    map[backend.Kind]error{},
 	}
 	if width > 0 {
 		m.width = width
@@ -89,6 +95,9 @@ func NewModel(socketPath string, width, height int) *Model {
 
 // Init is part of the tea.Model interface.
 func (m *Model) Init() tea.Cmd {
+	if m.backend != nil {
+		return waitForBackendEvent(m.backend)
+	}
 	return nil
 }
 
@@ -175,6 +184,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.infoMsg = ""
 		}
+	case backendEventMsg:
+		m.applyBackendEvent(msg.event)
+		if m.backend != nil {
+			return m, waitForBackendEvent(m.backend)
+		}
+		return m, nil
+	case backendDoneMsg:
+		m.backend = nil
+		return m, nil
 	}
 	return m, nil
 }
@@ -192,6 +210,12 @@ func (m *Model) View() string {
 			filterText = "(type to search)"
 		}
 		lines = append(lines, styledLine{text: fmt.Sprintf("Filter: %s", filterText), style: filterStyle})
+	}
+	if warn, msg := m.hasBackendIssue(); warn {
+		lines = append(lines, styledLine{text: "⚠ Backend communication", style: warningIconStyle})
+		if msg != "" {
+			lines = append(lines, styledLine{text: msg, style: warningTextStyle})
+		}
 	}
 	if m.loading {
 		label := m.pendingLabel
@@ -317,13 +341,24 @@ func cloneItems(items []menu.Item) []menu.Item {
 	return dup
 }
 
+func (l *level) updateItems(items []menu.Item) {
+	l.full = cloneItems(items)
+	l.applyFilter()
+}
+
 func (l *level) setFilter(query string) {
 	l.filter = query
-	l.items = filterItems(l.full, query)
+	l.applyFilter()
+}
+
+func (l *level) applyFilter() {
+	l.items = filterItems(l.full, l.filter)
 	if len(l.items) == 0 {
 		l.cursor = 0
-	} else if l.cursor >= len(l.items) {
-		l.cursor = 0
+		return
+	}
+	if l.cursor >= len(l.items) {
+		l.cursor = len(l.items) - 1
 	}
 }
 
@@ -384,6 +419,82 @@ func stylePtr(s lipgloss.Style) *lipgloss.Style {
 	return &s
 }
 
+func waitForBackendEvent(w *backend.Watcher) tea.Cmd {
+	return func() tea.Msg {
+		evt, ok := <-w.Events()
+		if !ok {
+			return backendDoneMsg{}
+		}
+		return backendEventMsg{event: evt}
+	}
+}
+
+func (m *Model) applyBackendEvent(evt backend.Event) {
+	if m.backendState == nil {
+		m.backendState = make(map[backend.Kind]error)
+	}
+	m.backendState[evt.Kind] = evt.Err
+	if evt.Err != nil {
+		m.backendLastErr = evt.Err.Error()
+		return
+	}
+
+	switch evt.Kind {
+	case backend.KindSessions:
+		if names, ok := evt.Data.([]string); ok {
+			m.ctx.Sessions = append([]string(nil), names...)
+			if lvl := m.findLevelByID("session:switch"); lvl != nil {
+				lvl.updateItems(itemsFromStrings(names))
+				if len(lvl.items) > 0 {
+					m.infoMsg = ""
+				}
+			}
+		}
+	case backend.KindWindows:
+		if windows, ok := evt.Data.([]tmux.Window); ok {
+			m.windows = windows
+		}
+	case backend.KindPanes:
+		if panes, ok := evt.Data.([]tmux.Pane); ok {
+			m.panes = panes
+		}
+	}
+
+	if warn, _ := m.hasBackendIssue(); !warn {
+		m.backendLastErr = ""
+	}
+}
+
+func (m *Model) hasBackendIssue() (bool, string) {
+	for _, err := range m.backendState {
+		if err != nil {
+			msg := m.backendLastErr
+			if msg == "" {
+				msg = err.Error()
+			}
+			return true, msg
+		}
+	}
+	return false, ""
+}
+
+func (m *Model) findLevelByID(id string) *level {
+	for _, lvl := range m.stack {
+		if lvl.id == id {
+			return lvl
+		}
+	}
+	return nil
+}
+
+func itemsFromStrings(values []string) []menu.Item {
+	items := make([]menu.Item, 0, len(values))
+	for _, v := range values {
+		items = append(items, menu.Item{ID: v, Label: v})
+	}
+	return items
+}
+
 func filterItems(items []menu.Item, query string) []menu.Item {
 	trimmed := strings.TrimSpace(query)
 	if trimmed == "" {
@@ -411,6 +522,12 @@ func filterItems(items []menu.Item, query string) []menu.Item {
 	}
 	return cloneItems(filtered)
 }
+
+type backendEventMsg struct {
+	event backend.Event
+}
+
+type backendDoneMsg struct{}
 
 // categoryLoadedMsg mirrors the async loader response.
 type categoryLoadedMsg struct {
