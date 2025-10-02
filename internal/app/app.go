@@ -9,10 +9,10 @@ import (
 )
 
 // Run bootstraps and executes the Bubble Tea program.
-func Run(socketPath string, width, height int) error {
+func Run(socketPath string, width, height int, showFooter bool) error {
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	defer watcher.Stop()
-	model := ui.NewModel(socketPath, width, height, watcher)
+	model := ui.NewModel(socketPath, width, height, showFooter, watcher)
 	_, err := tea.NewProgram(model).Run()
 	return err
 }

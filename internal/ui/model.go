@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
@@ -29,17 +30,17 @@ type styledLine struct {
 }
 
 var (
-	titleStyle        = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true))
-	breadcrumbStyle   = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("244")))
 	loadingStyle      = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Italic(true))
-	itemStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("252")))
-	selectedItemStyle = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true))
+	itemStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
+	selectedItemStyle = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Underline(true))
 	errorStyle        = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true))
-	infoStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("111")))
-	footerStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("241")))
-	filterStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("150")))
+	infoStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
+	footerStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
+	filterStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
 	warningIconStyle  = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true))
-	warningTextStyle  = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("208")))
+	warningTextStyle  = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("214")))
+	okIconStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
+	cursorStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Blink(true))
 )
 
 func newLevel(id, title string, items []menu.Item) *level {
@@ -56,6 +57,7 @@ type Model struct {
 	pendingLabel   string
 	errMsg         string
 	infoMsg        string
+	infoExpire     time.Time
 	width          int
 	height         int
 	fixedWidth     bool
@@ -66,13 +68,14 @@ type Model struct {
 	windows        []tmux.Window
 	panes          []tmux.Pane
 	backendLastErr string
+	showFooter     bool
 
 	categoryLoaders map[string]menu.Loader
 	actionLoaders   map[string]menu.Loader
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int, watcher *backend.Watcher) *Model {
+func NewModel(socketPath string, width, height int, showFooter bool, watcher *backend.Watcher) *Model {
 	root := newLevel("root", "Main Menu", menu.RootItems())
 	m := &Model{
 		stack:           []*level{root},
@@ -81,6 +84,7 @@ func NewModel(socketPath string, width, height int, watcher *backend.Watcher) *M
 		actionLoaders:   menu.ActionLoaders(),
 		backend:         watcher,
 		backendState:    map[backend.Kind]error{},
+		showFooter:      showFooter,
 	}
 	if width > 0 {
 		m.width = width
@@ -115,7 +119,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.stack) > 1 {
 				m.stack = m.stack[:len(m.stack)-1]
 				m.errMsg = ""
-				m.infoMsg = ""
+				m.forceClearInfo()
 			}
 		case "enter":
 			if m.loading {
@@ -129,14 +133,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if current.id == "root" {
 				loader, ok := m.categoryLoaders[item.ID]
 				if !ok {
-					m.infoMsg = fmt.Sprintf("No loader defined for %s", item.Label)
+					m.setInfo(fmt.Sprintf("No loader defined for %s", item.Label))
 					return m, nil
 				}
 				m.loading = true
 				m.pendingID = item.ID
 				m.pendingLabel = item.Label
 				m.errMsg = ""
-				m.infoMsg = ""
+				m.forceClearInfo()
 				return m, m.loadMenuCmd(item.ID, item.Label, loader)
 			}
 			key := fmt.Sprintf("%s:%s", current.id, item.ID)
@@ -145,10 +149,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pendingID = key
 				m.pendingLabel = item.Label
 				m.errMsg = ""
-				m.infoMsg = ""
+				m.forceClearInfo()
 				return m, m.loadMenuCmd(key, item.Label, loader)
 			}
-			m.infoMsg = fmt.Sprintf("Selected %s (no action defined yet)", item.Label)
+			m.setInfo(fmt.Sprintf("Selected %s (no action defined yet)", item.Label))
 		case "up":
 			if current := m.currentLevel(); current != nil && current.cursor > 0 {
 				current.cursor--
@@ -180,9 +184,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		level := newLevel(msg.id, msg.title, msg.items)
 		m.stack = append(m.stack, level)
 		if len(level.items) == 0 {
-			m.infoMsg = "No entries found."
-		} else {
-			m.infoMsg = ""
+			m.setInfo("No entries found.")
+		} else if m.infoMsg != "" {
+			m.clearInfo()
 		}
 	case backendEventMsg:
 		m.applyBackendEvent(msg.event)
@@ -199,24 +203,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the current menu state.
 func (m *Model) View() string {
-	lines := []styledLine{{text: "tmux-popup-control", style: titleStyle}}
-	if trail := m.breadcrumb(); trail != "" {
-		lines = append(lines, styledLine{text: trail, style: breadcrumbStyle})
-	}
-	current := m.currentLevel()
-	if current != nil {
-		filterText := current.filter
-		if filterText == "" {
-			filterText = "(type to search)"
-		}
-		lines = append(lines, styledLine{text: fmt.Sprintf("Filter: %s", filterText), style: filterStyle})
-	}
-	if warn, msg := m.hasBackendIssue(); warn {
-		lines = append(lines, styledLine{text: "⚠ Backend communication", style: warningIconStyle})
-		if msg != "" {
-			lines = append(lines, styledLine{text: msg, style: warningTextStyle})
-		}
-	}
+	lines := make([]styledLine, 0, 16)
+	statusLines := m.statusBanner()
+	lines = append(lines, statusLines...)
 	if m.loading {
 		label := m.pendingLabel
 		if label == "" {
@@ -227,7 +216,7 @@ func (m *Model) View() string {
 		}
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: fmt.Sprintf("Loading %s...", label), style: loadingStyle})
-	} else if current != nil {
+	} else if current := m.currentLevel(); current != nil {
 		lines = append(lines, styledLine{})
 		if len(current.items) == 0 {
 			msg := "(no entries)"
@@ -237,13 +226,16 @@ func (m *Model) View() string {
 			lines = append(lines, styledLine{text: msg, style: infoStyle})
 		} else {
 			for i, item := range current.items {
-				cursor := "  "
+				prefix := "  "
+				lineText := item.Label
 				lineStyle := itemStyle
 				if i == current.cursor {
-					cursor = "› "
-					lineStyle = selectedItemStyle
+					prefix = "▌ "
+					lineText = selectedItemStyle.Render(item.Label)
+					lineStyle = nil
 				}
-				lines = append(lines, styledLine{text: fmt.Sprintf("%s%s", cursor, item.Label), style: lineStyle})
+				fullText := fmt.Sprintf("%s%s", prefix, lineText)
+				lines = append(lines, styledLine{text: fullText, style: lineStyle})
 			}
 		}
 	}
@@ -251,12 +243,17 @@ func (m *Model) View() string {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: errorStyle})
 	}
-	if m.infoMsg != "" {
+	if info := m.currentInfo(); info != "" {
 		lines = append(lines, styledLine{})
-		lines = append(lines, styledLine{text: m.infoMsg, style: infoStyle})
+		lines = append(lines, styledLine{text: info, style: infoStyle})
 	}
-	lines = append(lines, styledLine{})
-	lines = append(lines, styledLine{text: "↑/↓ move  enter select  backspace clear  esc back  ctrl+c quit", style: footerStyle})
+	if m.showFooter {
+		lines = append(lines, styledLine{})
+		lines = append(lines, styledLine{text: "↑/↓ move  enter select  backspace clear  esc back  ctrl+c quit", style: footerStyle})
+	}
+
+	promptText, _ := m.filterPrompt()
+	lines = append(lines, styledLine{text: promptText})
 
 	lines = limitHeight(lines, m.height, m.width)
 	lines = applyWidth(lines, m.width)
@@ -278,17 +275,6 @@ func (m *Model) currentLevel() *level {
 		return nil
 	}
 	return m.stack[len(m.stack)-1]
-}
-
-func (m *Model) breadcrumb() string {
-	if len(m.stack) == 0 {
-		return ""
-	}
-	titles := make([]string, len(m.stack))
-	for i, lvl := range m.stack {
-		titles[i] = lvl.title
-	}
-	return strings.Join(titles, " > ")
 }
 
 func (m *Model) handleTextInput(msg tea.KeyMsg) bool {
@@ -318,7 +304,7 @@ func (m *Model) appendToFilter(text string) bool {
 		return false
 	}
 	current.setFilter(current.filter + text)
-	m.infoMsg = ""
+	m.forceClearInfo()
 	m.errMsg = ""
 	return true
 }
@@ -330,7 +316,7 @@ func (m *Model) removeFilterRune() bool {
 	}
 	runes := []rune(current.filter)
 	current.setFilter(string(runes[:len(runes)-1]))
-	m.infoMsg = ""
+	m.forceClearInfo()
 	m.errMsg = ""
 	return true
 }
@@ -446,7 +432,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 			if lvl := m.findLevelByID("session:switch"); lvl != nil {
 				lvl.updateItems(itemsFromStrings(names))
 				if len(lvl.items) > 0 {
-					m.infoMsg = ""
+					m.clearInfo()
 				}
 			}
 		}
@@ -521,6 +507,62 @@ func filterItems(items []menu.Item, query string) []menu.Item {
 		}
 	}
 	return cloneItems(filtered)
+}
+
+func (m *Model) statusBanner() []styledLine {
+	warn, msg := m.hasBackendIssue()
+	if warn {
+		lines := []styledLine{{text: "✖ Backend error", style: warningIconStyle}}
+		if msg != "" {
+			lines = append(lines, styledLine{text: msg, style: warningTextStyle})
+		}
+		return lines
+	}
+	return []styledLine{{text: "✔", style: okIconStyle}}
+}
+
+func (m *Model) filterPrompt() (string, *lipgloss.Style) {
+	current := m.currentLevel()
+	if current == nil {
+		return ">", filterStyle
+	}
+	cursor := cursorStyle.Render("█")
+	text := current.filter
+	prompt := lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("> ")
+	if text == "" {
+		placeholder := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("(type to search)")
+		return prompt + placeholder + cursor, nil
+	}
+	return prompt + text + cursor, nil
+}
+
+func (m *Model) setInfo(message string) {
+	m.infoMsg = message
+	m.infoExpire = time.Now().Add(5 * time.Second)
+}
+
+func (m *Model) clearInfo() {
+	if m.infoMsg == "" {
+		return
+	}
+	if !m.infoExpire.IsZero() && time.Now().Before(m.infoExpire) {
+		return
+	}
+	m.infoMsg = ""
+	m.infoExpire = time.Time{}
+}
+
+func (m *Model) forceClearInfo() {
+	m.infoMsg = ""
+	m.infoExpire = time.Time{}
+}
+
+func (m *Model) currentInfo() string {
+	if m.infoMsg != "" && !m.infoExpire.IsZero() && time.Now().After(m.infoExpire) {
+		m.infoMsg = ""
+		m.infoExpire = time.Time{}
+	}
+	return m.infoMsg
 }
 
 type backendEventMsg struct {
