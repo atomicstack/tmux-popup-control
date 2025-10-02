@@ -2,28 +2,35 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
-	"sync"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const logFile = "tmux-popup-control.log"
 
+var socketFlag = flag.String("socket", "", "path to the tmux socket (overrides environment detection)")
+
 type model struct {
-	sessions []string
-	selected int
-	loading  bool
-	mu       sync.Mutex
+	sessions   []string
+	selected   int
+	loading    bool
+	socketPath string
+	errMsg     string
 }
 
-type sessionListMsg []string
+type sessionsLoadedMsg struct {
+	sessions []string
+	err      error
+}
 
 // Log errors to file
 func logError(err error) {
@@ -37,31 +44,19 @@ func logError(err error) {
 	log.Println(err)
 }
 
-func fetchSessions() ([]string, error) {
-	u, err := user.Current()
-	if err != nil {
-		return nil, err
+func fetchSessions(socketPath string) ([]string, error) {
+	args := []string{"-C", "list-sessions"}
+	if socketPath != "" {
+		args = append([]string{"-S", socketPath}, args...)
 	}
-	socketPath := filepath.Join("/tmp", fmt.Sprintf("tmux-%s", u.Uid), "default")
-	conn, err := net.Dial("unix", socketPath)
+	cmd := exec.Command("tmux", args...)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	// Enter control mode
-	_, err = fmt.Fprintf(conn, "attach-client -t=default -C\n")
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = fmt.Fprintf(conn, "list-sessions\n")
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("tmux command failed: %w (output: %s)", err, strings.TrimSpace(string(output)))
 	}
 
 	var sessions []string
-	scanner := bufio.NewScanner(conn)
+	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "session-added") || strings.HasPrefix(line, "session-renamed") ||
@@ -85,28 +80,69 @@ func fetchSessions() ([]string, error) {
 	return sessions, nil
 }
 
-func (m model) Init() bubbletea.Cmd {
-	return func() bubbletea.Msg {
-		sessions, err := fetchSessions()
+func resolveSocketPath(flagValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	if envSocket := os.Getenv("TMUX_POPUP_SOCKET"); envSocket != "" {
+		return envSocket, nil
+	}
+	if tmuxEnv := os.Getenv("TMUX"); tmuxEnv != "" {
+		parts := strings.Split(tmuxEnv, ",")
+		if len(parts) > 0 && parts[0] != "" {
+			return parts[0], nil
+		}
+	}
+	baseDir := os.Getenv("TMUX_TMPDIR")
+	if baseDir == "" {
+		baseDir = "/tmp"
+	}
+	u, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(baseDir, fmt.Sprintf("tmux-%s", u.Uid), "default"), nil
+}
+
+func fetchSessionsCmd(socketPath string) tea.Cmd {
+	return func() tea.Msg {
+		sessions, err := fetchSessions(socketPath)
 		if err != nil {
 			logError(err)
-			return sessionListMsg([]string{"<error: see log>"})
 		}
-		return sessionListMsg(sessions)
+		return sessionsLoadedMsg{sessions: sessions, err: err}
 	}
 }
 
-func (m model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
+func (m *model) Init() tea.Cmd {
+	return fetchSessionsCmd(m.socketPath)
+}
+
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case sessionListMsg:
-		m.mu.Lock()
-		m.sessions = msg
+	case sessionsLoadedMsg:
 		m.loading = false
-		m.mu.Unlock()
-	case bubbletea.KeyMsg:
+		if msg.err != nil {
+			m.errMsg = msg.err.Error()
+			m.sessions = nil
+			m.selected = 0
+			return m, nil
+		}
+		m.errMsg = ""
+		m.sessions = msg.sessions
+		if len(m.sessions) == 0 {
+			m.selected = 0
+		} else if m.selected >= len(m.sessions) {
+			m.selected = len(m.sessions) - 1
+		}
+	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			return m, bubbletea.Quit
+			return m, tea.Quit
+		case "r":
+			m.loading = true
+			m.errMsg = ""
+			return m, fetchSessionsCmd(m.socketPath)
 		case "up":
 			if m.selected > 0 {
 				m.selected--
@@ -120,14 +156,15 @@ func (m model) Update(msg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *model) View() string {
 	if m.loading {
 		return "Loading tmux sessions..."
 	}
+	if m.errMsg != "" {
+		return fmt.Sprintf("Error loading tmux sessions:\n%s\n\nPress r to retry, q to quit.\n", m.errMsg)
+	}
 	if len(m.sessions) == 0 {
-		return "No tmux sessions found."
+		return "No tmux sessions found. Press r to refresh, q to quit."
 	}
 	s := "Tmux Sessions:\n\n"
 	for i, sess := range m.sessions {
@@ -137,13 +174,20 @@ func (m model) View() string {
 		}
 		s += fmt.Sprintf("%s %s\n", cursor, sess)
 	}
-	s += "\nPress q or ctrl+c to quit.\n"
+	s += "\nUse ↑/↓ to navigate, press r to refresh, q or ctrl+c to quit.\n"
 	return s
 }
 
 func main() {
-	m := model{loading: true}
-	p := bubbletea.NewProgram(m)
+	flag.Parse()
+	socketPath, err := resolveSocketPath(*socketFlag)
+	if err != nil {
+		logError(err)
+		fmt.Fprintf(os.Stderr, "Error resolving tmux socket: %v\n", err)
+		os.Exit(1)
+	}
+	m := &model{loading: true, socketPath: socketPath}
+	p := tea.NewProgram(m)
 	if err := p.Start(); err != nil {
 		logError(err)
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
