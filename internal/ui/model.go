@@ -11,6 +11,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
@@ -27,6 +28,13 @@ type level struct {
 type styledLine struct {
 	text  string
 	style *lipgloss.Style
+}
+
+type sessionFormState struct {
+	input    textinput.Model
+	existing map[string]struct{}
+	err      string
+	ctx      menu.Context
 }
 
 var (
@@ -66,6 +74,7 @@ type Model struct {
 	panes          []tmux.Pane
 	backendLastErr string
 	showFooter     bool
+	sessionForm    *sessionFormState
 
 	categoryLoaders map[string]menu.Loader
 	actionLoaders   map[string]menu.Loader
@@ -106,6 +115,9 @@ func (m *Model) Init() tea.Cmd {
 
 // Update responds to Bubble Tea messages.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+    if handled, cmd := m.handleSessionForm(msg); handled {
+        return m, cmd
+    }
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if m.handleTextInput(msg) {
@@ -233,6 +245,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		logging.Trace("action.success", map[string]interface{}{"info": msg.Info})
 		return m, tea.Quit
+	case menu.SessionPrompt:
+		m.loading = false
+		m.pendingID = ""
+		m.pendingLabel = ""
+		m.forceClearInfo()
+		m.startSessionForm(msg)
+		return m, nil
 	case backendEventMsg:
 		m.applyBackendEvent(msg.event)
 		if m.backend != nil {
@@ -248,6 +267,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the current menu state.
 func (m *Model) View() string {
+	if m.sessionForm != nil {
+		return m.viewSessionForm()
+	}
 	lines := make([]styledLine, 0, 16)
 	if m.loading {
 		label := m.pendingLabel
@@ -477,6 +499,10 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 					m.clearInfo()
 				}
 			}
+			if m.sessionForm != nil {
+				m.sessionForm.setExisting(names)
+				m.sessionForm.validate()
+			}
 		}
 	case backend.KindWindows:
 		if windows, ok := evt.Data.([]tmux.Window); ok {
@@ -572,6 +598,96 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		return prompt + placeholder + cursor, nil
 	}
 	return prompt + text + cursor, nil
+}
+
+func (m *Model) startSessionForm(prompt menu.SessionPrompt) {
+	ti := textinput.New()
+	ti.Placeholder = "session-name"
+	ti.Focus()
+	ti.CharLimit = 64
+	state := &sessionFormState{
+		input: ti,
+		ctx:   prompt.Context,
+	}
+	state.setExisting(prompt.Context.Sessions)
+	state.validate()
+	m.sessionForm = state
+}
+
+func (m *Model) viewSessionForm() string {
+	lines := []string{
+		"Create Session",
+		"",
+		m.sessionForm.input.View(),
+	}
+	if m.sessionForm.err != "" {
+		lines = append(lines, "", errorStyle.Render(m.sessionForm.err))
+	}
+	lines = append(lines, "", "Press Enter to create. Esc to cancel.")
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) handleSessionForm(msg tea.Msg) (bool, tea.Cmd) {
+	if m.sessionForm == nil {
+		return false, nil
+	}
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEsc:
+			logging.Trace("session.new.cancel", nil)
+			m.sessionForm = nil
+			return true, nil
+		case tea.KeyEnter:
+			name := strings.TrimSpace(m.sessionForm.input.Value())
+			if err := m.sessionForm.validate(); err != "" {
+				m.sessionForm.err = err
+				return true, nil
+			}
+			logging.Trace("session.new.submit", map[string]interface{}{"name": name})
+			ctx := m.sessionForm.ctx
+			m.sessionForm = nil
+			m.loading = true
+			m.pendingID = "session:new"
+			m.pendingLabel = name
+			return true, menu.SessionCreateCommand(ctx, name)
+		default:
+			var cmd tea.Cmd
+			m.sessionForm.input, cmd = m.sessionForm.input.Update(msg)
+			m.sessionForm.err = m.sessionForm.validate()
+			return true, cmd
+		}
+	default:
+		var cmd tea.Cmd
+		m.sessionForm.input, cmd = m.sessionForm.input.Update(msg)
+		if cmd != nil {
+			return true, cmd
+		}
+		return false, nil
+	}
+}
+
+func (s *sessionFormState) setExisting(names []string) {
+	s.existing = make(map[string]struct{}, len(names))
+	for _, name := range names {
+		s.existing[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+	}
+}
+
+func (s *sessionFormState) validate() string {
+	name := strings.TrimSpace(s.input.Value())
+	if name == "" {
+		s.err = "Session name required"
+		return s.err
+	}
+	if s.existing != nil {
+		if _, ok := s.existing[strings.ToLower(name)]; ok {
+			s.err = "Session already exists"
+			return s.err
+		}
+	}
+	s.err = ""
+	return ""
 }
 
 func (m *Model) setInfo(message string) {

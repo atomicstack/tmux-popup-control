@@ -28,6 +28,13 @@ func loadSessionSwitchMenu(ctx Context) ([]Item, error) {
 	return items, nil
 }
 
+func SessionNewAction(ctx Context, item Item) tea.Cmd {
+	return func() tea.Msg {
+		logging.Trace("session.new.prompt", map[string]interface{}{"existing": len(ctx.Sessions)})
+		return SessionPrompt{Context: ctx}
+	}
+}
+
 func SessionSwitchAction(ctx Context, item Item) tea.Cmd {
 	return func() tea.Msg {
 		logging.Trace("session.switch", map[string]interface{}{"target": item.ID})
@@ -35,5 +42,15 @@ func SessionSwitchAction(ctx Context, item Item) tea.Cmd {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Switched to %s", item.Label)}
+	}
+}
+
+func SessionCreateCommand(ctx Context, name string) tea.Cmd {
+	return func() tea.Msg {
+		logging.Trace("session.new.create", map[string]interface{}{"name": name})
+		if err := tmux.NewSession(ctx.SocketPath, name); err != nil {
+			return ActionResult{Err: err}
+		}
+		return ActionResult{Info: fmt.Sprintf("Created session %s", name)}
 	}
 }
