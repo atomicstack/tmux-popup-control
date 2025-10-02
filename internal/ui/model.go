@@ -232,7 +232,7 @@ func (m *Model) View() string {
 		lines = append(lines, styledLine{text: m.infoMsg, style: infoStyle})
 	}
 	lines = append(lines, styledLine{})
-	lines = append(lines, styledLine{text: "↑/↓ move  enter select  ←/esc back  q quit", style: footerStyle})
+	lines = append(lines, styledLine{text: "↑/↓ move  enter select  backspace clear  esc back  ctrl+c quit", style: footerStyle})
 
 	lines = limitHeight(lines, m.height, m.width)
 	lines = applyWidth(lines, m.width)

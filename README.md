@@ -12,7 +12,7 @@ This project is a Bubble Tea (Charm) TUI for interacting with tmux via control m
 The repository is configured to keep Go build artifacts inside the workspace so it works cleanly in sandboxed environments. Use the supplied Makefile targets:
 
 ```sh
-make build    # builds ./...
+make build    # builds the binary ./tmux-popup-control
 make run      # runs the application
 make tidy     # refreshes go.mod/go.sum
 make fmt      # gofmt on the repository
@@ -34,4 +34,3 @@ make clean-cache
 ## Logging
 
 Errors are written to `tmux-popup-control.log` in the working directory.
-
