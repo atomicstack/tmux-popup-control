@@ -3,10 +3,12 @@ GOCACHE := $(CURDIR)/.gocache
 GOMODCACHE := $(CURDIR)/.gomodcache
 GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=off
 
+.SILENT:
+
 .PHONY: build run tidy fmt test clean-cache ensure-dirs
 
 ensure-dirs:
-	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	mkdir -p $(GOCACHE) $(GOMODCACHE)
 
 build: ensure-dirs
 	$(GO_ENV) go build -o $(BINARY) .
