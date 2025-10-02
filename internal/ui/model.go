@@ -1,0 +1,421 @@
+package ui
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/lithammer/fuzzysearch/fuzzy"
+)
+
+type level struct {
+	id     string
+	title  string
+	items  []menu.Item
+	full   []menu.Item
+	filter string
+	cursor int
+}
+
+type styledLine struct {
+	text  string
+	style *lipgloss.Style
+}
+
+var (
+	titleStyle        = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true))
+	breadcrumbStyle   = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("244")))
+	loadingStyle      = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Italic(true))
+	itemStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("252")))
+	selectedItemStyle = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Bold(true))
+	errorStyle        = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true))
+	infoStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("111")))
+	footerStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("241")))
+	filterStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("150")))
+)
+
+func newLevel(id, title string, items []menu.Item) *level {
+	full := cloneItems(items)
+	return &level{
+		id:     id,
+		title:  title,
+		items:  cloneItems(full),
+		full:   full,
+		filter: "",
+	}
+}
+
+// Model implements the Bubble Tea model for the tmux popup menu.
+type Model struct {
+	stack        []*level
+	loading      bool
+	pendingID    string
+	pendingLabel string
+	errMsg       string
+	infoMsg      string
+	width        int
+	height       int
+	fixedWidth   bool
+	fixedHeight  bool
+	ctx          menu.Context
+
+	categoryLoaders map[string]menu.Loader
+	actionLoaders   map[string]menu.Loader
+}
+
+// NewModel initialises the UI state with the root menu and configuration.
+func NewModel(socketPath string, width, height int) *Model {
+	root := newLevel("root", "", menu.RootItems())
+	m := &Model{
+		stack:           []*level{root},
+		ctx:             menu.Context{SocketPath: socketPath},
+		categoryLoaders: menu.CategoryLoaders(),
+		actionLoaders:   menu.ActionLoaders(),
+	}
+	if width > 0 {
+		m.width = width
+		m.fixedWidth = true
+	}
+	if height > 0 {
+		m.height = height
+		m.fixedHeight = true
+	}
+	return m
+}
+
+// Init is part of the tea.Model interface.
+func (m *Model) Init() tea.Cmd {
+	return nil
+}
+
+// Update responds to Bubble Tea messages.
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if m.handleTextInput(msg) {
+			return m, nil
+		}
+		switch msg.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		case "esc", "backspace", "left":
+			if len(m.stack) > 1 {
+				m.stack = m.stack[:len(m.stack)-1]
+				m.errMsg = ""
+				m.infoMsg = ""
+			}
+		case "enter":
+			if m.loading {
+				return m, nil
+			}
+			current := m.currentLevel()
+			if current == nil || len(current.items) == 0 {
+				return m, nil
+			}
+			item := current.items[current.cursor]
+			if current.id == "root" {
+				loader, ok := m.categoryLoaders[item.ID]
+				if !ok {
+					m.infoMsg = fmt.Sprintf("No loader defined for %s", item.Label)
+					return m, nil
+				}
+				m.loading = true
+				m.pendingID = item.ID
+				m.pendingLabel = item.Label
+				m.errMsg = ""
+				m.infoMsg = ""
+				return m, m.loadMenuCmd(item.ID, item.Label, loader)
+			}
+			key := fmt.Sprintf("%s:%s", current.id, item.ID)
+			if loader, ok := m.actionLoaders[key]; ok {
+				m.loading = true
+				m.pendingID = key
+				m.pendingLabel = item.Label
+				m.errMsg = ""
+				m.infoMsg = ""
+				return m, m.loadMenuCmd(key, item.Label, loader)
+			}
+			m.infoMsg = fmt.Sprintf("Selected %s (no action defined yet)", item.Label)
+		case "up":
+			if current := m.currentLevel(); current != nil && current.cursor > 0 {
+				current.cursor--
+			}
+		case "down":
+			if current := m.currentLevel(); current != nil && current.cursor < len(current.items)-1 {
+				current.cursor++
+			}
+		}
+	case tea.WindowSizeMsg:
+		if !m.fixedWidth {
+			m.width = msg.Width
+		}
+		if !m.fixedHeight {
+			m.height = msg.Height
+		}
+	case categoryLoadedMsg:
+		if msg.id != m.pendingID {
+			return m, nil
+		}
+		m.loading = false
+		m.pendingID = ""
+		m.pendingLabel = ""
+		if msg.err != nil {
+			m.errMsg = msg.err.Error()
+			return m, nil
+		}
+		m.errMsg = ""
+		level := newLevel(msg.id, msg.title, msg.items)
+		m.stack = append(m.stack, level)
+		if len(level.items) == 0 {
+			m.infoMsg = "No entries found."
+		} else {
+			m.infoMsg = ""
+		}
+	}
+	return m, nil
+}
+
+// View renders the current menu state.
+func (m *Model) View() string {
+	lines := []styledLine{{text: "tmux-popup-control", style: titleStyle}}
+	if trail := m.breadcrumb(); trail != "" {
+		lines = append(lines, styledLine{text: trail, style: breadcrumbStyle})
+	}
+	current := m.currentLevel()
+	if current != nil {
+		filterText := current.filter
+		if filterText == "" {
+			filterText = "(type to search)"
+		}
+		lines = append(lines, styledLine{text: fmt.Sprintf("Filter: %s", filterText), style: filterStyle})
+	}
+	if m.loading {
+		label := m.pendingLabel
+		if label == "" {
+			label = m.pendingID
+		}
+		if label == "" {
+			label = "items"
+		}
+		lines = append(lines, styledLine{})
+		lines = append(lines, styledLine{text: fmt.Sprintf("Loading %s...", label), style: loadingStyle})
+	} else if current != nil {
+		lines = append(lines, styledLine{})
+		if len(current.items) == 0 {
+			msg := "(no entries)"
+			if current.filter != "" {
+				msg = fmt.Sprintf("No matches for %q", current.filter)
+			}
+			lines = append(lines, styledLine{text: msg, style: infoStyle})
+		} else {
+			for i, item := range current.items {
+				cursor := "  "
+				lineStyle := itemStyle
+				if i == current.cursor {
+					cursor = "› "
+					lineStyle = selectedItemStyle
+				}
+				lines = append(lines, styledLine{text: fmt.Sprintf("%s%s", cursor, item.Label), style: lineStyle})
+			}
+		}
+	}
+	if m.errMsg != "" {
+		lines = append(lines, styledLine{})
+		lines = append(lines, styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: errorStyle})
+	}
+	if m.infoMsg != "" {
+		lines = append(lines, styledLine{})
+		lines = append(lines, styledLine{text: m.infoMsg, style: infoStyle})
+	}
+	lines = append(lines, styledLine{})
+	lines = append(lines, styledLine{text: "↑/↓ move  enter select  ←/esc back  q quit", style: footerStyle})
+
+	lines = limitHeight(lines, m.height, m.width)
+	lines = applyWidth(lines, m.width)
+	return renderLines(lines)
+}
+
+func (m *Model) loadMenuCmd(id, title string, loader menu.Loader) tea.Cmd {
+	return func() tea.Msg {
+		items, err := loader(m.ctx)
+		if err != nil {
+			logging.Error(err)
+		}
+		return categoryLoadedMsg{id: id, title: title, items: items, err: err}
+	}
+}
+
+func (m *Model) currentLevel() *level {
+	if len(m.stack) == 0 {
+		return nil
+	}
+	return m.stack[len(m.stack)-1]
+}
+
+func (m *Model) breadcrumb() string {
+	if len(m.stack) == 0 {
+		return ""
+	}
+	titles := make([]string, len(m.stack))
+	for i, lvl := range m.stack {
+		titles[i] = lvl.title
+	}
+	return strings.Join(titles, " > ")
+}
+
+func (m *Model) handleTextInput(msg tea.KeyMsg) bool {
+	if m.loading {
+		return false
+	}
+	switch msg.Type {
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		return m.removeFilterRune()
+	case tea.KeyRunes:
+		if msg.Alt {
+			return false
+		}
+		return m.appendToFilter(string(msg.Runes))
+	case tea.KeySpace:
+		return m.appendToFilter(" ")
+	}
+	return false
+}
+
+func (m *Model) appendToFilter(text string) bool {
+	if text == "" {
+		return false
+	}
+	current := m.currentLevel()
+	if current == nil {
+		return false
+	}
+	current.setFilter(current.filter + text)
+	m.infoMsg = ""
+	m.errMsg = ""
+	return true
+}
+
+func (m *Model) removeFilterRune() bool {
+	current := m.currentLevel()
+	if current == nil || current.filter == "" {
+		return false
+	}
+	runes := []rune(current.filter)
+	current.setFilter(string(runes[:len(runes)-1]))
+	m.infoMsg = ""
+	m.errMsg = ""
+	return true
+}
+
+func cloneItems(items []menu.Item) []menu.Item {
+	dup := make([]menu.Item, len(items))
+	copy(dup, items)
+	return dup
+}
+
+func (l *level) setFilter(query string) {
+	l.filter = query
+	l.items = filterItems(l.full, query)
+	if len(l.items) == 0 {
+		l.cursor = 0
+	} else if l.cursor >= len(l.items) {
+		l.cursor = 0
+	}
+}
+
+func limitHeight(lines []styledLine, height, width int) []styledLine {
+	if height <= 0 || len(lines) <= height {
+		return lines
+	}
+	if height == 1 {
+		return []styledLine{{text: truncateText("…", width)}}
+	}
+	trimmed := make([]styledLine, 0, height)
+	trimmed = append(trimmed, lines[:height-1]...)
+	trimmed = append(trimmed, styledLine{text: truncateText("…", width)})
+	return trimmed
+}
+
+func applyWidth(lines []styledLine, width int) []styledLine {
+	if width <= 0 {
+		return lines
+	}
+	out := make([]styledLine, len(lines))
+	for i, line := range lines {
+		out[i] = styledLine{
+			text:  truncateText(line.text, width),
+			style: line.style,
+		}
+	}
+	return out
+}
+
+func renderLines(lines []styledLine) string {
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		text := line.text
+		if line.style != nil {
+			text = line.style.Render(text)
+		}
+		out[i] = text
+	}
+	return strings.Join(out, "\n")
+}
+
+func truncateText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= width {
+		return text
+	}
+	if width == 1 {
+		return string(runes[:1])
+	}
+	return string(runes[:width-1]) + "…"
+}
+
+func stylePtr(s lipgloss.Style) *lipgloss.Style {
+	return &s
+}
+
+func filterItems(items []menu.Item, query string) []menu.Item {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return cloneItems(items)
+	}
+	labels := make([]string, len(items))
+	for i, item := range items {
+		labels[i] = item.Label
+	}
+	ranks := fuzzy.RankFindNormalizedFold(trimmed, labels)
+	sort.Sort(ranks)
+	filtered := make([]menu.Item, 0, len(ranks))
+	for _, rank := range ranks {
+		filtered = append(filtered, items[rank.OriginalIndex])
+	}
+	if len(filtered) == 0 {
+		lower := strings.ToLower(trimmed)
+		for _, item := range items {
+			labelLower := strings.ToLower(item.Label)
+			idLower := strings.ToLower(item.ID)
+			if strings.Contains(labelLower, lower) || strings.Contains(idLower, lower) {
+				filtered = append(filtered, item)
+			}
+		}
+	}
+	return cloneItems(filtered)
+}
+
+// categoryLoadedMsg mirrors the async loader response.
+type categoryLoadedMsg struct {
+	id    string
+	title string
+	items []menu.Item
+	err   error
+}

@@ -1,3 +1,4 @@
+BINARY := tmux-popup-control
 GOCACHE := $(CURDIR)/.gocache
 GOMODCACHE := $(CURDIR)/.gomodcache
 GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw
@@ -8,7 +9,7 @@ ensure-dirs:
 	@mkdir -p $(GOCACHE) $(GOMODCACHE)
 
 build: ensure-dirs
-	$(GO_ENV) go build ./...
+	$(GO_ENV) go build -o $(BINARY) .
 
 run: ensure-dirs
 	$(GO_ENV) go run .
@@ -21,4 +22,3 @@ tidy: ensure-dirs
 
 clean-cache:
 	rm -rf $(GOCACHE) $(GOMODCACHE)
-
