@@ -1,0 +1,28 @@
+# Go executable files
+*.exe
+*.exe~
+*.out
+
+# Binary files
+*.a
+*.o
+*.so
+
+# Go package cache
+/pkg/
+
+# Dependency directories (remove the comment below if you want to ignore these)
+# vendor/ 
+
+# IDE files
+.idea/
+.vscode/
+
+# Logs
+*.log
+
+# Test binary, build with `go test -c`
+*.test
+
+# Coverage files
+*.out
