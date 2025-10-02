@@ -37,9 +37,6 @@ var (
 	infoStyle         = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
 	footerStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
 	filterStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
-	warningIconStyle  = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Bold(true))
-	warningTextStyle  = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("214")))
-	okIconStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("249")))
 	cursorStyle       = stylePtr(lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Blink(true))
 )
 
@@ -72,6 +69,7 @@ type Model struct {
 
 	categoryLoaders map[string]menu.Loader
 	actionLoaders   map[string]menu.Loader
+	actionHandlers  map[string]menu.Action
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
@@ -82,6 +80,7 @@ func NewModel(socketPath string, width, height int, showFooter bool, watcher *ba
 		ctx:             menu.Context{SocketPath: socketPath},
 		categoryLoaders: menu.CategoryLoaders(),
 		actionLoaders:   menu.ActionLoaders(),
+		actionHandlers:  menu.ActionHandlers(),
 		backend:         watcher,
 		backendState:    map[backend.Kind]error{},
 		showFooter:      showFooter,
@@ -133,6 +132,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			item := current.items[current.cursor]
+			if handler := m.actionHandlers[current.id]; handler != nil {
+				m.loading = true
+				m.pendingID = current.id
+				m.pendingLabel = item.Label
+				m.errMsg = ""
+				m.forceClearInfo()
+				return m, handler(m.ctx, item)
+			}
 			if current.id == "root" {
 				loader, ok := m.categoryLoaders[item.ID]
 				if !ok {
@@ -157,12 +164,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.setInfo(fmt.Sprintf("Selected %s (no action defined yet)", item.Label))
 		case "up":
-			if current := m.currentLevel(); current != nil && current.cursor > 0 {
-				current.cursor--
+			if current := m.currentLevel(); current != nil {
+				if n := len(current.items); n > 0 {
+					if current.cursor > 0 {
+						current.cursor--
+					} else {
+						current.cursor = n - 1
+					}
+				}
 			}
 		case "down":
-			if current := m.currentLevel(); current != nil && current.cursor < len(current.items)-1 {
-				current.cursor++
+			if current := m.currentLevel(); current != nil {
+				if n := len(current.items); n > 0 {
+					if current.cursor < n-1 {
+						current.cursor++
+					} else {
+						current.cursor = 0
+					}
+				}
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -191,6 +210,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if m.infoMsg != "" {
 			m.clearInfo()
 		}
+	case menu.ActionResult:
+		m.loading = false
+		m.pendingID = ""
+		m.pendingLabel = ""
+		if msg.Err != nil {
+			m.errMsg = msg.Err.Error()
+			m.forceClearInfo()
+			return m, nil
+		}
+		if msg.Info != "" {
+			m.setInfo(msg.Info)
+		} else {
+			m.forceClearInfo()
+		}
+		return m, nil
 	case backendEventMsg:
 		m.applyBackendEvent(msg.event)
 		if m.backend != nil {
@@ -439,6 +473,14 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 	case backend.KindWindows:
 		if windows, ok := evt.Data.([]tmux.Window); ok {
 			m.windows = windows
+			entries := menu.WindowEntriesFromTmux(windows)
+			m.ctx.Windows = entries
+			if lvl := m.findLevelByID("window:switch"); lvl != nil {
+				lvl.updateItems(menu.WindowEntriesToItems(entries))
+			}
+			if lvl := m.findLevelByID("window:kill"); lvl != nil {
+				lvl.updateItems(menu.WindowEntriesToItems(entries))
+			}
 		}
 	case backend.KindPanes:
 		if panes, ok := evt.Data.([]tmux.Pane); ok {
@@ -518,7 +560,8 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	text := current.filter
 	prompt := lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Render("> ")
 	if text == "" {
-		return prompt + cursor, nil
+		placeholder := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render("(type to search)")
+		return prompt + placeholder + cursor, nil
 	}
 	return prompt + text + cursor, nil
 }

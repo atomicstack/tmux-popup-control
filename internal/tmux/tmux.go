@@ -136,6 +136,27 @@ func FetchPanes(socketPath string) ([]Pane, error) {
 	return panes, nil
 }
 
+func runCommand(socketPath string, args ...string) error {
+	cmd := exec.Command("tmux", buildArgs(socketPath, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("tmux %s failed: %w (output: %s)", args[0], err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func SwitchClient(socketPath, target string) error {
+	return runCommand(socketPath, "switch-client", "-t", target)
+}
+
+func SelectWindow(socketPath, target string) error {
+	return runCommand(socketPath, "select-window", "-t", target)
+}
+
+func KillWindow(socketPath, target string) error {
+	return runCommand(socketPath, "kill-window", "-t", target)
+}
+
 // ResolveSocketPath determines the tmux socket to talk to based on CLI flag,
 // env vars, or a reasonable default.
 func ResolveSocketPath(flagValue string) (string, error) {

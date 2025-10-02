@@ -3,6 +3,8 @@ package menu
 import (
 	"strings"
 	"unicode"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Item represents a selectable menu entry.
@@ -22,10 +24,25 @@ type Level struct {
 type Context struct {
 	SocketPath string
 	Sessions   []string
+	Windows    []WindowEntry
+}
+
+// WindowEntry represents a tmux window reference for menu loaders.
+type WindowEntry struct {
+	ID    string
+	Label string
 }
 
 // Loader populates submenu entries on demand.
 type Loader func(Context) ([]Item, error)
+
+type Action func(Context, Item) tea.Cmd
+
+// ActionResult communicates the outcome of executing a menu action.
+type ActionResult struct {
+	Info string
+	Err  error
+}
 
 // RootItems returns the top-level menu entries.
 func RootItems() []Item {
@@ -53,13 +70,30 @@ func CategoryLoaders() map[string]Loader {
 	}
 }
 
+// ActionHandlers maps submenu identifiers to their execution logic.
+func ActionHandlers() map[string]Action {
+	return map[string]Action{
+		"window:switch": WindowSwitchAction,
+		"window:kill":   WindowKillAction,
+	}
+}
+
 // ActionLoaders enumerates loaders for nested submenu actions.
 func ActionLoaders() map[string]Loader {
 	return map[string]Loader{
 		"session:switch": loadSessionSwitchMenu,
+		"window:switch":  loadWindowSwitchMenu,
+		"window:kill":    loadWindowKillMenu,
 	}
 }
 
+func WindowEntriesToItems(entries []WindowEntry) []Item {
+	items := make([]Item, 0, len(entries))
+	for _, entry := range entries {
+		items = append(items, Item{ID: entry.ID, Label: entry.Label})
+	}
+	return items
+}
 func menuItemsFromIDs(ids []string) []Item {
 	items := make([]Item, 0, len(ids))
 	for _, id := range ids {
