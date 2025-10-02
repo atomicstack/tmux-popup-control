@@ -22,5 +22,8 @@ fmt:
 tidy: ensure-dirs
 	$(GO_ENV) go mod tidy
 
+test: ensure-dirs
+	$(GO_ENV) go test ./...
+
 clean-cache:
 	rm -rf $(GOCACHE) $(GOMODCACHE)

@@ -22,15 +22,34 @@ type Level struct {
 
 // Context carries runtime data needed by loader functions.
 type Context struct {
-	SocketPath string
-	Sessions   []string
-	Windows    []WindowEntry
+	SocketPath           string
+	Sessions             []SessionEntry
+	Current              string
+	IncludeCurrent       bool
+	Windows              []WindowEntry
+	CurrentWindowID      string
+	CurrentWindowLabel   string
+	CurrentWindowSession string
+	WindowIncludeCurrent bool
 }
 
 // WindowEntry represents a tmux window reference for menu loaders.
 type WindowEntry struct {
-	ID    string
-	Label string
+	ID      string
+	Label   string
+	Name    string
+	Session string
+	Index   int
+	Current bool
+}
+
+// SessionEntry represents a tmux session reference for menu loaders.
+type SessionEntry struct {
+	Name     string
+	Label    string
+	Attached bool
+	Current  bool
+	Clients  []string
 }
 
 // Loader populates submenu entries on demand.
@@ -42,6 +61,14 @@ type Action func(Context, Item) tea.Cmd
 type ActionResult struct {
 	Info string
 	Err  error
+}
+
+// SessionPrompt requests interactive input for session operations.
+type SessionPrompt struct {
+	Context Context
+	Action  string
+	Target  string
+	Initial string
 }
 
 // RootItems returns the top-level menu entries.
@@ -73,8 +100,16 @@ func CategoryLoaders() map[string]Loader {
 // ActionHandlers maps submenu identifiers to their execution logic.
 func ActionHandlers() map[string]Action {
 	return map[string]Action{
+		"session:new":    SessionNewAction,
 		"session:switch": SessionSwitchAction,
+		"session:rename": SessionRenameAction,
+		"session:detach": SessionDetachAction,
+		"session:kill":   SessionKillAction,
 		"window:switch":  WindowSwitchAction,
+		"window:link":    WindowLinkAction,
+		"window:move":    WindowMoveAction,
+		"window:swap":    WindowSwapAction,
+		"window:rename":  WindowRenameAction,
 		"window:kill":    WindowKillAction,
 	}
 }
@@ -83,7 +118,14 @@ func ActionHandlers() map[string]Action {
 func ActionLoaders() map[string]Loader {
 	return map[string]Loader{
 		"session:switch": loadSessionSwitchMenu,
+		"session:rename": loadSessionRenameMenu,
+		"session:detach": loadSessionDetachMenu,
+		"session:kill":   loadSessionKillMenu,
 		"window:switch":  loadWindowSwitchMenu,
+		"window:link":    loadWindowLinkMenu,
+		"window:move":    loadWindowMoveMenu,
+		"window:swap":    loadWindowSwapMenu,
+		"window:rename":  loadWindowRenameMenu,
 		"window:kill":    loadWindowKillMenu,
 	}
 }

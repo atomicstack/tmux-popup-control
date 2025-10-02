@@ -11,30 +11,26 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
 type level struct {
-	id     string
-	title  string
-	items  []menu.Item
-	full   []menu.Item
-	filter string
-	cursor int
+	id          string
+	title       string
+	items       []menu.Item
+	full        []menu.Item
+	filter      string
+	cursor      int
+	multiSelect bool
+	selected    map[string]struct{}
+	data        interface{}
 }
 
 type styledLine struct {
-	text  string
-	style *lipgloss.Style
-}
-
-type sessionFormState struct {
-	input    textinput.Model
-	existing map[string]struct{}
-	err      string
-	ctx      menu.Context
+	text          string
+	style         *lipgloss.Style
+	highlightFrom int
 }
 
 var (
@@ -49,7 +45,7 @@ var (
 )
 
 func newLevel(id, title string, items []menu.Item) *level {
-	l := &level{id: id, title: title}
+	l := &level{id: id, title: title, cursor: -1, selected: make(map[string]struct{})}
 	l.updateItems(items)
 	return l
 }
@@ -74,7 +70,10 @@ type Model struct {
 	panes          []tmux.Pane
 	backendLastErr string
 	showFooter     bool
-	sessionForm    *sessionFormState
+	verbose        bool
+	sessionForm    *menu.SessionForm
+	windowForm     *menu.WindowRenameForm
+	pendingSwap    *menu.Item
 
 	categoryLoaders map[string]menu.Loader
 	actionLoaders   map[string]menu.Loader
@@ -82,17 +81,18 @@ type Model struct {
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int, showFooter bool, watcher *backend.Watcher) *Model {
+func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher) *Model {
 	root := newLevel("root", "Main Menu", menu.RootItems())
 	m := &Model{
 		stack:           []*level{root},
-		ctx:             menu.Context{SocketPath: socketPath},
+		ctx:             menu.Context{SocketPath: socketPath, IncludeCurrent: true, WindowIncludeCurrent: true},
 		categoryLoaders: menu.CategoryLoaders(),
 		actionLoaders:   menu.ActionLoaders(),
 		actionHandlers:  menu.ActionHandlers(),
 		backend:         watcher,
 		backendState:    map[backend.Kind]error{},
 		showFooter:      showFooter,
+		verbose:         verbose,
 	}
 	if width > 0 {
 		m.width = width
@@ -114,12 +114,22 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update responds to Bubble Tea messages.
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-    if handled, cmd := m.handleSessionForm(msg); handled {
-        return m, cmd
-    }
+	if handled, cmd := m.handleWindowForm(msg); handled {
+		return m, cmd
+	}
+	if handled, cmd := m.handleSessionForm(msg); handled {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if msg.Type == tea.KeyTab {
+			if current := m.currentLevel(); current != nil && current.multiSelect {
+				current.toggleCurrentSelection()
+				return m, nil
+			}
+		}
 		if m.handleTextInput(msg) {
 			return m, nil
 		}
@@ -127,6 +137,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "esc", "backspace", "left":
+			if current := m.currentLevel(); current != nil && current.id == "window:swap-target" {
+				m.pendingSwap = nil
+			}
 			if len(m.stack) > 1 {
 				m.stack = m.stack[:len(m.stack)-1]
 				m.errMsg = ""
@@ -148,6 +161,46 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				"filter": current.filter,
 			})
 			current.setFilter("")
+			if current.id == "window:swap-target" && m.pendingSwap != nil {
+				first := *m.pendingSwap
+				m.pendingSwap = nil
+				m.stack = m.stack[:len(m.stack)-1]
+				m.loading = true
+				m.pendingID = "window:swap"
+				m.pendingLabel = fmt.Sprintf("%s ↔ %s", first.Label, item.Label)
+				m.errMsg = ""
+				m.forceClearInfo()
+				return m, menu.WindowSwapCommand(m.ctx, first.ID, item.ID, first.Label, item.Label)
+			}
+			if current.multiSelect {
+				if selected := current.selectedItems(); len(selected) > 0 {
+					ids := make([]string, 0, len(selected))
+					labels := make([]string, 0, len(selected))
+					for _, sel := range selected {
+						ids = append(ids, sel.ID)
+						labels = append(labels, sel.Label)
+					}
+					item = menu.Item{ID: strings.Join(ids, "\n"), Label: strings.Join(labels, ", ")}
+					current.clearSelection()
+				}
+			}
+			comboKey := fmt.Sprintf("%s:%s", current.id, item.ID)
+			if loader, ok := m.actionLoaders[comboKey]; ok {
+				m.loading = true
+				m.pendingID = comboKey
+				m.pendingLabel = item.Label
+				m.errMsg = ""
+				m.forceClearInfo()
+				return m, m.loadMenuCmd(comboKey, item.Label, loader)
+			}
+			if handler := m.actionHandlers[comboKey]; handler != nil {
+				m.loading = true
+				m.pendingID = comboKey
+				m.pendingLabel = item.Label
+				m.errMsg = ""
+				m.forceClearInfo()
+				return m, handler(m.ctx, item)
+			}
 			if handler := m.actionHandlers[current.id]; handler != nil {
 				m.loading = true
 				m.pendingID = current.id
@@ -168,15 +221,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.errMsg = ""
 				m.forceClearInfo()
 				return m, m.loadMenuCmd(item.ID, item.Label, loader)
-			}
-			key := fmt.Sprintf("%s:%s", current.id, item.ID)
-			if loader, ok := m.actionLoaders[key]; ok {
-				m.loading = true
-				m.pendingID = key
-				m.pendingLabel = item.Label
-				m.errMsg = ""
-				m.forceClearInfo()
-				return m, m.loadMenuCmd(key, item.Label, loader)
 			}
 			m.setInfo(fmt.Sprintf("Selected %s (no action defined yet)", item.Label))
 		case "up":
@@ -223,6 +267,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.errMsg = ""
 		level := newLevel(msg.id, msg.title, msg.items)
 		m.stack = append(m.stack, level)
+		switch msg.id {
+		case "window:kill":
+			level.multiSelect = true
+		}
 		if len(level.items) == 0 {
 			m.setInfo("No entries found.")
 		} else if m.infoMsg != "" {
@@ -238,13 +286,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			logging.Trace("action.error", map[string]interface{}{"error": msg.Err.Error()})
 			return m, nil
 		}
-		if msg.Info != "" {
+		if msg.Info != "" && m.verbose {
 			m.setInfo(msg.Info)
 		} else {
 			m.forceClearInfo()
 		}
 		logging.Trace("action.success", map[string]interface{}{"info": msg.Info})
 		return m, tea.Quit
+	case menu.WindowPrompt:
+		m.loading = false
+		m.pendingID = ""
+		m.pendingLabel = ""
+		m.forceClearInfo()
+		m.startWindowForm(msg)
+		return m, nil
+	case menu.WindowSwapPrompt:
+		m.loading = false
+		m.pendingID = ""
+		m.pendingLabel = ""
+		m.forceClearInfo()
+		m.startWindowSwap(msg)
+		return m, nil
 	case menu.SessionPrompt:
 		m.loading = false
 		m.pendingID = ""
@@ -267,6 +329,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the current menu state.
 func (m *Model) View() string {
+	if m.windowForm != nil {
+		return m.viewWindowForm()
+	}
 	if m.sessionForm != nil {
 		return m.viewSessionForm()
 	}
@@ -289,15 +354,26 @@ func (m *Model) View() string {
 		} else {
 			for i, item := range current.items {
 				prefix := "  "
-				lineText := item.Label
 				lineStyle := itemStyle
+				selectDisplay := ""
+				if current.multiSelect {
+					mark := " "
+					if current.isSelected(item.ID) {
+						mark = "✓"
+					}
+					selectDisplay = fmt.Sprintf("[%s] ", mark)
+				}
 				if i == current.cursor {
 					prefix = "▌ "
-					lineText = selectedItemStyle.Render(item.Label)
-					lineStyle = nil
+					lineStyle = selectedItemStyle
 				}
+				lineText := selectDisplay + item.Label
 				fullText := fmt.Sprintf("%s%s", prefix, lineText)
-				lines = append(lines, styledLine{text: fullText, style: lineStyle})
+				highlightFrom := 0
+				if lineStyle == selectedItemStyle {
+					highlightFrom = len([]rune(prefix)) + len([]rune(selectDisplay))
+				}
+				lines = append(lines, styledLine{text: fullText, style: lineStyle, highlightFrom: highlightFrom})
 			}
 		}
 	}
@@ -311,7 +387,7 @@ func (m *Model) View() string {
 	}
 	if m.showFooter {
 		lines = append(lines, styledLine{})
-		lines = append(lines, styledLine{text: "↑/↓ move  enter select  backspace clear  esc back  ctrl+c quit", style: footerStyle})
+		lines = append(lines, styledLine{text: "↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit", style: footerStyle})
 	}
 
 	promptText, _ := m.filterPrompt()
@@ -391,8 +467,92 @@ func cloneItems(items []menu.Item) []menu.Item {
 	return dup
 }
 
+func (l *level) cleanupSelections() {
+	if len(l.selected) == 0 {
+		return
+	}
+	valid := make(map[string]struct{}, len(l.full))
+	for _, item := range l.full {
+		valid[item.ID] = struct{}{}
+	}
+	for id := range l.selected {
+		if _, ok := valid[id]; !ok {
+			delete(l.selected, id)
+		}
+	}
+}
+
+func (l *level) isSelected(id string) bool {
+	if l.selected == nil {
+		return false
+	}
+	_, ok := l.selected[id]
+	return ok
+}
+
+func (l *level) toggleSelection(id string) {
+	if l.selected == nil {
+		l.selected = make(map[string]struct{})
+	}
+	if _, ok := l.selected[id]; ok {
+		delete(l.selected, id)
+	} else {
+		l.selected[id] = struct{}{}
+	}
+}
+
+func (l *level) toggleCurrentSelection() {
+	if !l.multiSelect || l.cursor < 0 || l.cursor >= len(l.items) {
+		return
+	}
+	l.toggleSelection(l.items[l.cursor].ID)
+}
+
+func (l *level) clearSelection() {
+	for id := range l.selected {
+		delete(l.selected, id)
+	}
+}
+
+func (l *level) selectedItems() []menu.Item {
+	if len(l.selected) == 0 {
+		return nil
+	}
+	selected := make([]menu.Item, 0, len(l.selected))
+	for _, item := range l.items {
+		if l.isSelected(item.ID) {
+			selected = append(selected, item)
+		}
+	}
+	return selected
+}
+
+func sessionSwitchItems(ctx menu.Context) []menu.Item {
+	items := make([]menu.Item, 0, len(ctx.Sessions))
+	for _, sess := range ctx.Sessions {
+		if !ctx.IncludeCurrent && sess.Current {
+			continue
+		}
+		items = append(items, menu.Item{ID: sess.Name, Label: sess.Label})
+	}
+	return items
+}
+
+func currentWindowMenuItem(ctx menu.Context) (menu.Item, bool) {
+	id := strings.TrimSpace(ctx.CurrentWindowID)
+	if id == "" {
+		return menu.Item{}, false
+	}
+	label := strings.TrimSpace(ctx.CurrentWindowLabel)
+	if label == "" {
+		label = id
+	}
+	return menu.Item{ID: id, Label: fmt.Sprintf("[current] %s", label)}, true
+}
+
 func (l *level) updateItems(items []menu.Item) {
 	l.full = cloneItems(items)
+	l.cleanupSelections()
 	l.applyFilter()
 }
 
@@ -405,6 +565,10 @@ func (l *level) applyFilter() {
 	l.items = filterItems(l.full, l.filter)
 	if len(l.items) == 0 {
 		l.cursor = 0
+		return
+	}
+	if l.cursor < 0 {
+		l.cursor = len(l.items) - 1
 		return
 	}
 	if l.cursor >= len(l.items) {
@@ -432,8 +596,9 @@ func applyWidth(lines []styledLine, width int) []styledLine {
 	out := make([]styledLine, len(lines))
 	for i, line := range lines {
 		out[i] = styledLine{
-			text:  truncateText(line.text, width),
-			style: line.style,
+			text:          truncateText(line.text, width),
+			style:         line.style,
+			highlightFrom: line.highlightFrom,
 		}
 	}
 	return out
@@ -444,7 +609,14 @@ func renderLines(lines []styledLine) string {
 	for i, line := range lines {
 		text := line.text
 		if line.style != nil {
-			text = line.style.Render(text)
+			runes := []rune(text)
+			if line.highlightFrom <= 0 || line.highlightFrom >= len(runes) {
+				text = line.style.Render(text)
+			} else {
+				head := string(runes[:line.highlightFrom])
+				tail := string(runes[line.highlightFrom:])
+				text = head + line.style.Render(tail)
+			}
 		}
 		out[i] = text
 	}
@@ -491,29 +663,89 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 
 	switch evt.Kind {
 	case backend.KindSessions:
-		if names, ok := evt.Data.([]string); ok {
-			m.ctx.Sessions = append([]string(nil), names...)
+		if snapshot, ok := evt.Data.(tmux.SessionSnapshot); ok {
+			entries := menu.SessionEntriesFromTmux(snapshot.Sessions)
+			m.ctx.Sessions = entries
+			m.ctx.Current = snapshot.Current
+			m.ctx.IncludeCurrent = snapshot.IncludeCurrent
 			if lvl := m.findLevelByID("session:switch"); lvl != nil {
-				lvl.updateItems(itemsFromStrings(names))
+				items := sessionSwitchItems(m.ctx)
+				lvl.updateItems(items)
 				if len(lvl.items) > 0 {
 					m.clearInfo()
 				}
 			}
+			items := menu.SessionEntriesToItems(entries)
+			for _, id := range []string{"session:rename", "session:detach", "session:kill"} {
+				if lvl := m.findLevelByID(id); lvl != nil {
+					lvl.updateItems(items)
+				}
+			}
 			if m.sessionForm != nil {
-				m.sessionForm.setExisting(names)
-				m.sessionForm.validate()
+				m.sessionForm.SetSessions(entries)
 			}
 		}
 	case backend.KindWindows:
-		if windows, ok := evt.Data.([]tmux.Window); ok {
-			m.windows = windows
-			entries := menu.WindowEntriesFromTmux(windows)
+		if snapshot, ok := evt.Data.(tmux.WindowSnapshot); ok {
+			m.windows = snapshot.Windows
+			entries := menu.WindowEntriesFromTmux(snapshot.Windows)
 			m.ctx.Windows = entries
+			m.ctx.CurrentWindowID = snapshot.CurrentID
+			m.ctx.CurrentWindowLabel = snapshot.CurrentLabel
+			m.ctx.CurrentWindowSession = snapshot.CurrentSession
+			m.ctx.WindowIncludeCurrent = snapshot.IncludeCurrent
+			m.pendingSwap = nil
 			if lvl := m.findLevelByID("window:switch"); lvl != nil {
-				lvl.updateItems(menu.WindowEntriesToItems(entries))
+				items := make([]menu.Item, 0, len(entries))
+				for _, entry := range entries {
+					if entry.Current && !m.ctx.WindowIncludeCurrent {
+						continue
+					}
+					items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
+				}
+				lvl.updateItems(items)
+			}
+			if lvl := m.findLevelByID("window:rename"); lvl != nil {
+				items := menu.WindowEntriesToItems(entries)
+				if currentItem, ok := currentWindowMenuItem(m.ctx); ok {
+					items = append([]menu.Item{currentItem}, items...)
+				}
+				lvl.updateItems(items)
+			}
+			if lvl := m.findLevelByID("window:link"); lvl != nil {
+				items := make([]menu.Item, 0, len(entries))
+				for _, entry := range entries {
+					if entry.Session == m.ctx.CurrentWindowSession {
+						continue
+					}
+					items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
+				}
+				lvl.updateItems(items)
+			}
+			if lvl := m.findLevelByID("window:move"); lvl != nil {
+				items := make([]menu.Item, 0, len(entries))
+				for _, entry := range entries {
+					if entry.Session == m.ctx.CurrentWindowSession {
+						continue
+					}
+					items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
+				}
+				lvl.updateItems(items)
+			}
+			if lvl := m.findLevelByID("window:swap"); lvl != nil {
+				items := menu.WindowEntriesToItems(entries)
+				if currentItem, ok := currentWindowMenuItem(m.ctx); ok {
+					items = append([]menu.Item{currentItem}, items...)
+				}
+				lvl.updateItems(items)
 			}
 			if lvl := m.findLevelByID("window:kill"); lvl != nil {
-				lvl.updateItems(menu.WindowEntriesToItems(entries))
+				items := menu.WindowEntriesToItems(entries)
+				if currentItem, ok := currentWindowMenuItem(m.ctx); ok {
+					items = append([]menu.Item{currentItem}, items...)
+				}
+				lvl.updateItems(items)
+				lvl.multiSelect = true
 			}
 		}
 	case backend.KindPanes:
@@ -547,14 +779,6 @@ func (m *Model) findLevelByID(id string) *level {
 		}
 	}
 	return nil
-}
-
-func itemsFromStrings(values []string) []menu.Item {
-	items := make([]menu.Item, 0, len(values))
-	for _, v := range values {
-		items = append(items, menu.Item{ID: v, Label: v})
-	}
-	return items
 }
 
 func filterItems(items []menu.Item, query string) []menu.Item {
@@ -601,93 +825,120 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 }
 
 func (m *Model) startSessionForm(prompt menu.SessionPrompt) {
-	ti := textinput.New()
-	ti.Placeholder = "session-name"
-	ti.Focus()
-	ti.CharLimit = 64
-	state := &sessionFormState{
-		input: ti,
-		ctx:   prompt.Context,
+	m.sessionForm = menu.NewSessionForm(prompt)
+}
+
+func (m *Model) startWindowForm(prompt menu.WindowPrompt) {
+	m.windowForm = menu.NewWindowRenameForm(prompt)
+}
+
+func (m *Model) startWindowSwap(prompt menu.WindowSwapPrompt) {
+	label := prompt.First.Label
+	for _, entry := range m.ctx.Windows {
+		if entry.ID == prompt.First.ID {
+			label = entry.Label
+			break
+		}
 	}
-	state.setExisting(prompt.Context.Sessions)
-	state.validate()
-	m.sessionForm = state
+	items := make([]menu.Item, 0, len(m.ctx.Windows))
+	for _, entry := range m.ctx.Windows {
+		if entry.ID == prompt.First.ID {
+			continue
+		}
+		items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
+	}
+	if len(items) == 0 {
+		m.setInfo("No windows available to swap with.")
+		return
+	}
+	level := newLevel("window:swap-target", fmt.Sprintf("Swap %s with…", label), items)
+	m.pendingSwap = &menu.Item{ID: prompt.First.ID, Label: label}
+	m.stack = append(m.stack, level)
+}
+
+func (m *Model) viewWindowForm() string {
+	lines := []string{
+		m.windowForm.Title(),
+		"",
+		m.windowForm.InputView(),
+		"",
+		m.windowForm.Help(),
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *Model) viewSessionForm() string {
 	lines := []string{
-		"Create Session",
+		m.sessionForm.Title(),
 		"",
-		m.sessionForm.input.View(),
+		m.sessionForm.InputView(),
 	}
-	if m.sessionForm.err != "" {
-		lines = append(lines, "", errorStyle.Render(m.sessionForm.err))
+	if err := m.sessionForm.Error(); err != "" {
+		lines = append(lines, "", errorStyle.Render(err))
 	}
-	lines = append(lines, "", "Press Enter to create. Esc to cancel.")
+	lines = append(lines, "", m.sessionForm.Help())
 	return strings.Join(lines, "\n")
+}
+
+func (m *Model) handleWindowForm(msg tea.Msg) (bool, tea.Cmd) {
+	if m.windowForm == nil {
+		return false, nil
+	}
+	cmd, done, cancel := m.windowForm.Update(msg)
+	if cancel {
+		m.windowForm = nil
+		return true, cmd
+	}
+	if done {
+		ctx := m.windowForm.Context()
+		name := m.windowForm.Value()
+		target := m.windowForm.Target()
+		actionID := m.windowForm.ActionID()
+		pendingLabel := m.windowForm.PendingLabel()
+		m.windowForm = nil
+		m.loading = true
+		m.pendingID = actionID
+		m.pendingLabel = pendingLabel
+		if cmd == nil {
+			cmd = menu.WindowRenameCommand(ctx, target, name)
+		}
+		return true, cmd
+	}
+	if cmd != nil {
+		return true, cmd
+	}
+	return true, nil
 }
 
 func (m *Model) handleSessionForm(msg tea.Msg) (bool, tea.Cmd) {
 	if m.sessionForm == nil {
 		return false, nil
 	}
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEsc:
-			logging.Trace("session.new.cancel", nil)
-			m.sessionForm = nil
-			return true, nil
-		case tea.KeyEnter:
-			name := strings.TrimSpace(m.sessionForm.input.Value())
-			if err := m.sessionForm.validate(); err != "" {
-				m.sessionForm.err = err
-				return true, nil
-			}
-			logging.Trace("session.new.submit", map[string]interface{}{"name": name})
-			ctx := m.sessionForm.ctx
-			m.sessionForm = nil
-			m.loading = true
-			m.pendingID = "session:new"
-			m.pendingLabel = name
-			return true, menu.SessionCreateCommand(ctx, name)
-		default:
-			var cmd tea.Cmd
-			m.sessionForm.input, cmd = m.sessionForm.input.Update(msg)
-			m.sessionForm.err = m.sessionForm.validate()
-			return true, cmd
+	cmd, done, cancel := m.sessionForm.Update(msg)
+	if cancel {
+		m.sessionForm = nil
+		return true, cmd
+	}
+	if done {
+		ctx := m.sessionForm.Context()
+		name := m.sessionForm.Value()
+		target := m.sessionForm.Target()
+		actionID := m.sessionForm.ActionID()
+		pendingLabel := m.sessionForm.PendingLabel()
+		m.sessionForm = nil
+		m.loading = true
+		m.pendingID = actionID
+		m.pendingLabel = pendingLabel
+		if cmd == nil {
+			sessionCmd := menu.SessionCommandForAction(actionID, ctx, target, name)
+			cmd = sessionCmd
 		}
-	default:
-		var cmd tea.Cmd
-		m.sessionForm.input, cmd = m.sessionForm.input.Update(msg)
-		if cmd != nil {
-			return true, cmd
-		}
-		return false, nil
+		return true, cmd
 	}
-}
-
-func (s *sessionFormState) setExisting(names []string) {
-	s.existing = make(map[string]struct{}, len(names))
-	for _, name := range names {
-		s.existing[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+	if cmd != nil {
+		return true, cmd
 	}
-}
-
-func (s *sessionFormState) validate() string {
-	name := strings.TrimSpace(s.input.Value())
-	if name == "" {
-		s.err = "Session name required"
-		return s.err
-	}
-	if s.existing != nil {
-		if _, ok := s.existing[strings.ToLower(name)]; ok {
-			s.err = "Session already exists"
-			return s.err
-		}
-	}
-	s.err = ""
-	return ""
+	return true, nil
 }
 
 func (m *Model) setInfo(message string) {
