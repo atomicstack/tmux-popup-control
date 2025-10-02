@@ -29,7 +29,6 @@ func loadWindowKillMenu(ctx Context) ([]Item, error) {
 	return WindowEntriesToItems(ctx.Windows), nil
 }
 
-
 func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
 	windowID := item.ID
 	parts := strings.SplitN(windowID, ":", 2)

@@ -3,14 +3,13 @@ package tmux
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	gotmux "github.com/GianlucaP106/gotmux/gotmux"
 )
 
-// Window describes a tmux window identified by session:index.
 type Window struct {
 	ID      string
 	Session string
@@ -19,7 +18,6 @@ type Window struct {
 	Active  bool
 }
 
-// Pane describes a tmux pane identified by session:index.pane.
 type Pane struct {
 	ID      string
 	Session string
@@ -29,136 +27,108 @@ type Pane struct {
 	Active  bool
 }
 
-func buildArgs(socketPath string, args ...string) []string {
-	if socketPath == "" {
-		return args
-	}
-	return append([]string{"-S", socketPath}, args...)
-}
-
-// FetchSessions returns the list of session names.
 func FetchSessions(socketPath string) ([]string, error) {
-	args := buildArgs(socketPath, "list-sessions", "-F", "#{session_name}")
-	out, err := exec.Command("tmux", args...).CombinedOutput()
+	client, err := newTmux(socketPath)
 	if err != nil {
-		return nil, fmt.Errorf("tmux command failed: %w (output: %s)", err, strings.TrimSpace(string(out)))
+		return nil, err
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	sessions := make([]string, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			sessions = append(sessions, line)
-		}
+	sessions, err := client.ListSessions()
+	if err != nil {
+		return nil, err
 	}
-	return sessions, nil
+	out := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		out = append(out, s.Name)
+	}
+	return out, nil
 }
 
-// FetchWindows returns metadata about all tmux windows.
 func FetchWindows(socketPath string) ([]Window, error) {
-	format := "#{session_name}:#{window_index} #{window_active} #{window_name}"
-	args := buildArgs(socketPath, "list-windows", "-a", "-F", format)
-	out, err := exec.Command("tmux", args...).CombinedOutput()
+	client, err := newTmux(socketPath)
 	if err != nil {
-		return nil, fmt.Errorf("tmux list-windows failed: %w (output: %s)", err, strings.TrimSpace(string(out)))
+		return nil, err
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	windows := make([]Window, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+	windows, err := client.ListAllWindows()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Window, 0, len(windows))
+	for _, w := range windows {
+		session := firstSession(w)
+		id := w.Id
+		if session != "" {
+			id = fmt.Sprintf("%s:%d", session, w.Index)
 		}
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) < 3 {
-			continue
-		}
-		idPart := parts[0]
-		active := parts[1] == "1"
-		name := strings.TrimSpace(parts[2])
-		session, indexStr, found := strings.Cut(idPart, ":")
-		if !found {
-			continue
-		}
-		idx, _ := strconv.Atoi(indexStr)
-		windows = append(windows, Window{
-			ID:      idPart,
+		out = append(out, Window{
+			ID:      id,
 			Session: session,
-			Index:   idx,
-			Name:    name,
-			Active:  active,
+			Index:   w.Index,
+			Name:    w.Name,
+			Active:  w.Active,
 		})
 	}
-	return windows, nil
+	return out, nil
 }
 
-// FetchPanes returns metadata about all tmux panes.
 func FetchPanes(socketPath string) ([]Pane, error) {
-	format := "#{session_name}:#{window_index}.#{pane_index} #{pane_active} #{pane_title}"
-	args := buildArgs(socketPath, "list-panes", "-a", "-F", format)
-	out, err := exec.Command("tmux", args...).CombinedOutput()
+	client, err := newTmux(socketPath)
 	if err != nil {
-		return nil, fmt.Errorf("tmux list-panes failed: %w (output: %s)", err, strings.TrimSpace(string(out)))
+		return nil, err
 	}
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	panes := make([]Pane, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) < 3 {
-			continue
-		}
-		idPart := parts[0]
-		active := parts[1] == "1"
-		title := strings.TrimSpace(parts[2])
-		sessWin, paneIdxStr, found := strings.Cut(idPart, ".")
-		if !found {
-			continue
-		}
-		session, winIdxStr, found := strings.Cut(sessWin, ":")
-		if !found {
-			continue
-		}
-		paneIdx, _ := strconv.Atoi(paneIdxStr)
-		windowIdx, _ := strconv.Atoi(winIdxStr)
-		panes = append(panes, Pane{
-			ID:      idPart,
-			Session: session,
-			Window:  fmt.Sprintf("%s:%d", session, windowIdx),
-			Index:   paneIdx,
-			Title:   title,
-			Active:  active,
+	panes, err := client.ListAllPanes()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Pane, 0, len(panes))
+	for _, p := range panes {
+		out = append(out, Pane{
+			ID:     p.Id,
+			Index:  p.Index,
+			Title:  p.Title,
+			Active: p.Active,
 		})
 	}
-	return panes, nil
-}
-
-func runCommand(socketPath string, args ...string) error {
-	cmd := exec.Command("tmux", buildArgs(socketPath, args...)...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("tmux %s failed: %w (output: %s)", args[0], err, strings.TrimSpace(string(out)))
-	}
-	return nil
+	return out, nil
 }
 
 func SwitchClient(socketPath, target string) error {
-	return runCommand(socketPath, "switch-client", "-t", target)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	return client.SwitchClient(&gotmux.SwitchClientOptions{TargetSession: target})
 }
 
 func SelectWindow(socketPath, target string) error {
-	return runCommand(socketPath, "select-window", "-t", target)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	window, err := findWindow(client, target)
+	if err != nil {
+		return err
+	}
+	if window == nil {
+		return fmt.Errorf("window %s not found", target)
+	}
+	return window.Select()
 }
 
 func KillWindow(socketPath, target string) error {
-	return runCommand(socketPath, "kill-window", "-t", target)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	window, err := findWindow(client, target)
+	if err != nil {
+		return err
+	}
+	if window == nil {
+		return fmt.Errorf("window %s not found", target)
+	}
+	return window.Kill()
 }
 
-// ResolveSocketPath determines the tmux socket to talk to based on CLI flag,
-// env vars, or a reasonable default.
 func ResolveSocketPath(flagValue string) (string, error) {
 	if flagValue != "" {
 		return flagValue, nil
@@ -181,4 +151,41 @@ func ResolveSocketPath(flagValue string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(baseDir, fmt.Sprintf("tmux-%s", u.Uid), "default"), nil
+}
+
+func newTmux(socketPath string) (*gotmux.Tmux, error) {
+	if socketPath != "" {
+		return gotmux.NewTmux(socketPath)
+	}
+	return gotmux.DefaultTmux()
+}
+
+func findWindow(client *gotmux.Tmux, target string) (*gotmux.Window, error) {
+	windows, err := client.ListAllWindows()
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range windows {
+		session := firstSession(w)
+		candidates := []string{w.Id}
+		if session != "" {
+			candidates = append(candidates, fmt.Sprintf("%s:%d", session, w.Index))
+		}
+		for _, c := range candidates {
+			if c == target {
+				return w, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func firstSession(w *gotmux.Window) string {
+	if len(w.ActiveSessionsList) > 0 {
+		return w.ActiveSessionsList[0]
+	}
+	if len(w.LinkedSessionsList) > 0 {
+		return w.LinkedSessionsList[0]
+	}
+	return ""
 }
