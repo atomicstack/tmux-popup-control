@@ -124,14 +124,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.loading {
 				return m, nil
 			}
-			if current := m.currentLevel(); current != nil {
-				current.setFilter("")
-			}
 			current := m.currentLevel()
 			if current == nil || len(current.items) == 0 {
 				return m, nil
 			}
 			item := current.items[current.cursor]
+			current.setFilter("")
 			if handler := m.actionHandlers[current.id]; handler != nil {
 				m.loading = true
 				m.pendingID = current.id

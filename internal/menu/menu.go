@@ -73,8 +73,9 @@ func CategoryLoaders() map[string]Loader {
 // ActionHandlers maps submenu identifiers to their execution logic.
 func ActionHandlers() map[string]Action {
 	return map[string]Action{
-		"window:switch": WindowSwitchAction,
-		"window:kill":   WindowKillAction,
+		"session:switch": SessionSwitchAction,
+		"window:switch":  WindowSwitchAction,
+		"window:kill":    WindowKillAction,
 	}
 }
 
@@ -114,7 +115,6 @@ func prettyLabel(id string) string {
 			continue
 		}
 		runes := []rune(part)
-		runes[0] = unicode.ToUpper(runes[0])
 		for j := 1; j < len(runes); j++ {
 			runes[j] = unicode.ToLower(runes[j])
 		}
