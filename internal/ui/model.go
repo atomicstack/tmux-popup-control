@@ -129,6 +129,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			item := current.items[current.cursor]
+			logging.Trace("menu.enter", map[string]interface{}{
+				"level":  current.id,
+				"item":   item.ID,
+				"label":  item.Label,
+				"filter": current.filter,
+			})
 			current.setFilter("")
 			if handler := m.actionHandlers[current.id]; handler != nil {
 				m.loading = true
@@ -169,6 +175,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						current.cursor = n - 1
 					}
+					logging.Trace("menu.cursor", map[string]interface{}{"level": current.id, "cursor": current.cursor})
 				}
 			}
 		case "down":
@@ -179,6 +186,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						current.cursor = 0
 					}
+					logging.Trace("menu.cursor", map[string]interface{}{"level": current.id, "cursor": current.cursor})
 				}
 			}
 		}
@@ -215,6 +223,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.errMsg = msg.Err.Error()
 			m.forceClearInfo()
+			logging.Trace("action.error", map[string]interface{}{"error": msg.Err.Error()})
 			return m, nil
 		}
 		if msg.Info != "" {
@@ -222,7 +231,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.forceClearInfo()
 		}
-		return m, nil
+		logging.Trace("action.success", map[string]interface{}{"info": msg.Info})
+		return m, tea.Quit
 	case backendEventMsg:
 		m.applyBackendEvent(msg.event)
 		if m.backend != nil {
@@ -247,8 +257,6 @@ func (m *Model) View() string {
 		if label == "" {
 			label = "items"
 		}
-		lines = append(lines, styledLine{})
-		lines = append(lines, styledLine{text: fmt.Sprintf("Loading %s...", label), style: loadingStyle})
 	} else if current := m.currentLevel(); current != nil {
 		if len(current.items) == 0 {
 			msg := "(no entries)"
@@ -338,6 +346,7 @@ func (m *Model) appendToFilter(text string) bool {
 	current.setFilter(current.filter + text)
 	m.forceClearInfo()
 	m.errMsg = ""
+	logging.Trace("filter.append", map[string]interface{}{"level": current.id, "filter": current.filter})
 	return true
 }
 
@@ -350,6 +359,7 @@ func (m *Model) removeFilterRune() bool {
 	current.setFilter(string(runes[:len(runes)-1]))
 	m.forceClearInfo()
 	m.errMsg = ""
+	logging.Trace("filter.backspace", map[string]interface{}{"level": current.id, "filter": current.filter})
 	return true
 }
 

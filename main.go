@@ -15,10 +15,12 @@ var (
 	widthFlag  = flag.Int("width", 0, "desired viewport width in cells (0 uses terminal width)")
 	heightFlag = flag.Int("height", 0, "desired viewport height in rows (0 uses terminal height)")
 	footerFlag = flag.Bool("footer", false, "enable footer hint row (disabled by default)")
+	traceFlag  = flag.Bool("trace", false, "enable verbose JSON trace logging")
 )
 
 func main() {
 	flag.Parse()
+	logging.SetTraceEnabled(*traceFlag)
 
 	socketPath, err := tmux.ResolveSocketPath(*socketFlag)
 	if err != nil {

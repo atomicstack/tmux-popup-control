@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
@@ -39,6 +40,7 @@ func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
 	session := parts[0]
 	label := item.Label
 	return func() tea.Msg {
+		logging.Trace("window.switch", map[string]interface{}{"target": windowID})
 		if err := tmux.SwitchClient(ctx.SocketPath, session); err != nil {
 			return ActionResult{Err: err}
 		}
@@ -53,6 +55,7 @@ func WindowKillAction(ctx Context, item Item) tea.Cmd {
 	windowID := item.ID
 	label := item.Label
 	return func() tea.Msg {
+		logging.Trace("window.kill", map[string]interface{}{"target": windowID})
 		if err := tmux.KillWindow(ctx.SocketPath, windowID); err != nil {
 			return ActionResult{Err: err}
 		}

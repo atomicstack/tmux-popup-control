@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
@@ -29,6 +30,7 @@ func loadSessionSwitchMenu(ctx Context) ([]Item, error) {
 
 func SessionSwitchAction(ctx Context, item Item) tea.Cmd {
 	return func() tea.Msg {
+		logging.Trace("session.switch", map[string]interface{}{"target": item.ID})
 		if err := tmux.SwitchClient(ctx.SocketPath, item.ID); err != nil {
 			return ActionResult{Err: err}
 		}
