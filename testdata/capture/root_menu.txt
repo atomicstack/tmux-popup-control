@@ -1,0 +1,12 @@
+Main Menu
+
+▌ process
+  clipboard
+  keybinding
+  command
+  pane
+  window
+  session
+
+↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit
+> (type to search)█
