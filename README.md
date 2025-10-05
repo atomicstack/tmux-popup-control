@@ -1,8 +1,6 @@
 # tmux-popup-control
 
-This project is a Bubble Tea (Charm) TUI for interacting with tmux in a
-popup-pane. It's a vibe-coded re-implementation of tmux-fzf by @sainnhe
-(https://github.com/sainnhe/tmux-fzf).
+This project is a a vibe-coded re-implementation of [tmux-fzf by @sainnhe](https://github.com/sainnhe/tmux-fzf), using [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
 ## Prerequisites
 
