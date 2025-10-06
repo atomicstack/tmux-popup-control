@@ -23,7 +23,7 @@ func TestSessionSwitchItemsFiltersCurrent(t *testing.T) {
 func TestMenuHeaderRootLevel(t *testing.T) {
 	m := NewModel("", 0, 0, false, false, nil)
 	got := m.menuHeader()
-	want := "tmux_popup_control - main menu"
+	want := "main menu"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
@@ -33,7 +33,7 @@ func TestMenuHeaderNestedLevels(t *testing.T) {
 	m := NewModel("", 0, 0, false, false, nil)
 	m.stack = append(m.stack, newLevel("session", "session", nil, nil))
 	got := m.menuHeader()
-	want := "tmux_popup_control - session"
+	want := "session"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
@@ -45,7 +45,7 @@ func TestMenuHeaderDeepLevels(t *testing.T) {
 	m.stack = append(m.stack, newLevel("pane:resize", "Resize", nil, nil))
 	m.stack = append(m.stack, newLevel("pane:resize:left", "Left", nil, nil))
 	got := m.menuHeader()
-	want := "tmux_popup_control - pane→resize→left"
+	want := "pane→resize→left"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
@@ -54,7 +54,7 @@ func TestMenuHeaderDeepLevels(t *testing.T) {
 	m.stack = append(m.stack, newLevel("window", "window", nil, nil))
 	m.stack = append(m.stack, newLevel("window:swap-target", "Swap A with…", nil, nil))
 	got = m.menuHeader()
-	want = "tmux_popup_control - window→swap target"
+	want = "window→swap target"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}

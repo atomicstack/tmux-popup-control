@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -54,14 +55,7 @@ func currentWindowItem(ctx Context) (Item, bool) {
 }
 
 func loadWindowSwitchMenu(ctx Context) ([]Item, error) {
-	items := make([]Item, 0, len(ctx.Windows))
-	for _, entry := range ctx.Windows {
-		if entry.Current && !ctx.WindowIncludeCurrent {
-			continue
-		}
-		items = append(items, windowItemFromEntry(entry))
-	}
-	return items, nil
+	return WindowSwitchItems(ctx), nil
 }
 
 func loadWindowRenameMenu(ctx Context) ([]Item, error) {
@@ -79,6 +73,7 @@ func windowRenameItems(ctx Context) []Item {
 		}
 		ordered = append(ordered, entry)
 	}
+	sortWindowEntries(ordered)
 	if current != nil {
 		ordered = append([]WindowEntry{*current}, ordered...)
 	}
@@ -98,19 +93,127 @@ func windowRenameItems(ctx Context) []Item {
 		if windowID == "" {
 			windowID = fmt.Sprintf("#%d", entry.Index)
 		}
+		internalID := strings.TrimSpace(entry.InternalID)
+		if internalID == "" {
+			internalID = "-"
+		}
 		currentMark := ""
 		if entry.Current {
 			currentMark = "current"
 		}
-		rows = append(rows, []string{name, windowID, currentMark})
+		rows = append(rows, []string{name, windowID, internalID, currentMark})
 		ids = append(ids, entry.ID)
 	}
-	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignLeft})
+	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft})
 	items := make([]Item, len(aligned))
 	for i, label := range aligned {
 		items[i] = Item{ID: ids[i], Label: label}
 	}
 	return items
+}
+
+func WindowSwitchItems(ctx Context) []Item {
+	ordered := make([]WindowEntry, 0, len(ctx.Windows))
+	var current *WindowEntry
+	for _, entry := range ctx.Windows {
+		if entry.Current && !ctx.WindowIncludeCurrent {
+			continue
+		}
+		if entry.Current {
+			copy := entry
+			current = &copy
+			continue
+		}
+		ordered = append(ordered, entry)
+	}
+	sortWindowEntries(ordered)
+	if current != nil {
+		ordered = append([]WindowEntry{*current}, ordered...)
+	}
+	if len(ordered) == 0 {
+		return nil
+	}
+	rows := make([][]string, 0, len(ordered))
+	ids := make([]string, 0, len(ordered))
+	for _, entry := range ordered {
+		label := strings.TrimSpace(entry.Label)
+		label = strings.TrimPrefix(label, "[current] ")
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			name = label
+		}
+		windowID := strings.TrimSpace(entry.ID)
+		if windowID == "" {
+			windowID = fmt.Sprintf("#%d", entry.Index)
+		}
+		internalID := strings.TrimSpace(entry.InternalID)
+		if internalID == "" {
+			internalID = "-"
+		}
+		currentMark := ""
+		if entry.Current {
+			currentMark = "current"
+		}
+		rows = append(rows, []string{name, windowID, internalID, currentMark})
+		ids = append(ids, entry.ID)
+	}
+	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft})
+	items := make([]Item, len(aligned))
+	for i, label := range aligned {
+		items[i] = Item{ID: ids[i], Label: label}
+	}
+	return items
+}
+
+func sortWindowEntries(entries []WindowEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		return windowEntryLess(entries[i], entries[j])
+	})
+}
+
+func windowEntryLess(a, b WindowEntry) bool {
+	as := buildWindowOrderKey(a)
+	bs := buildWindowOrderKey(b)
+	if as.session != bs.session {
+		return as.session < bs.session
+	}
+	if as.hasIndex && bs.hasIndex && as.index != bs.index {
+		return as.index < bs.index
+	}
+	if as.hasIndex != bs.hasIndex {
+		return as.hasIndex
+	}
+	if a.Index != b.Index {
+		return a.Index < b.Index
+	}
+	return a.ID < b.ID
+}
+
+type windowOrderKey struct {
+	session  string
+	index    int
+	hasIndex bool
+}
+
+func buildWindowOrderKey(entry WindowEntry) windowOrderKey {
+	session := strings.TrimSpace(entry.Session)
+	raw := strings.TrimSpace(entry.ID)
+	parts := strings.SplitN(raw, ":", 2)
+	if session == "" && len(parts) > 0 {
+		session = strings.TrimSpace(parts[0])
+	}
+	if session == "" {
+		session = raw
+	}
+	if len(parts) == 2 {
+		if idx, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
+			return windowOrderKey{session: session, index: idx, hasIndex: true}
+		}
+	}
+	if entry.Index >= 0 {
+		return windowOrderKey{session: session, index: entry.Index, hasIndex: true}
+	}
+	return windowOrderKey{session: session}
 }
 
 func loadWindowLinkMenu(ctx Context) ([]Item, error) {
@@ -230,12 +333,13 @@ func WindowEntriesFromTmux(windows []tmux.Window) []WindowEntry {
 			label = fmt.Sprintf("%s:%d %s", w.Session, w.Index, w.Name)
 		}
 		entries = append(entries, WindowEntry{
-			ID:      id,
-			Label:   label,
-			Name:    w.Name,
-			Session: w.Session,
-			Index:   w.Index,
-			Current: w.Current,
+			ID:         id,
+			Label:      label,
+			Name:       w.Name,
+			Session:    w.Session,
+			Index:      w.Index,
+			InternalID: w.InternalID,
+			Current:    w.Current,
 		})
 	}
 	return entries

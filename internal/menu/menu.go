@@ -39,12 +39,13 @@ type Context struct {
 
 // WindowEntry represents a tmux window reference for menu loaders.
 type WindowEntry struct {
-	ID      string
-	Label   string
-	Name    string
-	Session string
-	Index   int
-	Current bool
+	ID         string
+	Label      string
+	Name       string
+	Session    string
+	Index      int
+	InternalID string
+	Current    bool
 }
 
 // PaneEntry represents a tmux pane reference for menu loaders.

@@ -16,8 +16,8 @@ func TestLoadWindowSwitchMenuFiltersCurrent(t *testing.T) {
 	ctx := Context{
 		WindowIncludeCurrent: false,
 		Windows: []WindowEntry{
-			{ID: "s1:1", Label: "s1:1 main", Current: true},
-			{ID: "s1:2", Label: "s1:2 dev"},
+			{ID: "s1:1", Label: "s1:1 main", Current: true, InternalID: "@1"},
+			{ID: "s1:2", Label: "s1:2 dev", InternalID: "@2"},
 		},
 	}
 	items, err := loadWindowSwitchMenu(ctx)
@@ -27,13 +27,16 @@ func TestLoadWindowSwitchMenuFiltersCurrent(t *testing.T) {
 	if len(items) != 1 || items[0].ID != "s1:2" {
 		t.Fatalf("unexpected items: %#v", items)
 	}
+	if !strings.Contains(items[0].Label, "s1:2") {
+		t.Fatalf("expected window id in label, got %q", items[0].Label)
+	}
 }
 
 func TestLoadWindowKillMenuIncludesCurrentMarker(t *testing.T) {
 	ctx := Context{
 		CurrentWindowID:    "s1:1",
 		CurrentWindowLabel: "s1:1 main",
-		Windows:            []WindowEntry{{ID: "s1:2", Label: "s1:2 dev"}},
+		Windows:            []WindowEntry{{ID: "s1:2", Label: "s1:2 dev", InternalID: "@2"}},
 	}
 	items, err := loadWindowKillMenu(ctx)
 	if err != nil {
@@ -47,8 +50,8 @@ func TestLoadWindowKillMenuIncludesCurrentMarker(t *testing.T) {
 func TestWindowRenameMenuTabular(t *testing.T) {
 	ctx := Context{
 		Windows: []WindowEntry{
-			{ID: "s1:1", Name: "main", Session: "s1", Index: 1, Current: true, Label: "s1:1 main"},
-			{ID: "s1:2", Name: "dev", Session: "s1", Index: 2, Label: "s1:2 dev"},
+			{ID: "s1:1", Name: "main", Session: "s1", Index: 1, Current: true, Label: "s1:1 main", InternalID: "@1"},
+			{ID: "s1:2", Name: "dev", Session: "s1", Index: 2, Label: "s1:2 dev", InternalID: "@2"},
 		},
 		CurrentWindowID:    "s1:1",
 		CurrentWindowLabel: "s1:1 main",
@@ -69,11 +72,56 @@ func TestWindowRenameMenuTabular(t *testing.T) {
 	if !strings.Contains(items[0].Label, "s1:1") {
 		t.Fatalf("expected window id in label, got %q", items[0].Label)
 	}
-	if strings.Contains(items[0].Label, "  s1 ") {
-		t.Fatalf("unexpected session column in %q", items[0].Label)
+	if !strings.Contains(items[0].Label, "@1") {
+		t.Fatalf("expected internal window id in label, got %q", items[0].Label)
 	}
-	if !strings.Contains(items[0].Label, "s1") {
-		t.Fatalf("expected session column, got %q", items[0].Label)
+	if strings.Count(items[0].Label, " ") < 3 {
+		t.Fatalf("expected tabular columns in %q", items[0].Label)
+	}
+}
+
+func TestWindowSwitchItemsTabular(t *testing.T) {
+	ctx := Context{
+		WindowIncludeCurrent: true,
+		Windows: []WindowEntry{
+			{ID: "s1:1", Name: "main", Label: "s1:1 main", Index: 1, Current: true, InternalID: "@1"},
+			{ID: "s1:2", Name: "dev", Label: "s1:2 dev", Index: 2, InternalID: "@2"},
+		},
+	}
+	items, err := loadWindowSwitchMenu(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if !strings.Contains(items[0].Label, "current") {
+		t.Fatalf("expected current marker in first label, got %q", items[0].Label)
+	}
+	if !strings.Contains(items[0].Label, "@1") {
+		t.Fatalf("expected internal id column in %q", items[0].Label)
+	}
+}
+
+func TestWindowSwitchItemsSortedBySessionAndID(t *testing.T) {
+	ctx := Context{
+		WindowIncludeCurrent: false,
+		Windows: []WindowEntry{
+			{ID: "b:3", Name: "b-3", Session: "b", Index: 3, Label: "b:3", InternalID: "@13"},
+			{ID: "a:10", Name: "a-10", Session: "a", Index: 10, Label: "a:10", InternalID: "@10"},
+			{ID: "a:2", Name: "a-2", Session: "a", Index: 2, Label: "a:2", InternalID: "@2"},
+			{ID: "a:3", Name: "a-3", Session: "a", Index: 3, Label: "a:3", InternalID: "@3"},
+		},
+	}
+	items := WindowSwitchItems(ctx)
+	if len(items) != 4 {
+		t.Fatalf("expected 4 items, got %d", len(items))
+	}
+	expected := []string{"a:2", "a:3", "a:10", "b:3"}
+	for i, id := range expected {
+		if items[i].ID != id {
+			t.Fatalf("expected %s at position %d, got %s", id, i, items[i].ID)
+		}
 	}
 }
 

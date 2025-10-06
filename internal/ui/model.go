@@ -51,7 +51,6 @@ const (
 )
 
 const (
-	menuHeaderPrefix    = "tmux_popup_control - "
 	menuHeaderSeparator = "→"
 )
 
@@ -519,7 +518,7 @@ func (m *Model) menuHeader() string {
 	if len(segments) == 0 {
 		return ""
 	}
-	return menuHeaderPrefix + strings.Join(segments, menuHeaderSeparator)
+	return strings.Join(segments, menuHeaderSeparator)
 }
 
 func (m *Model) headerSegments() []string {
@@ -1304,14 +1303,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 	if res.WindowsUpdated {
 		m.pendingWindowSwap = nil
 		if lvl := m.findLevelByID("window:switch"); lvl != nil {
-			items := make([]menu.Item, 0, len(ctx.Windows))
-			for _, entry := range ctx.Windows {
-				if entry.Current && !ctx.WindowIncludeCurrent {
-					continue
-				}
-				items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
-			}
-			lvl.updateItems(items)
+			lvl.updateItems(menu.WindowSwitchItems(ctx))
 			m.syncViewport(lvl)
 		}
 		if lvl := m.findLevelByID("window:move"); lvl != nil {

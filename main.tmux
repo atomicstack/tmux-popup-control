@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LAUNCH_SCRIPT="$CURRENT_DIR/main.sh"
-
 BINARY_PATH="$CURRENT_DIR/tmux-popup-control"
+LAUNCH_SCRIPT="$CURRENT_DIR/main.sh"
 
 if [[ ! -x "$BINARY_PATH" ]]; then
   echo "can't find binary at $BINARY_PATH, calling make build..." 1>&2

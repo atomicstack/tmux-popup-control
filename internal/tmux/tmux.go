@@ -13,13 +13,14 @@ import (
 )
 
 type Window struct {
-	ID      string
-	Session string
-	Index   int
-	Name    string
-	Active  bool
-	Label   string
-	Current bool
+	ID         string
+	Session    string
+	Index      int
+	Name       string
+	Active     bool
+	Label      string
+	Current    bool
+	InternalID string
 }
 
 type Pane struct {
@@ -135,13 +136,14 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 			displayID = fmt.Sprintf("%s:%d", session, w.Index)
 		}
 		entry := Window{
-			ID:      displayID,
-			Session: session,
-			Index:   w.Index,
-			Name:    w.Name,
-			Active:  w.Active,
-			Label:   line.label,
-			Current: session == currentSession && w.Active,
+			ID:         displayID,
+			Session:    session,
+			Index:      w.Index,
+			Name:       w.Name,
+			Active:     w.Active,
+			Label:      line.label,
+			Current:    session == currentSession && w.Active,
+			InternalID: line.windowID,
 		}
 		if entry.Current {
 			snapshot.CurrentID = entry.ID
