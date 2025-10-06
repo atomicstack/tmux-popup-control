@@ -1,4 +1,4 @@
-# tmux-popup-control
+# tmux-popup-control [BETA]
 
 This project is a a vibe-coded re-implementation of [tmux-fzf by @sainnhe](https://github.com/sainnhe/tmux-fzf), using [Bubble Tea](https://github.com/charmbracelet/bubbletea).
 
