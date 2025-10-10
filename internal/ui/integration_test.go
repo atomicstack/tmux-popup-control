@@ -40,7 +40,7 @@ func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {
 
 	// Navigate into the window menu from the root menu.
 	root := harness.Model().stack[0]
-	root.cursor = root.indexOf("window")
+	root.Cursor = root.IndexOf("window")
 	harness.Send(tea.KeyMsg{Type: tea.KeyEnter})
 
 	ctx := harness.Model().menuContext()
@@ -53,7 +53,7 @@ func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {
 	}
 	node, _ := harness.Model().registry.Find("window:switch")
 	level := newLevel("window:switch", "switch", items, node)
-	level.cursor = 0
+	level.Cursor = 0
 	harness.Model().stack = append(harness.Model().stack, level)
 	harness.Model().applyNodeSettings(level)
 	harness.Model().syncViewport(level)

@@ -24,7 +24,7 @@ func TestSessionSwitchItemsFiltersCurrent(t *testing.T) {
 func TestMenuHeaderRootLevel(t *testing.T) {
 	m := NewModel("", 0, 0, false, false, nil, "")
 	got := m.menuHeader()
-	want := "main menu"
+	want := defaultRootTitle
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
@@ -63,7 +63,7 @@ func TestMenuHeaderDeepLevels(t *testing.T) {
 
 func TestRootMenuOverrideSetsInitialLevel(t *testing.T) {
 	m := NewModel("", 0, 0, false, false, nil, "window")
-	if got := m.stack[0].id; got != "window" {
+	if got := m.stack[0].ID; got != "window" {
 		t.Fatalf("expected root id window, got %s", got)
 	}
 	if m.rootMenuID != "window" {
@@ -84,7 +84,7 @@ func TestRootMenuOverrideIncludesRootInHeaderBreadcrumb(t *testing.T) {
 
 func TestInvalidRootMenuFallsBackToDefault(t *testing.T) {
 	m := NewModel("", 0, 0, false, false, nil, "does-not-exist")
-	if got := m.stack[0].id; got != "root" {
+	if got := m.stack[0].ID; got != "root" {
 		t.Fatalf("expected default root id, got %s", got)
 	}
 	if m.rootMenuID != "" {
@@ -108,19 +108,19 @@ func TestCurrentWindowMenuItem(t *testing.T) {
 
 func TestLevelToggleSelection(t *testing.T) {
 	lvl := newLevel("test", "Test", []menu.Item{{ID: "a"}, {ID: "b"}}, nil)
-	lvl.multiSelect = true
-	lvl.cursor = 0
-	lvl.toggleCurrentSelection()
-	if len(lvl.selected) != 1 || !lvl.isSelected("a") {
-		t.Fatalf("expected first item selected, got %#v", lvl.selected)
+	lvl.MultiSelect = true
+	lvl.Cursor = 0
+	lvl.ToggleCurrentSelection()
+	if len(lvl.Selected) != 1 || !lvl.IsSelected("a") {
+		t.Fatalf("expected first item selected, got %#v", lvl.Selected)
 	}
-	lvl.cursor = 1
-	lvl.toggleCurrentSelection()
-	if len(lvl.selected) != 2 {
-		t.Fatalf("expected two selections, got %#v", lvl.selected)
+	lvl.Cursor = 1
+	lvl.ToggleCurrentSelection()
+	if len(lvl.Selected) != 2 {
+		t.Fatalf("expected two selections, got %#v", lvl.Selected)
 	}
-	lvl.toggleCurrentSelection()
-	if lvl.isSelected("b") {
+	lvl.ToggleCurrentSelection()
+	if lvl.IsSelected("b") {
 		t.Fatalf("expected deselection of second item")
 	}
 }
@@ -131,65 +131,65 @@ func TestLevelCursorPaging(t *testing.T) {
 		items[i] = menu.Item{ID: fmt.Sprintf("item-%d", i)}
 	}
 	lvl := newLevel("test", "Test", items, nil)
-	lvl.cursor = 0
-	if !lvl.moveCursorPageDown(5) || lvl.cursor != 5 {
-		t.Fatalf("expected cursor at 5, got %d", lvl.cursor)
+	lvl.Cursor = 0
+	if !lvl.MoveCursorPageDown(5) || lvl.Cursor != 5 {
+		t.Fatalf("expected cursor at 5, got %d", lvl.Cursor)
 	}
-	if !lvl.moveCursorPageDown(5) || lvl.cursor != 10 {
-		t.Fatalf("expected cursor at 10, got %d", lvl.cursor)
+	if !lvl.MoveCursorPageDown(5) || lvl.Cursor != 10 {
+		t.Fatalf("expected cursor at 10, got %d", lvl.Cursor)
 	}
-	if !lvl.moveCursorPageDown(5) || lvl.cursor != 11 {
-		t.Fatalf("expected cursor at end, got %d", lvl.cursor)
+	if !lvl.MoveCursorPageDown(5) || lvl.Cursor != 11 {
+		t.Fatalf("expected cursor at end, got %d", lvl.Cursor)
 	}
-	if lvl.moveCursorPageDown(5) {
+	if lvl.MoveCursorPageDown(5) {
 		t.Fatalf("expected no movement past end")
 	}
-	if !lvl.moveCursorPageUp(5) || lvl.cursor != 6 {
-		t.Fatalf("expected cursor at 6, got %d", lvl.cursor)
+	if !lvl.MoveCursorPageUp(5) || lvl.Cursor != 6 {
+		t.Fatalf("expected cursor at 6, got %d", lvl.Cursor)
 	}
-	if !lvl.moveCursorPageUp(5) || lvl.cursor != 1 {
-		t.Fatalf("expected cursor at 1, got %d", lvl.cursor)
+	if !lvl.MoveCursorPageUp(5) || lvl.Cursor != 1 {
+		t.Fatalf("expected cursor at 1, got %d", lvl.Cursor)
 	}
-	if !lvl.moveCursorPageUp(5) || lvl.cursor != 0 {
-		t.Fatalf("expected cursor at start, got %d", lvl.cursor)
+	if !lvl.MoveCursorPageUp(5) || lvl.Cursor != 0 {
+		t.Fatalf("expected cursor at start, got %d", lvl.Cursor)
 	}
-	if lvl.moveCursorPageUp(5) {
+	if lvl.MoveCursorPageUp(5) {
 		t.Fatalf("expected no movement past start")
 	}
-	lvl.cursor = 2
-	if !lvl.moveCursorPageDown(0) || lvl.cursor != len(items)-1 {
-		t.Fatalf("expected cursor jump to end with unknown page size, got %d", lvl.cursor)
+	lvl.Cursor = 2
+	if !lvl.MoveCursorPageDown(0) || lvl.Cursor != len(items)-1 {
+		t.Fatalf("expected cursor jump to end with unknown page size, got %d", lvl.Cursor)
 	}
 }
 
 func TestLevelCursorHomeEnd(t *testing.T) {
 	lvl := newLevel("test", "Test", []menu.Item{{ID: "a"}, {ID: "b"}, {ID: "c"}}, nil)
-	lvl.cursor = 1
-	if !lvl.moveCursorHome() || lvl.cursor != 0 {
-		t.Fatalf("expected home to set cursor to 0, got %d", lvl.cursor)
+	lvl.Cursor = 1
+	if !lvl.MoveCursorHome() || lvl.Cursor != 0 {
+		t.Fatalf("expected home to set cursor to 0, got %d", lvl.Cursor)
 	}
-	if lvl.moveCursorHome() {
+	if lvl.MoveCursorHome() {
 		t.Fatalf("expected no movement when already at home")
 	}
-	if !lvl.moveCursorEnd() || lvl.cursor != 2 {
-		t.Fatalf("expected end to set cursor to last item, got %d", lvl.cursor)
+	if !lvl.MoveCursorEnd() || lvl.Cursor != 2 {
+		t.Fatalf("expected end to set cursor to last item, got %d", lvl.Cursor)
 	}
-	if lvl.moveCursorEnd() {
+	if lvl.MoveCursorEnd() {
 		t.Fatalf("expected no movement when already at end")
 	}
 	empty := newLevel("empty", "Empty", nil, nil)
-	empty.cursor = 5
-	if empty.moveCursorHome() {
+	empty.Cursor = 5
+	if empty.MoveCursorHome() {
 		t.Fatalf("expected no movement for empty menu")
 	}
-	if empty.cursor != 0 {
-		t.Fatalf("expected empty menu cursor reset to 0, got %d", empty.cursor)
+	if empty.Cursor != 0 {
+		t.Fatalf("expected empty menu cursor reset to 0, got %d", empty.Cursor)
 	}
-	if empty.moveCursorEnd() {
+	if empty.MoveCursorEnd() {
 		t.Fatalf("expected no movement for empty menu on end")
 	}
-	if empty.cursor != 0 {
-		t.Fatalf("expected empty menu cursor stay at 0, got %d", empty.cursor)
+	if empty.Cursor != 0 {
+		t.Fatalf("expected empty menu cursor stay at 0, got %d", empty.Cursor)
 	}
 }
 
@@ -202,10 +202,10 @@ func TestStartPaneSwapAddsLevel(t *testing.T) {
 		t.Fatalf("expected level push, got %d", len(m.stack))
 	}
 	lvl := m.stack[len(m.stack)-1]
-	if lvl.id != "pane:swap-target" {
-		t.Fatalf("unexpected level id %s", lvl.id)
+	if lvl.ID != "pane:swap-target" {
+		t.Fatalf("unexpected level id %s", lvl.ID)
 	}
-	if len(lvl.items) != 1 || lvl.items[0].ID != "b" {
-		t.Fatalf("unexpected items %#v", lvl.items)
+	if len(lvl.Items) != 1 || lvl.Items[0].ID != "b" {
+		t.Fatalf("unexpected items %#v", lvl.Items)
 	}
 }
