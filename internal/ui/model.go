@@ -1718,6 +1718,14 @@ func bestMatchIndex(items []menu.Item, query string) int {
 	}
 	lower := strings.ToLower(trimmed)
 	for i, item := range items {
+		if strings.EqualFold(item.Label, trimmed) {
+			return i
+		}
+		if strings.EqualFold(item.ID, trimmed) {
+			return i
+		}
+	}
+	for i, item := range items {
 		labelLower := strings.ToLower(item.Label)
 		if strings.HasPrefix(labelLower, lower) {
 			return i
@@ -1726,6 +1734,18 @@ func bestMatchIndex(items []menu.Item, query string) int {
 	for i, item := range items {
 		idLower := strings.ToLower(item.ID)
 		if strings.HasPrefix(idLower, lower) {
+			return i
+		}
+	}
+	for i, item := range items {
+		idLower := strings.ToLower(item.ID)
+		if strings.Contains(idLower, lower) {
+			return i
+		}
+	}
+	for i, item := range items {
+		labelLower := strings.ToLower(item.Label)
+		if strings.Contains(labelLower, lower) {
 			return i
 		}
 	}
