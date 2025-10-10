@@ -8,6 +8,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// CommandPromptMsg requests that the UI open the tmux command prompt with an initial value.
+type CommandPromptMsg struct {
+	Command string
+	Label   string
+}
+
 func loadCommandMenu(Context) ([]Item, error) {
 	cmd := exec.Command("tmux", "list-commands")
 	output, err := cmd.CombinedOutput()
@@ -34,10 +40,23 @@ func CommandAction(ctx Context, item Item) tea.Cmd {
 	if command == "" {
 		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid command selection")} }
 	}
-	return func() tea.Msg {
-		if err := runTmuxCommand(ctx.SocketPath, "command-prompt", "-I", command); err != nil {
-			return ActionResult{Err: fmt.Errorf("tmux command-prompt failed: %w", err)}
-		}
-		return ActionResult{Info: fmt.Sprintf("Prompted command %s", command)}
+	initial := command
+	if !strings.HasSuffix(initial, " ") {
+		initial += " "
 	}
+	return func() tea.Msg {
+		return CommandPromptMsg{Command: initial, Label: item.Label}
+	}
+}
+
+// CommandPrompt opens the tmux command prompt with the provided initial text.
+// The command executes out-of-band to allow the popup to close cleanly first.
+func CommandPrompt(socketPath, initial string) error {
+	script := strings.Builder{}
+	script.WriteString("sleep 0.03; tmux command-prompt")
+	if strings.TrimSpace(initial) != "" {
+		script.WriteString(" -I ")
+		script.WriteString(fmt.Sprintf("%q", initial))
+	}
+	return runTmuxCommand(socketPath, "run-shell", "-b", script.String())
 }

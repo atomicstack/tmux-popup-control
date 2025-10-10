@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CMD="$CURRENT_DIR/tmux-popup-control"
 
-tmux display-popup -E $CURRENT_DIR/tmux-popup-control --trace
+tmux display-popup -E "$CMD" --trace "$@"
+status=$?
+if [ "$status" -eq 129 ]; then
+  exit 0
+fi
+exit "$status"
 
 # [[ -z "$TMUX_FZF_ORDER" ]] && TMUX_FZF_ORDER="copy-mode|session|window|pane|command|keybinding|clipboard|process"
 # source "$CURRENT_DIR/scripts/.envs"
@@ -21,4 +27,3 @@ tmux display-popup -E $CURRENT_DIR/tmux-popup-control --trace
 # item=$(echo "${items_origin}" | $TMUX_FZF_BIN $TMUX_FZF_OPTIONS )
 # [[ "$item" == "[cancel]" || -z "$item" ]] && exit
 # tmux run-shell -b "$CURRENT_DIR/scripts/${item}.sh"
-

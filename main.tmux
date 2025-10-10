@@ -18,4 +18,7 @@ fi
 # fi
 
 [[ -z "$TMUX_POPUP_CONTROL_LAUNCH_KEY" ]] && TMUX_POPUP_CONTROL_LAUNCH_KEY="F"
-tmux bind-key -N "Launches $LAUNCH_SCRIPT" -T prefix "$TMUX_POPUP_CONTROL_LAUNCH_KEY" run-shell -b "$LAUNCH_SCRIPT"
+tmux bind-key -T prefix -N "Launches $(basename $BINARY_PATH) via $LAUNCH_SCRIPT" "$TMUX_POPUP_CONTROL_LAUNCH_KEY" run-shell -b "$LAUNCH_SCRIPT"
+
+[[ -z "$TMUX_POPUP_CONTROL_KEY_MENU_COMMAND" ]] && TMUX_POPUP_CONTROL_KEY_MENU_COMMAND=":"
+tmux bind-key -T prefix -N "Launches $(basename $BINARY_PATH)'s command menu" "$TMUX_POPUP_CONTROL_KEY_MENU_COMMAND" run-shell -b "$LAUNCH_SCRIPT --root-menu=command"

@@ -34,7 +34,7 @@ var defaultStyles = Styles{
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 	),
 	Header: ptr(
-		lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true),
 	),
 	Footer: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),

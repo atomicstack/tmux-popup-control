@@ -53,6 +53,7 @@ const (
 
 const (
 	menuHeaderSeparator = "→"
+	defaultRootTitle    = "main menu"
 )
 
 var styles = theme.Default()
@@ -94,6 +95,8 @@ type Model struct {
 	registry   *menu.Registry
 	bus        *command.Bus
 	mode       Mode
+	rootMenuID string
+	rootTitle  string
 	socketPath string
 	sessions   state.SessionStore
 	windows    state.WindowStore
@@ -102,7 +105,7 @@ type Model struct {
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher) *Model {
+func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string) *Model {
 	registry := menu.BuildRegistry()
 	sessions := state.NewSessionStore()
 	sessions.SetIncludeCurrent(true)
@@ -121,6 +124,7 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 		showFooter:   showFooter,
 		verbose:      verbose,
 		mode:         ModeMenu,
+		rootTitle:    defaultRootTitle,
 		socketPath:   socketPath,
 		sessions:     sessions,
 		windows:      windows,
@@ -146,6 +150,7 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 	}
 	c.SetChar(" ")
 	m.filterCursor = c
+	m.applyRootMenuOverride(rootMenu)
 	return m
 }
 
@@ -488,6 +493,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case backendDoneMsg:
 		m.backend = nil
 		return m, m.finishUpdate(cmds)
+	case menu.CommandPromptMsg:
+		m.loading = false
+		m.pendingID = ""
+		m.pendingLabel = ""
+		m.forceClearInfo()
+		m.errMsg = ""
+		if err := menu.CommandPrompt(m.socketPath, msg.Command); err != nil {
+			m.errMsg = err.Error()
+			events.Action.Error(err)
+			return m, m.finishUpdate(cmds)
+		}
+		info := fmt.Sprintf("Prompted command %s", strings.TrimSpace(msg.Command))
+		if m.verbose && info != "" {
+			m.setInfo(info)
+		}
+		events.Action.Success(info)
+		cmds = append(cmds, tea.Quit)
+		return m, m.finishUpdate(cmds)
 	}
 	return m, m.finishUpdate(cmds)
 }
@@ -607,10 +630,17 @@ func (m *Model) headerSegments() []string {
 	if depth == 0 {
 		return nil
 	}
-	if depth == 1 {
-		return []string{"main menu"}
+	root := strings.TrimSpace(m.rootTitle)
+	if root == "" {
+		root = defaultRootTitle
 	}
-	segments := make([]string, 0, depth-1)
+	if depth == 1 {
+		return []string{root}
+	}
+	segments := make([]string, 0, depth)
+	if m.rootMenuID != "" {
+		segments = append(segments, root)
+	}
 	for i := 1; i < depth; i++ {
 		segment := headerSegmentForLevel(m.stack[i])
 		if segment == "" {
@@ -619,7 +649,7 @@ func (m *Model) headerSegments() []string {
 		segments = append(segments, segment)
 	}
 	if len(segments) == 0 {
-		return []string{"main menu"}
+		return []string{root}
 	}
 	return segments
 }
@@ -672,6 +702,57 @@ func (m *Model) applyNodeSettings(l *level) {
 	if l.node != nil {
 		l.multiSelect = l.node.MultiSelect
 	}
+}
+
+func (m *Model) applyRootMenuOverride(requested string) {
+	trimmed := strings.TrimSpace(requested)
+	if trimmed == "" {
+		m.rootMenuID = ""
+		m.rootTitle = defaultRootTitle
+		return
+	}
+	if m.registry == nil {
+		return
+	}
+	id := strings.ToLower(trimmed)
+	node, ok := m.registry.Find(id)
+	if !ok {
+		m.errMsg = fmt.Sprintf("Unknown root menu %q", trimmed)
+		m.rootMenuID = ""
+		m.rootTitle = defaultRootTitle
+		return
+	}
+
+	items := []menu.Item(nil)
+	if node.Loader != nil {
+		loaded, err := node.Loader(m.menuContext())
+		if err != nil {
+			logging.Error(err)
+			m.errMsg = fmt.Sprintf("Failed to load %s menu: %v", id, err)
+		} else {
+			items = loaded
+			m.errMsg = ""
+		}
+	} else {
+		m.errMsg = ""
+	}
+
+	title := headerSegmentCleaner.Replace(node.ID)
+	title = strings.TrimSpace(title)
+	root := newLevel(node.ID, title, items, node)
+	m.applyNodeSettings(root)
+	m.syncViewport(root)
+	m.stack = []*level{root}
+	m.rootMenuID = node.ID
+
+	segment := headerSegmentForLevel(root)
+	if segment == "" {
+		segment = title
+	}
+	if segment == "" {
+		segment = node.ID
+	}
+	m.rootTitle = segment
 }
 
 func (m *Model) currentLevel() *level {

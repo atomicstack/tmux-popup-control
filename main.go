@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/atomicstack/tmux-popup-control/internal/app"
 	"github.com/atomicstack/tmux-popup-control/internal/config"
@@ -12,6 +14,7 @@ import (
 )
 
 func main() {
+	ensureZeroExitOnHangup()
 	runtimeCfg := config.MustLoad()
 	if err := config.Validate(runtimeCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
@@ -27,6 +30,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func ensureZeroExitOnHangup() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGHUP)
+	go func() {
+		for range ch {
+			os.Exit(0)
+		}
+	}()
 }
 
 func traceStartup(cfg config.Config) {

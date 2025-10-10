@@ -36,6 +36,7 @@ const (
 	envVerbose    = "TMUX_POPUP_CONTROL_VERBOSE"
 	envTrace      = "TMUX_POPUP_CONTROL_TRACE"
 	envLogFile    = "TMUX_POPUP_CONTROL_LOG_FILE"
+	envRootMenu   = "TMUX_POPUP_CONTROL_ROOT_MENU"
 )
 
 // Load parses configuration from CLI arguments and environment variables.
@@ -57,6 +58,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	trace := fs.Bool("trace", envOrBool(env, envTrace, false), "enable verbose JSON trace logging")
 	verbose := fs.Bool("verbose", envOrBool(env, envVerbose, false), "print success messages for actions")
 	logFile := fs.String("log-file", envOrDefault(env, envLogFile, ""), "path to the log file")
+	rootMenu := fs.String("root-menu", envOrDefault(env, envRootMenu, ""), "open directly into the specified menu path")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -76,6 +78,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			Height:     *height,
 			ShowFooter: *footer,
 			Verbose:    *verbose,
+			RootMenu:   strings.TrimSpace(*rootMenu),
 		},
 		Logging: Logging{
 			FilePath: *logFile,
@@ -85,13 +88,14 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			Verbose: *verbose,
 		},
 		Flags: map[string]string{
-			"socket":  *socket,
-			"width":   strconv.Itoa(*width),
-			"height":  strconv.Itoa(*height),
-			"footer":  strconv.FormatBool(*footer),
-			"trace":   strconv.FormatBool(*trace),
-			"verbose": strconv.FormatBool(*verbose),
-			"logFile": *logFile,
+			"socket":   *socket,
+			"width":    strconv.Itoa(*width),
+			"height":   strconv.Itoa(*height),
+			"footer":   strconv.FormatBool(*footer),
+			"trace":    strconv.FormatBool(*trace),
+			"verbose":  strconv.FormatBool(*verbose),
+			"logFile":  *logFile,
+			"rootMenu": strings.TrimSpace(*rootMenu),
 		},
 		Args: append([]string(nil), args...),
 	}

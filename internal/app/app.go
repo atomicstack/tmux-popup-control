@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,6 +18,7 @@ type Config struct {
 	Height     int
 	ShowFooter bool
 	Verbose    bool
+	RootMenu   string
 }
 
 // Run bootstraps and executes the Bubble Tea program.
@@ -27,8 +29,11 @@ func Run(cfg Config) error {
 	}
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	defer watcher.Stop()
-	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher)
+	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = program.Run()
+	if errors.Is(err, tea.ErrProgramKilled) {
+		return nil
+	}
 	return err
 }

@@ -32,6 +32,9 @@ make clean-cache
 
 - Specify a tmux socket explicitly with `--socket /path/to/socket`.
 - Alternatively set `TMUX_POPUP_SOCKET` or rely on the active `$TMUX` value.
+- Launch directly into a submenu with `--root-menu window` (or any other menu
+  identifier such as `pane:swap`). Set `TMUX_POPUP_CONTROL_ROOT_MENU` to apply
+  the same override via the environment.
 
 ## Logging
 
