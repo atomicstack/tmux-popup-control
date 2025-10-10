@@ -14,6 +14,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/state"
 	"github.com/atomicstack/tmux-popup-control/internal/theme"
 	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
+	"github.com/charmbracelet/bubbles/cursor"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lithammer/fuzzysearch/fuzzy"
@@ -87,6 +88,8 @@ type Model struct {
 	paneForm          *menu.PaneRenameForm
 	pendingWindowSwap *menu.Item
 	pendingPaneSwap   *menu.Item
+	filterCursor      cursor.Model
+	filterCursorDirty bool
 
 	registry   *menu.Registry
 	bus        *command.Bus
@@ -134,63 +137,96 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 		m.height = height
 		m.fixedHeight = true
 	}
+	c := cursor.New()
+	if styles.Cursor != nil {
+		c.Style = styles.Cursor.Copy()
+	}
+	if styles.Filter != nil {
+		c.TextStyle = styles.Filter.Copy()
+	}
+	c.SetChar(" ")
+	m.filterCursor = c
 	return m
 }
 
 // Init is part of the tea.Model interface.
 func (m *Model) Init() tea.Cmd {
+	cmds := []tea.Cmd{}
 	if m.backend != nil {
-		return waitForBackendEvent(m.backend)
+		cmds = append(cmds, waitForBackendEvent(m.backend))
 	}
-	return nil
+	if cmd := m.filterCursor.Focus(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 // Update responds to Bubble Tea messages.
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmds := make([]tea.Cmd, 0, 4)
+	if cmd := m.updateFilterCursorModel(msg); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	switch m.mode {
 	case ModePaneForm:
 		if handled, cmd := m.handlePaneForm(msg); handled {
-			return m, cmd
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, m.finishUpdate(cmds)
 		}
 	case ModeWindowForm:
 		if handled, cmd := m.handleWindowForm(msg); handled {
-			return m, cmd
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, m.finishUpdate(cmds)
 		}
 	case ModeSessionForm:
 		if handled, cmd := m.handleSessionForm(msg); handled {
-			return m, cmd
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, m.finishUpdate(cmds)
 		}
 	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if m.mode != ModeMenu {
-			return m, nil
+			return m, m.finishUpdate(cmds)
 		}
 		if msg.Type == tea.KeyTab {
 			if current := m.currentLevel(); current != nil && current.multiSelect {
 				current.toggleCurrentSelection()
-				return m, nil
+				return m, m.finishUpdate(cmds)
 			}
 		}
 		if m.handleTextInput(msg) {
-			return m, nil
+			return m, m.finishUpdate(cmds)
 		}
 		switch msg.String() {
 		case "ctrl+c", "q":
-			return m, tea.Quit
+			cmds = append(cmds, tea.Quit)
+			return m, m.finishUpdate(cmds)
 		case "esc":
 			current := m.currentLevel()
 			if current == nil {
-				return m, tea.Quit
+				cmds = append(cmds, tea.Quit)
+				return m, m.finishUpdate(cmds)
 			}
 			if len(m.stack) <= 1 {
-				return m, tea.Quit
+				cmds = append(cmds, tea.Quit)
+				return m, m.finishUpdate(cmds)
 			}
-			if current != nil && current.id == "window:swap-target" {
+			if current.id == "window:swap-target" {
 				m.pendingWindowSwap = nil
 			}
-			if current != nil && current.id == "pane:swap-target" {
+			if current.id == "pane:swap-target" {
 				m.pendingPaneSwap = nil
 			}
 			parent := m.stack[len(m.stack)-2]
@@ -198,30 +234,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if parent != nil {
 				if parent.lastCursor >= 0 && parent.lastCursor < len(parent.items) {
 					parent.cursor = parent.lastCursor
-				} else if current != nil {
-					if idx := parent.indexOf(current.id); idx >= 0 {
-						parent.cursor = idx
-					} else if len(parent.items) > 0 {
-						parent.cursor = len(parent.items) - 1
-					}
+				} else if idx := parent.indexOf(current.id); idx >= 0 {
+					parent.cursor = idx
+				} else if len(parent.items) > 0 {
+					parent.cursor = len(parent.items) - 1
 				}
 				parent.lastCursor = -1
 				m.syncViewport(parent)
 			}
 			m.errMsg = ""
 			m.forceClearInfo()
+			return m, m.finishUpdate(cmds)
 		case "enter":
 			if m.loading {
-				return m, nil
+				return m, m.finishUpdate(cmds)
 			}
 			current := m.currentLevel()
 			if current == nil || len(current.items) == 0 {
-				return m, nil
+				return m, m.finishUpdate(cmds)
 			}
 			ctx := m.menuContext()
 			item := current.items[current.cursor]
 			events.UI.MenuEnter(current.id, item.ID, item.Label, current.filter)
+			beforeCursor := current.filterCursorPos()
 			current.setFilter("", 0)
+			m.noteFilterCursorChange(current, beforeCursor)
 			if current.id == "window:swap-target" && m.pendingWindowSwap != nil {
 				first := *m.pendingWindowSwap
 				m.pendingWindowSwap = nil
@@ -231,7 +268,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pendingLabel = fmt.Sprintf("%s ↔ %s", first.Label, item.Label)
 				m.errMsg = ""
 				m.forceClearInfo()
-				return m, menu.WindowSwapCommand(ctx, first.ID, item.ID, first.Label, item.Label)
+				cmds = append(cmds, menu.WindowSwapCommand(ctx, first.ID, item.ID, first.Label, item.Label))
+				return m, m.finishUpdate(cmds)
 			}
 			if current.id == "pane:swap-target" && m.pendingPaneSwap != nil {
 				first := *m.pendingPaneSwap
@@ -242,7 +280,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pendingLabel = fmt.Sprintf("%s ↔ %s", first.Label, item.Label)
 				m.errMsg = ""
 				m.forceClearInfo()
-				return m, menu.PaneSwapCommand(ctx, first, item)
+				cmds = append(cmds, menu.PaneSwapCommand(ctx, first, item))
+				return m, m.finishUpdate(cmds)
 			}
 			node := current.node
 			if node == nil {
@@ -269,7 +308,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.pendingLabel = item.Label
 						m.errMsg = ""
 						m.forceClearInfo()
-						return m, m.loadMenuCmd(child.ID, item.Label, child.Loader)
+						cmds = append(cmds, m.loadMenuCmd(child.ID, item.Label, child.Loader))
+						return m, m.finishUpdate(cmds)
 					}
 					if child.Action != nil {
 						m.loading = true
@@ -277,7 +317,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.pendingLabel = item.Label
 						m.errMsg = ""
 						m.forceClearInfo()
-						return m, m.bus.Execute(ctx, command.Request{ID: child.ID, Label: item.Label, Handler: child.Action, Item: item})
+						cmds = append(cmds, m.bus.Execute(ctx, command.Request{ID: child.ID, Label: item.Label, Handler: child.Action, Item: item}))
+						return m, m.finishUpdate(cmds)
 					}
 				}
 				if node.Action != nil {
@@ -286,10 +327,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pendingLabel = item.Label
 					m.errMsg = ""
 					m.forceClearInfo()
-					return m, m.bus.Execute(ctx, command.Request{ID: node.ID, Label: item.Label, Handler: node.Action, Item: item})
+					cmds = append(cmds, m.bus.Execute(ctx, command.Request{ID: node.ID, Label: item.Label, Handler: node.Action, Item: item}))
+					return m, m.finishUpdate(cmds)
 				}
 			}
 			m.setInfo(fmt.Sprintf("Selected %s (no action defined yet)", item.Label))
+			return m, m.finishUpdate(cmds)
 		case "up":
 			if current := m.currentLevel(); current != nil {
 				if n := len(current.items); n > 0 {
@@ -302,6 +345,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.syncViewport(current)
 				}
 			}
+			return m, m.finishUpdate(cmds)
 		case "down":
 			if current := m.currentLevel(); current != nil {
 				if n := len(current.items); n > 0 {
@@ -314,6 +358,39 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.syncViewport(current)
 				}
 			}
+			return m, m.finishUpdate(cmds)
+		case "pgup":
+			if current := m.currentLevel(); current != nil {
+				if moved := current.moveCursorPageUp(m.maxVisibleItems()); moved {
+					events.UI.MenuCursor(current.id, current.cursor)
+				}
+				m.syncViewport(current)
+			}
+			return m, m.finishUpdate(cmds)
+		case "pgdown":
+			if current := m.currentLevel(); current != nil {
+				if moved := current.moveCursorPageDown(m.maxVisibleItems()); moved {
+					events.UI.MenuCursor(current.id, current.cursor)
+				}
+				m.syncViewport(current)
+			}
+			return m, m.finishUpdate(cmds)
+		case "home":
+			if current := m.currentLevel(); current != nil {
+				if moved := current.moveCursorHome(); moved {
+					events.UI.MenuCursor(current.id, current.cursor)
+				}
+				m.syncViewport(current)
+			}
+			return m, m.finishUpdate(cmds)
+		case "end":
+			if current := m.currentLevel(); current != nil {
+				if moved := current.moveCursorEnd(); moved {
+					events.UI.MenuCursor(current.id, current.cursor)
+				}
+				m.syncViewport(current)
+			}
+			return m, m.finishUpdate(cmds)
 		}
 	case tea.WindowSizeMsg:
 		if !m.fixedWidth {
@@ -325,16 +402,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if current := m.currentLevel(); current != nil {
 			m.syncViewport(current)
 		}
+		return m, m.finishUpdate(cmds)
 	case categoryLoadedMsg:
 		if msg.id != m.pendingID {
-			return m, nil
+			return m, m.finishUpdate(cmds)
 		}
 		m.loading = false
 		m.pendingID = ""
 		m.pendingLabel = ""
 		if msg.err != nil {
 			m.errMsg = msg.err.Error()
-			return m, nil
+			return m, m.finishUpdate(cmds)
 		}
 		m.errMsg = ""
 		node, _ := m.registry.Find(msg.id)
@@ -347,6 +425,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if m.infoMsg != "" {
 			m.clearInfo()
 		}
+		return m, m.finishUpdate(cmds)
 	case menu.ActionResult:
 		m.loading = false
 		m.pendingID = ""
@@ -355,7 +434,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errMsg = msg.Err.Error()
 			m.forceClearInfo()
 			events.Action.Error(msg.Err)
-			return m, nil
+			return m, m.finishUpdate(cmds)
 		}
 		if msg.Info != "" && m.verbose {
 			m.setInfo(msg.Info)
@@ -363,53 +442,54 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.forceClearInfo()
 		}
 		events.Action.Success(msg.Info)
-		return m, tea.Quit
+		cmds = append(cmds, tea.Quit)
+		return m, m.finishUpdate(cmds)
 	case menu.WindowPrompt:
 		m.loading = false
 		m.pendingID = ""
 		m.pendingLabel = ""
 		m.forceClearInfo()
 		m.startWindowForm(msg)
-		return m, nil
+		return m, m.finishUpdate(cmds)
 	case menu.PanePrompt:
 		m.loading = false
 		m.pendingID = ""
 		m.pendingLabel = ""
 		m.forceClearInfo()
 		m.startPaneForm(msg)
-		return m, nil
+		return m, m.finishUpdate(cmds)
 	case menu.WindowSwapPrompt:
 		m.loading = false
 		m.pendingID = ""
 		m.pendingLabel = ""
 		m.forceClearInfo()
 		m.startWindowSwap(msg)
-		return m, nil
+		return m, m.finishUpdate(cmds)
 	case menu.PaneSwapPrompt:
 		m.loading = false
 		m.pendingID = ""
 		m.pendingLabel = ""
 		m.forceClearInfo()
 		m.startPaneSwap(msg)
-		return m, nil
+		return m, m.finishUpdate(cmds)
 	case menu.SessionPrompt:
 		m.loading = false
 		m.pendingID = ""
 		m.pendingLabel = ""
 		m.forceClearInfo()
 		m.startSessionForm(msg)
-		return m, nil
+		return m, m.finishUpdate(cmds)
 	case backendEventMsg:
 		m.applyBackendEvent(msg.event)
 		if m.backend != nil {
-			return m, waitForBackendEvent(m.backend)
+			cmds = append(cmds, waitForBackendEvent(m.backend))
 		}
-		return m, nil
+		return m, m.finishUpdate(cmds)
 	case backendDoneMsg:
 		m.backend = nil
-		return m, nil
+		return m, m.finishUpdate(cmds)
 	}
-	return m, nil
+	return m, m.finishUpdate(cmds)
 }
 
 // View renders the current menu state.
@@ -441,7 +521,8 @@ func (m *Model) View() string {
 		if label == "" {
 			label = "items"
 		}
-	} else if current := m.currentLevel(); current != nil {
+	}
+	if current := m.currentLevel(); current != nil {
 		m.syncViewport(current)
 		start := 0
 		displayItems := current.items
@@ -650,6 +731,35 @@ func (m *Model) syncViewport(l *level) {
 	l.ensureCursorVisible(m.maxVisibleItems())
 }
 
+func (m *Model) updateFilterCursorModel(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	m.filterCursor, cmd = m.filterCursor.Update(msg)
+	return cmd
+}
+
+func (m *Model) noteFilterCursorChange(l *level, before int) {
+	if l == nil {
+		return
+	}
+	if before != l.filterCursorPos() {
+		m.filterCursorDirty = true
+	}
+}
+
+func (m *Model) finishUpdate(cmds []tea.Cmd) tea.Cmd {
+	if m.filterCursorDirty {
+		m.filterCursorDirty = false
+		m.filterCursor.Blink = false
+		if cmd := m.filterCursor.BlinkCmd(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
 func (m *Model) handleTextInput(msg tea.KeyMsg) bool {
 	if m.loading {
 		return false
@@ -663,43 +773,55 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) bool {
 		if current.filter == "" {
 			return false
 		}
+		before := current.filterCursorPos()
 		current.setFilter("", 0)
+		m.noteFilterCursorChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
 		events.Filter.Cleared(current.id)
 		m.syncViewport(current)
 		return true
 	case "ctrl+w":
+		before := current.filterCursorPos()
 		if !current.deleteFilterWordBackward() {
 			return false
 		}
+		m.noteFilterCursorChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
 		events.Filter.WordBackspace(current.id, current.filter)
 		m.syncViewport(current)
 		return true
 	case "ctrl+a":
+		before := current.filterCursorPos()
 		if !current.moveFilterCursorStart() {
 			return false
 		}
+		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.id, current.filterCursor)
 		return true
 	case "ctrl+e":
+		before := current.filterCursorPos()
 		if !current.moveFilterCursorEnd() {
 			return false
 		}
+		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.id, current.filterCursor)
 		return true
 	case "alt+b":
+		before := current.filterCursorPos()
 		if !current.moveFilterCursorWordBackward() {
 			return false
 		}
+		m.noteFilterCursorChange(current, before)
 		events.Filter.CursorWord(current.id, current.filterCursor)
 		return true
 	case "alt+f":
+		before := current.filterCursorPos()
 		if !current.moveFilterCursorWordForward() {
 			return false
 		}
+		m.noteFilterCursorChange(current, before)
 		events.Filter.CursorWord(current.id, current.filterCursor)
 		return true
 	}
@@ -726,15 +848,19 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) bool {
 	case tea.KeySpace:
 		return m.appendToFilter(" ")
 	case tea.KeyLeft:
+		before := current.filterCursorPos()
 		if !current.moveFilterCursorRuneBackward() {
 			return false
 		}
+		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.id, current.filterCursor)
 		return true
 	case tea.KeyRight:
+		before := current.filterCursorPos()
 		if !current.moveFilterCursorRuneForward() {
 			return false
 		}
+		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.id, current.filterCursor)
 		return true
 	}
@@ -749,9 +875,11 @@ func (m *Model) appendToFilter(text string) bool {
 	if current == nil {
 		return false
 	}
+	before := current.filterCursorPos()
 	if !current.insertFilterText(text) {
 		return false
 	}
+	m.noteFilterCursorChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
 	events.Filter.Append(current.id, current.filter)
@@ -764,9 +892,11 @@ func (m *Model) removeFilterRune() bool {
 	if current == nil {
 		return false
 	}
+	before := current.filterCursorPos()
 	if !current.deleteFilterRuneBackward() {
 		return false
 	}
+	m.noteFilterCursorChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
 	events.Filter.Backspace(current.id, current.filter)
@@ -858,6 +988,69 @@ func (l *level) selectedItems() []menu.Item {
 		}
 	}
 	return selected
+}
+
+func (l *level) moveCursorHome() bool {
+	if len(l.items) == 0 {
+		l.cursor = 0
+		return false
+	}
+	old := l.cursor
+	l.cursor = 0
+	return old != l.cursor
+}
+
+func (l *level) moveCursorEnd() bool {
+	n := len(l.items)
+	if n == 0 {
+		l.cursor = 0
+		return false
+	}
+	old := l.cursor
+	l.cursor = n - 1
+	return old != l.cursor
+}
+
+func (l *level) moveCursorPageUp(maxVisible int) bool {
+	return l.moveCursorBy(-l.pageSize(maxVisible))
+}
+
+func (l *level) moveCursorPageDown(maxVisible int) bool {
+	return l.moveCursorBy(l.pageSize(maxVisible))
+}
+
+func (l *level) moveCursorBy(delta int) bool {
+	if len(l.items) == 0 {
+		l.cursor = 0
+		return false
+	}
+	old := l.cursor
+	if l.cursor < 0 {
+		l.cursor = 0
+	}
+	l.cursor += delta
+	if l.cursor < 0 {
+		l.cursor = 0
+	}
+	if l.cursor >= len(l.items) {
+		l.cursor = len(l.items) - 1
+	}
+	return l.cursor != old
+}
+
+func (l *level) pageSize(maxVisible int) int {
+	total := len(l.items)
+	if total == 0 {
+		return 0
+	}
+	size := maxVisible
+	if size <= 0 || size > total {
+		size = total
+	}
+	if size < 1 {
+		size = 1
+	}
+	return size
 }
 
 func (l *level) ensureCursorVisible(maxVisible int) {
@@ -1490,17 +1683,39 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	if current == nil {
 		return ">", styles.Filter
 	}
-	cursor := styles.Cursor.Render(" ")
-	text := current.filter
-	prompt := styles.FilterPrompt.Render("» ")
-	if text == "" {
-		placeholderRunes := []rune("(type to search)")
-		if len(placeholderRunes) == 0 {
-			return prompt + cursor, nil
+	render := func(style *lipgloss.Style, value string) string {
+		if style == nil || value == "" {
+			return value
 		}
-		first := styles.Cursor.Render(string(placeholderRunes[0]))
-		tail := styles.FilterPlaceholder.Render(string(placeholderRunes[1:]))
-		return prompt + first + tail, nil
+		return style.Render(value)
+	}
+	if styles.Cursor != nil {
+		m.filterCursor.Style = styles.Cursor.Copy()
+	}
+	if styles.Filter != nil {
+		m.filterCursor.TextStyle = styles.Filter.Copy()
+	} else {
+		m.filterCursor.TextStyle = lipgloss.Style{}
+	}
+	prompt := "» "
+	if styles.FilterPrompt != nil {
+		prompt = styles.FilterPrompt.Render(prompt)
+	}
+	text := current.filter
+	if text == "" {
+		placeholder := "(type to search)"
+		runes := []rune(placeholder)
+		var caretRune string
+		var rest string
+		if len(runes) > 0 {
+			caretRune = string(runes[0])
+			rest = string(runes[1:])
+		}
+		if styles.FilterPlaceholder != nil {
+			m.filterCursor.TextStyle = styles.FilterPlaceholder.Copy()
+		}
+		caret := m.renderFilterCursor(caretRune)
+		return prompt + caret + render(styles.FilterPlaceholder, rest), nil
 	}
 	runes := []rune(text)
 	pos := current.filterCursorPos()
@@ -1510,13 +1725,43 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	if pos > len(runes) {
 		pos = len(runes)
 	}
-	before := string(runes[:pos])
+	before := render(styles.Filter, string(runes[:pos]))
+	var caretRune string
 	if pos < len(runes) {
-		highlight := styles.Cursor.Render(string(runes[pos]))
-		after := string(runes[pos+1:])
-		return prompt + before + highlight + after, nil
+		caretRune = string(runes[pos])
+	} else {
+		caretRune = " "
 	}
-	return prompt + string(runes) + cursor, nil
+	caret := m.renderFilterCursor(caretRune)
+	var after string
+	if pos < len(runes) {
+		after = render(styles.Filter, string(runes[pos+1:]))
+	} else {
+		after = ""
+	}
+	return prompt + before + caret + after, nil
+}
+
+func (m *Model) renderFilterCursor(char string) string {
+	if char == "" {
+		char = " "
+	}
+	m.filterCursor.SetChar(char)
+
+	base := m.filterCursor.TextStyle.Copy()
+	base = base.Inline(true)
+
+	if m.filterCursor.Blink {
+		return base.Render(char)
+	}
+
+	if styles.Cursor != nil {
+		cursorStyle := styles.Cursor.Copy().Inline(true)
+		base = base.Inherit(cursorStyle).Blink(false)
+		return base.Render(char)
+	}
+
+	return base.Reverse(true).Render(char)
 }
 
 func (m *Model) startSessionForm(prompt menu.SessionPrompt) {

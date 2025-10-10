@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -87,6 +88,74 @@ func TestLevelToggleSelection(t *testing.T) {
 	lvl.toggleCurrentSelection()
 	if lvl.isSelected("b") {
 		t.Fatalf("expected deselection of second item")
+	}
+}
+
+func TestLevelCursorPaging(t *testing.T) {
+	items := make([]menu.Item, 12)
+	for i := range items {
+		items[i] = menu.Item{ID: fmt.Sprintf("item-%d", i)}
+	}
+	lvl := newLevel("test", "Test", items, nil)
+	lvl.cursor = 0
+	if !lvl.moveCursorPageDown(5) || lvl.cursor != 5 {
+		t.Fatalf("expected cursor at 5, got %d", lvl.cursor)
+	}
+	if !lvl.moveCursorPageDown(5) || lvl.cursor != 10 {
+		t.Fatalf("expected cursor at 10, got %d", lvl.cursor)
+	}
+	if !lvl.moveCursorPageDown(5) || lvl.cursor != 11 {
+		t.Fatalf("expected cursor at end, got %d", lvl.cursor)
+	}
+	if lvl.moveCursorPageDown(5) {
+		t.Fatalf("expected no movement past end")
+	}
+	if !lvl.moveCursorPageUp(5) || lvl.cursor != 6 {
+		t.Fatalf("expected cursor at 6, got %d", lvl.cursor)
+	}
+	if !lvl.moveCursorPageUp(5) || lvl.cursor != 1 {
+		t.Fatalf("expected cursor at 1, got %d", lvl.cursor)
+	}
+	if !lvl.moveCursorPageUp(5) || lvl.cursor != 0 {
+		t.Fatalf("expected cursor at start, got %d", lvl.cursor)
+	}
+	if lvl.moveCursorPageUp(5) {
+		t.Fatalf("expected no movement past start")
+	}
+	lvl.cursor = 2
+	if !lvl.moveCursorPageDown(0) || lvl.cursor != len(items)-1 {
+		t.Fatalf("expected cursor jump to end with unknown page size, got %d", lvl.cursor)
+	}
+}
+
+func TestLevelCursorHomeEnd(t *testing.T) {
+	lvl := newLevel("test", "Test", []menu.Item{{ID: "a"}, {ID: "b"}, {ID: "c"}}, nil)
+	lvl.cursor = 1
+	if !lvl.moveCursorHome() || lvl.cursor != 0 {
+		t.Fatalf("expected home to set cursor to 0, got %d", lvl.cursor)
+	}
+	if lvl.moveCursorHome() {
+		t.Fatalf("expected no movement when already at home")
+	}
+	if !lvl.moveCursorEnd() || lvl.cursor != 2 {
+		t.Fatalf("expected end to set cursor to last item, got %d", lvl.cursor)
+	}
+	if lvl.moveCursorEnd() {
+		t.Fatalf("expected no movement when already at end")
+	}
+	empty := newLevel("empty", "Empty", nil, nil)
+	empty.cursor = 5
+	if empty.moveCursorHome() {
+		t.Fatalf("expected no movement for empty menu")
+	}
+	if empty.cursor != 0 {
+		t.Fatalf("expected empty menu cursor reset to 0, got %d", empty.cursor)
+	}
+	if empty.moveCursorEnd() {
+		t.Fatalf("expected no movement for empty menu on end")
+	}
+	if empty.cursor != 0 {
+		t.Fatalf("expected empty menu cursor stay at 0, got %d", empty.cursor)
 	}
 }
 
