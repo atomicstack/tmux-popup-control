@@ -40,6 +40,14 @@ func CommandAction(ctx Context, item Item) tea.Cmd {
 	if command == "" {
 		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid command selection")} }
 	}
+	if command == "command-prompt" {
+		return func() tea.Msg {
+			if err := runTmuxCommand(ctx.SocketPath, "command-prompt"); err != nil {
+				return ActionResult{Err: fmt.Errorf("tmux command-prompt failed: %w", err)}
+			}
+			return ActionResult{Info: "Opened command prompt"}
+		}
+	}
 	initial := command
 	if !strings.HasSuffix(initial, " ") {
 		initial += " "
