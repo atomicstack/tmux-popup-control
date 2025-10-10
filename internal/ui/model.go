@@ -1492,16 +1492,14 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	}
 	cursor := styles.Cursor.Render(" ")
 	text := current.filter
-	promptStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	prompt := promptStyle.Render(">")
+	prompt := styles.FilterPrompt.Render("» ")
 	if text == "" {
 		placeholderRunes := []rune("(type to search)")
 		if len(placeholderRunes) == 0 {
 			return prompt + cursor, nil
 		}
-		placeholderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 		first := styles.Cursor.Render(string(placeholderRunes[0]))
-		tail := placeholderStyle.Render(string(placeholderRunes[1:]))
+		tail := styles.FilterPlaceholder.Render(string(placeholderRunes[1:]))
 		return prompt + first + tail, nil
 	}
 	runes := []rune(text)

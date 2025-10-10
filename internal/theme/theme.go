@@ -4,15 +4,17 @@ import "github.com/charmbracelet/lipgloss"
 
 // Styles describes reusable Lip Gloss styles shared across the UI.
 type Styles struct {
-	Loading      *lipgloss.Style
-	Item         *lipgloss.Style
-	SelectedItem *lipgloss.Style
-	Error        *lipgloss.Style
-	Info         *lipgloss.Style
-	Header       *lipgloss.Style
-	Footer       *lipgloss.Style
-	Filter       *lipgloss.Style
-	Cursor       *lipgloss.Style
+	Loading           *lipgloss.Style
+	Item              *lipgloss.Style
+	SelectedItem      *lipgloss.Style
+	Error             *lipgloss.Style
+	Info              *lipgloss.Style
+	Header            *lipgloss.Style
+	Footer            *lipgloss.Style
+	Filter            *lipgloss.Style
+	FilterPrompt      *lipgloss.Style
+	FilterPlaceholder *lipgloss.Style
+	Cursor            *lipgloss.Style
 }
 
 var defaultStyles = Styles{
@@ -39,6 +41,12 @@ var defaultStyles = Styles{
 	),
 	Filter: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
+	),
+	FilterPrompt: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true),
+	),
+	FilterPlaceholder: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
 	),
 	Cursor: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("33")).Blink(true),
