@@ -42,3 +42,17 @@ Errors and trace output are written to a log file. By default the file is
 `tmux-popup-control.log` in the working directory, but you can change this via
 the `--log-file` command-line option or by setting the
 `TMUX_POPUP_CONTROL_LOG` environment variable.
+
+## Changelog
+
+- Refactored the UI layer: `internal/ui/model.go` is now decomposed into
+  focused files (`commands.go`, `navigation.go`, `input.go`, `view.go`,
+  `prompt.go`, `forms.go`, `backend.go`) with a supporting `doc.go`, making
+  message handling, prompts, and rendering easier to reason about and test.
+- Moved menu state management into the `internal/ui/state` package and split
+  responsibilities across `level.go`, `selection.go`, `cursor.go`, `filter.go`,
+  and `items.go`, alongside new cursor/filter unit tests to raise coverage.
+- Reworked the tmux client package into modular files (`types.go`,
+  `snapshots.go`, `windows.go`, `panes.go`, `sessions.go`, `command.go`),
+  expanded the fake client, and added extensive unit/integration coverage;
+  session detaches now skip when no clients are attached.
