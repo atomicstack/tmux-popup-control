@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	gotmux "github.com/GianlucaP106/gotmux/gotmux"
+	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 func SwitchClient(socketPath, target string) error {
@@ -73,7 +73,11 @@ func RenameWindow(socketPath, target, newName string) error {
 		return err
 	}
 	if window == nil {
-		return fmt.Errorf("window %s not found", target)
+		args := append(baseArgs(socketPath), "rename-window", "-t", target, newName)
+		if err := runExecCommand("tmux", args...).Run(); err != nil {
+			return fmt.Errorf("window %s not found", target)
+		}
+		return nil
 	}
 	return window.Rename(newName)
 }
@@ -132,7 +136,11 @@ func KillWindows(socketPath string, targets []string) error {
 			return err
 		}
 		if window == nil {
-			return fmt.Errorf("window %s not found", target)
+			args := append(baseArgs(socketPath), "kill-window", "-t", target)
+			if err := runExecCommand("tmux", args...).Run(); err != nil {
+				return fmt.Errorf("window %s not found", target)
+			}
+			continue
 		}
 		if err := window.Kill(); err != nil {
 			return err
@@ -148,6 +156,9 @@ func findWindow(client tmuxClient, target string) (windowHandle, error) {
 	}
 	for _, w := range windows {
 		session := firstSession(w)
+		if session == "" {
+			session = strings.TrimSpace(w.Session)
+		}
 		candidates := []string{w.Id}
 		if session != "" {
 			candidates = append(candidates, fmt.Sprintf("%s:%d", session, w.Index))

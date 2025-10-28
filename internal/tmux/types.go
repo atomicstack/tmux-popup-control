@@ -3,7 +3,7 @@ package tmux
 import (
 	"os/exec"
 
-	gotmux "github.com/GianlucaP106/gotmux/gotmux"
+	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 type Window struct {
@@ -106,13 +106,15 @@ var (
 )
 
 type tmuxClient interface {
-	ListSessions() ([]*gotmux.Session, error)
-	ListAllWindows() ([]*gotmux.Window, error)
-	ListAllPanes() ([]*gotmux.Pane, error)
-	ListClients() ([]*gotmux.Client, error)
-	SwitchClient(*gotmux.SwitchClientOptions) error
-	GetSessionByName(string) (*gotmux.Session, error)
-	NewSession(*gotmux.SessionOptions) (*gotmux.Session, error)
+    ListSessions() ([]*gotmux.Session, error)
+    ListAllWindows() ([]*gotmux.Window, error)
+    ListAllPanes() ([]*gotmux.Pane, error)
+    ListClients() ([]*gotmux.Client, error)
+    SwitchClient(*gotmux.SwitchClientOptions) error
+    GetSessionByName(string) (*gotmux.Session, error)
+    NewSession(*gotmux.SessionOptions) (*gotmux.Session, error)
+    KillServer() error
+    Close() error
 }
 
 type commander interface {

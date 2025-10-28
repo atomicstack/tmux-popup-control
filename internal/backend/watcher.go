@@ -71,22 +71,28 @@ func (w *Watcher) Stop() {
 }
 
 func (w *Watcher) startSessionPoller() {
+	throttle := newThrottle(250 * time.Millisecond)
 	w.wg.Add(1)
 	go w.poll(KindSessions, func(ctx context.Context) (interface{}, error) {
+		throttle.wait()
 		return tmux.FetchSessions(w.socketPath)
 	})
 }
 
 func (w *Watcher) startWindowPoller() {
+	throttle := newThrottle(250 * time.Millisecond)
 	w.wg.Add(1)
 	go w.poll(KindWindows, func(ctx context.Context) (interface{}, error) {
+		throttle.wait()
 		return tmux.FetchWindows(w.socketPath)
 	})
 }
 
 func (w *Watcher) startPanePoller() {
+	throttle := newThrottle(250 * time.Millisecond)
 	w.wg.Add(1)
 	go w.poll(KindPanes, func(ctx context.Context) (interface{}, error) {
+		throttle.wait()
 		return tmux.FetchPanes(w.socketPath)
 	})
 }

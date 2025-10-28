@@ -3,7 +3,7 @@ module github.com/atomicstack/tmux-popup-control
 go 1.22.3
 
 require (
-	github.com/GianlucaP106/gotmux v0.5.0
+	github.com/atomicstack/gotmuxcc v0.0.0
 	github.com/charmbracelet/bubbletea v0.25.0
 	github.com/charmbracelet/lipgloss v0.10.0
 	github.com/lithammer/fuzzysearch v1.1.5
@@ -28,3 +28,5 @@ require (
 	golang.org/x/term v0.6.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
 )
+
+replace github.com/atomicstack/gotmuxcc => ../gotmuxcc

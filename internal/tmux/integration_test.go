@@ -13,8 +13,11 @@ import (
 
 func TestFetchSnapshotsIntegration(t *testing.T) {
 	testutil.RequireTmux(t)
-	socket, cleanup := testutil.StartTmuxServer(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
 	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
 	t.Setenv("TMUX_TMPDIR", filepath.Dir(socket))
 
 	sessionName := "tmux-integration"
@@ -31,6 +34,9 @@ func TestFetchSnapshotsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchSessions failed: %v", err)
 	}
+	for _, sess := range sessions.Sessions {
+		t.Logf("snapshot session: name=%q label=%q windows=%d attached=%v", sess.Name, sess.Label, sess.Windows, sess.Attached)
+	}
 	if !containsSession(sessions.Sessions, sessionName) {
 		t.Fatalf("expected session %q in snapshot %#v", sessionName, sessions.Sessions)
 	}
@@ -38,6 +44,9 @@ func TestFetchSnapshotsIntegration(t *testing.T) {
 	windows, err := FetchWindows(socket)
 	if err != nil {
 		t.Fatalf("FetchWindows failed: %v", err)
+	}
+	for _, window := range windows.Windows {
+		t.Logf("initial window: id=%q session=%q label=%q", window.ID, window.Session, window.Label)
 	}
 	win := firstWindowForSession(windows.Windows, sessionName)
 	if win == nil {
@@ -53,6 +62,9 @@ func TestFetchSnapshotsIntegration(t *testing.T) {
 	windowsAfter, err := FetchWindows(socket)
 	if err != nil {
 		t.Fatalf("FetchWindows after rename failed: %v", err)
+	}
+	for _, window := range windowsAfter.Windows {
+		t.Logf("window after rename: id=%q session=%q label=%q", window.ID, window.Session, window.Label)
 	}
 	winAfter := firstWindowForSession(windowsAfter.Windows, sessionName)
 	if winAfter == nil || !strings.Contains(winAfter.Label, newWindowName) {
@@ -70,6 +82,9 @@ func TestFetchSnapshotsIntegration(t *testing.T) {
 	windowsPostKill, err := FetchWindows(socket)
 	if err != nil {
 		t.Fatalf("FetchWindows after kill failed: %v", err)
+	}
+	for _, window := range windowsPostKill.Windows {
+		t.Logf("window post kill: id=%q session=%q label=%q", window.ID, window.Session, window.Label)
 	}
 	if containsWindow(windowsPostKill.Windows, sessionName, 1) {
 		t.Fatalf("expected window %s:1 to be gone", sessionName)

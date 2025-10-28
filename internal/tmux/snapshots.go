@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	gotmux "github.com/GianlucaP106/gotmux/gotmux"
+	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 func FetchSessions(socketPath string) (SessionSnapshot, error) {
@@ -14,9 +14,16 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 	if err != nil {
 		return SessionSnapshot{}, err
 	}
+	defer client.Close()
 	sessions, err := client.ListSessions()
 	if err != nil {
 		return SessionSnapshot{}, err
+	}
+	if len(sessions) == 0 {
+		fallback, err := fetchSessionsFallback(socketPath)
+		if err == nil {
+			sessions = fallback
+		}
 	}
 	labelMap := fetchSessionLabels(socketPath, os.Getenv("TMUX_POPUP_CONTROL_SESSION_FORMAT"))
 	currentName := currentSessionName(client)
@@ -45,6 +52,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	if err != nil {
 		return WindowSnapshot{}, err
 	}
+	defer client.Close()
 	allWindows, err := client.ListAllWindows()
 	if err != nil {
 		return WindowSnapshot{}, err
@@ -65,9 +73,33 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	for _, line := range lines {
 		w := windowMap[line.windowID]
 		if w == nil {
+			session := ""
+			var idx int
+			if parts := strings.SplitN(line.displayID, ":", 2); len(parts) > 0 {
+				session = strings.TrimSpace(parts[0])
+				if len(parts) > 1 {
+					if parsed, err := strconv.Atoi(parts[1]); err == nil {
+						idx = parsed
+					}
+				}
+			}
+			entry := Window{
+				ID:         line.displayID,
+				Session:    session,
+				Index:      idx,
+				Label:      line.label,
+				InternalID: line.windowID,
+			}
+			if session == currentSession {
+				entry.Current = true
+			}
+			snapshot.Windows = append(snapshot.Windows, entry)
 			continue
 		}
 		session := firstSession(w)
+		if session == "" {
+			session = strings.TrimSpace(w.Session)
+		}
 		displayID := line.displayID
 		if displayID == "" {
 			displayID = fmt.Sprintf("%s:%d", session, w.Index)
@@ -105,6 +137,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	if err != nil {
 		return PaneSnapshot{}, err
 	}
+	defer client.Close()
 	allPanes, err := client.ListAllPanes()
 	if err != nil {
 		return PaneSnapshot{}, err
@@ -159,6 +192,43 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 		}
 	}
 	return snapshot, nil
+}
+
+func fetchSessionsFallback(socketPath string) ([]*gotmux.Session, error) {
+	format := "#{session_name}\t#{session_windows}\t#{session_attached}"
+	args := make([]string, 0, 6)
+	if socketPath != "" {
+		args = append(args, "-S", socketPath)
+	}
+	args = append(args, "list-sessions", "-F", format)
+	output, err := runExecCommand("tmux", args...).Output()
+	if err != nil {
+		return nil, err
+	}
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return []*gotmux.Session{}, nil
+	}
+	lines := strings.Split(text, "\n")
+	sessions := make([]*gotmux.Session, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		windows, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
+		attached, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+		sessions = append(sessions, &gotmux.Session{
+			Name:     strings.TrimSpace(parts[0]),
+			Windows:  windows,
+			Attached: attached,
+		})
+	}
+	return sessions, nil
 }
 
 func fetchSessionLabels(socketPath, envFormat string) map[string]string {

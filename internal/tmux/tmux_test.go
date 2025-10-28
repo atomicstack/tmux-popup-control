@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	gotmux "github.com/GianlucaP106/gotmux/gotmux"
+	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 type stubCommander struct {
@@ -171,6 +171,10 @@ func (f *fakeClient) NewSession(opts *gotmux.SessionOptions) (*gotmux.Session, e
 	}
 	return &gotmux.Session{Name: name}, nil
 }
+
+func (f *fakeClient) KillServer() error { return nil }
+
+func (f *fakeClient) Close() error { return nil }
 
 func (f *fakeClient) useWindowHandles(t *testing.T, handles map[string]*stubWindowHandle) {
 	t.Helper()
@@ -767,6 +771,9 @@ func TestKillWindowsMissingTarget(t *testing.T) {
 		},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(name string, args ...string) commander {
+		return &stubCommander{runErr: fmt.Errorf("no such window")}
+	})
 	if err := KillWindows("", []string{"@2"}); err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("expected not found error, got %v", err)
 	}

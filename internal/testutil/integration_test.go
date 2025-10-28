@@ -11,8 +11,11 @@ import (
 
 func TestRootMenuRendering(t *testing.T) {
 	bin := buildBinary(t)
-	socket, cleanup := StartTmuxServer(t)
+	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
+	t.Cleanup(func() {
+		AssertNoServerCrash(t, logDir)
+	})
 	session := "rootmenu"
 	pane := session + ":0.0"
 	scriptDir := t.TempDir()

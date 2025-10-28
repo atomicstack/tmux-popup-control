@@ -1,11 +1,12 @@
+GO ?= go
 BINARY := tmux-popup-control
 GOCACHE := $(CURDIR)/.gocache
 GOMODCACHE := $(CURDIR)/.gomodcache
-GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=off
+GO_ENV := GOTMUXCC_TRACE=1 GOTMUXCC_TRACE_FILE=$(CURDIR)/gotmuxcc_trace.log GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=off
 
 .SILENT:
 
-.PHONY: build run tidy fmt test clean-cache ensure-dirs
+.PHONY: build run tidy fmt test clean-cache ensure-dirs cover
 
 ensure-dirs:
 	mkdir -p $(GOCACHE) $(GOMODCACHE)
@@ -27,3 +28,9 @@ test: ensure-dirs
 
 clean-cache:
 	rm -rf $(GOCACHE) $(GOMODCACHE)
+
+cover:
+	@echo "==> Generating coverage report"
+	$(GO) test ./... -coverprofile=coverage.out
+	@echo "Coverage summary:"
+	$(GO) tool cover -func=coverage.out
