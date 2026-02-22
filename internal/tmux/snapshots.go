@@ -27,6 +27,7 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 	}
 	labelMap := fetchSessionLabels(socketPath, os.Getenv("TMUX_POPUP_CONTROL_SESSION_FORMAT"))
 	currentName := currentSessionName(socketPath, client)
+	realClients := realAttachedClients(client)
 	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
 	out := make([]Session, 0, len(sessions))
 	for _, s := range sessions {
@@ -34,11 +35,12 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 		if label == "" {
 			label = defaultLabelForSession(s)
 		}
+		clients := realClients[s.Name]
 		entry := Session{
 			Name:     s.Name,
 			Label:    label,
-			Attached: s.Attached > 0,
-			Clients:  append([]string(nil), s.AttachedList...),
+			Attached: len(clients) > 0,
+			Clients:  clients,
 			Current:  s.Name == currentName,
 			Windows:  s.Windows,
 		}
@@ -284,9 +286,27 @@ func defaultLabelForSession(s *gotmux.Session) string {
 	return label
 }
 
+// realAttachedClients returns a map from session name to the names of
+// non-control-mode clients attached to it. This excludes gotmuxcc's own
+// control-mode connection, which would otherwise inflate session_attached counts.
+func realAttachedClients(client tmuxClient) map[string][]string {
+	clients, err := client.ListClients()
+	if err != nil {
+		return nil
+	}
+	result := make(map[string][]string)
+	for _, c := range clients {
+		if c == nil || c.ControlMode || c.Session == "" {
+			continue
+		}
+		result[c.Session] = append(result[c.Session], c.Name)
+	}
+	return result
+}
+
 func currentSessionName(socketPath string, client tmuxClient) string {
 	if pane := strings.TrimSpace(os.Getenv("TMUX_PANE")); pane != "" {
-		args := append(baseArgs(socketPath), "display-message", "-p", "#{session_name}", "-t", pane)
+		args := append(baseArgs(socketPath), "display-message", "-t", pane, "-p", "#{session_name}")
 		if output, err := runExecCommand("tmux", args...).Output(); err == nil {
 			if name := strings.TrimSpace(string(output)); name != "" {
 				return name

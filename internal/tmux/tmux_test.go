@@ -335,6 +335,51 @@ func TestFetchSessions(t *testing.T) {
 	}
 }
 
+func TestFetchSessionsControlModeClientNotCounted(t *testing.T) {
+	// A control-mode client (gotmuxcc itself) attached to session "aaa" must
+	// not cause "aaa" to appear as attached in the session switch menu.
+	// Only non-control-mode clients should count.
+	fake := &fakeClient{
+		sessions: []*gotmux.Session{
+			{Name: "aaa", Windows: 1, Attached: 1}, // inflated by gotmuxcc
+			{Name: "zzz", Windows: 2, Attached: 1},
+		},
+		clients: []*gotmux.Client{
+			{Session: "aaa", ControlMode: true},  // gotmuxcc itself — should be ignored
+			{Session: "zzz", ControlMode: false}, // real terminal client
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(_ string, args ...string) commander {
+		if containsArg(args, "list-sessions") {
+			return &stubCommander{output: []byte("aaa\taaa\nzzz\tzzz\n")}
+		}
+		return &stubCommander{}
+	})
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "1")
+	t.Setenv("TMUX_PANE", "")
+	snap, err := FetchSessions("sock")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, s := range snap.Sessions {
+		switch s.Name {
+		case "aaa":
+			if s.Attached {
+				t.Fatalf("expected aaa NOT attached (only control-mode client), got Attached=true")
+			}
+		case "zzz":
+			if !s.Attached {
+				t.Fatalf("expected zzz attached (has real client), got Attached=false")
+			}
+			if len(s.Clients) != 1 {
+				t.Fatalf("expected 1 real client for zzz, got %d", len(s.Clients))
+			}
+		}
+	}
+}
+
 func TestFetchSessionsCurrentFromTmuxPane(t *testing.T) {
 	// When multiple clients are attached to different sessions, currentSessionName
 	// should use TMUX_PANE → display-message to identify the launching client's
