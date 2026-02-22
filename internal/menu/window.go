@@ -265,7 +265,7 @@ func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
 	label := item.Label
 	return func() tea.Msg {
 		events.Window.Switch(windowID)
-		if err := switchClientFn(ctx.SocketPath, session); err != nil {
+		if err := switchClientFn(ctx.SocketPath, ctx.ClientID, session); err != nil {
 			return ActionResult{Err: err}
 		}
 		if err := selectWindowFn(ctx.SocketPath, windowID); err != nil {

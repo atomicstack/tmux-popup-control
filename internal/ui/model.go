@@ -76,14 +76,17 @@ type Model struct {
 	rootMenuID string
 	rootTitle  string
 	socketPath string
+	clientID   string
 	sessions   state.SessionStore
 	windows    state.WindowStore
 	panes      state.PaneStore
 	dispatcher *dispatcher.Dispatcher
+	preview    map[string]*previewData
+	previewSeq int
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string) *Model {
+func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string, clientID string) *Model {
 	registry := menu.BuildRegistry()
 	sessions := state.NewSessionStore()
 	sessions.SetIncludeCurrent(true)
@@ -104,10 +107,12 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 		mode:         ModeMenu,
 		rootTitle:    defaultRootTitle,
 		socketPath:   socketPath,
+		clientID:     clientID,
 		sessions:     sessions,
 		windows:      windows,
 		panes:        panes,
 		dispatcher:   dispatcher.New(sessions, windows, panes),
+		preview:      make(map[string]*previewData),
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)
@@ -199,6 +204,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(backendEventMsg{}):       m.handleBackendEventMsg,
 		reflect.TypeOf(backendDoneMsg{}):        m.handleBackendDoneMsg,
 		reflect.TypeOf(menu.CommandPromptMsg{}): m.handleCommandPromptMsg,
+		reflect.TypeOf(previewLoadedMsg{}):      m.handlePreviewLoadedMsg,
 	}
 }
 

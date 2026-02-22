@@ -8,7 +8,7 @@ import (
 )
 
 func TestWithPromptResetsStateAndReturnsCommand(t *testing.T) {
-	m := NewModel("", 0, 0, false, true, nil, "")
+	m := NewModel("", 0, 0, false, true, nil, "", "")
 	m.loading = true
 	m.pendingID = "test"
 	m.pendingLabel = "label"
@@ -42,7 +42,7 @@ func TestWithPromptResetsStateAndReturnsCommand(t *testing.T) {
 }
 
 func TestWithPromptHandlesError(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	boom := errors.New("boom")
 
 	cmd := m.withPrompt(func() promptResult {

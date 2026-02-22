@@ -26,7 +26,7 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 		}
 	}
 	labelMap := fetchSessionLabels(socketPath, os.Getenv("TMUX_POPUP_CONTROL_SESSION_FORMAT"))
-	currentName := currentSessionName(client)
+	currentName := currentSessionName(socketPath, client)
 	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
 	out := make([]Session, 0, len(sessions))
 	for _, s := range sessions {
@@ -65,7 +65,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	for _, w := range allWindows {
 		windowMap[w.Id] = w
 	}
-	currentSession := currentSessionName(client)
+	currentSession := currentSessionName(socketPath, client)
 	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
 	var snapshot WindowSnapshot
 	snapshot.IncludeCurrent = includeCurrent
@@ -284,7 +284,15 @@ func defaultLabelForSession(s *gotmux.Session) string {
 	return label
 }
 
-func currentSessionName(client tmuxClient) string {
+func currentSessionName(socketPath string, client tmuxClient) string {
+	if pane := strings.TrimSpace(os.Getenv("TMUX_PANE")); pane != "" {
+		args := append(baseArgs(socketPath), "display-message", "-p", "#{session_name}", "-t", pane)
+		if output, err := runExecCommand("tmux", args...).Output(); err == nil {
+			if name := strings.TrimSpace(string(output)); name != "" {
+				return name
+			}
+		}
+	}
 	if clients, err := client.ListClients(); err == nil {
 		for _, c := range clients {
 			if c != nil && c.Session != "" {

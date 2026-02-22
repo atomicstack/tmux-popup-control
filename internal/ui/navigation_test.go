@@ -8,7 +8,7 @@ import (
 )
 
 func TestHandleEscapeKeyFromRootQuits(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	cmd := m.handleEscapeKey()
 	if cmd == nil {
 		t.Fatalf("expected quit command")
@@ -20,7 +20,7 @@ func TestHandleEscapeKeyFromRootQuits(t *testing.T) {
 }
 
 func TestHandleEscapeKeyPopsLevelAndClearsSwapState(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	parent := m.currentLevel()
 	parent.Items = []menu.Item{{ID: "one"}, {ID: "two"}, {ID: "window:swap-target"}}
 	parent.Cursor = 1

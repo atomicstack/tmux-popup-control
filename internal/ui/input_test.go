@@ -9,10 +9,10 @@ import (
 )
 
 func TestHandleTextInputAppendsRunes(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	current := m.currentLevel()
 	current.UpdateItems([]menu.Item{{ID: "one"}})
-	handled := m.handleTextInput(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("abc")})
+	handled, _ := m.handleTextInput(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("abc")})
 	if !handled {
 		t.Fatalf("expected key press to be handled")
 	}
@@ -25,19 +25,19 @@ func TestHandleTextInputAppendsRunes(t *testing.T) {
 }
 
 func TestHandleTextInputCursorMovement(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	current := m.currentLevel()
 	current.UpdateItems([]menu.Item{{ID: "one"}})
 	current.SetFilter("abc", 3)
 
-	if !m.handleTextInput(tea.KeyMsg{Type: tea.KeyLeft}) {
+	if handled, _ := m.handleTextInput(tea.KeyMsg{Type: tea.KeyLeft}); !handled {
 		t.Fatalf("expected left arrow to be handled")
 	}
 	if pos := current.FilterCursorPos(); pos != 2 {
 		t.Fatalf("expected cursor at 2 after left, got %d", pos)
 	}
 
-	if !m.handleTextInput(tea.KeyMsg{Type: tea.KeyRight}) {
+	if handled, _ := m.handleTextInput(tea.KeyMsg{Type: tea.KeyRight}); !handled {
 		t.Fatalf("expected right arrow to be handled")
 	}
 	if pos := current.FilterCursorPos(); pos != 3 {
@@ -46,7 +46,7 @@ func TestHandleTextInputCursorMovement(t *testing.T) {
 }
 
 func TestFilterPromptPlaceholder(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	current := m.currentLevel()
 	current.SetFilter("", 0)
 	prompt, _ := m.filterPrompt()

@@ -15,6 +15,9 @@ type Styles struct {
 	FilterPrompt      *lipgloss.Style
 	FilterPlaceholder *lipgloss.Style
 	Cursor            *lipgloss.Style
+	PreviewTitle      *lipgloss.Style
+	PreviewBody       *lipgloss.Style
+	PreviewError      *lipgloss.Style
 }
 
 var defaultStyles = Styles{
@@ -50,6 +53,15 @@ var defaultStyles = Styles{
 	),
 	Cursor: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("33")).Blink(true),
+	),
+	PreviewTitle: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true),
+	),
+	PreviewBody: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("250")),
+	),
+	PreviewError: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
 	),
 }
 

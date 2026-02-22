@@ -23,18 +23,18 @@ func (m *Model) noteFilterCursorChange(l *level, before int) {
 	}
 }
 
-func (m *Model) handleTextInput(msg tea.KeyMsg) bool {
+func (m *Model) handleTextInput(msg tea.KeyMsg) (bool, tea.Cmd) {
 	if m.loading {
-		return false
+		return false, nil
 	}
 	current := m.currentLevel()
 	if current == nil {
-		return false
+		return false, nil
 	}
 	switch msg.String() {
 	case "ctrl+u":
 		if current.Filter == "" {
-			return false
+			return false, nil
 		}
 		before := current.FilterCursorPos()
 		current.SetFilter("", 0)
@@ -43,91 +43,100 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) bool {
 		m.errMsg = ""
 		events.Filter.Cleared(current.ID)
 		m.syncViewport(current)
-		return true
+		return true, m.ensurePreviewForLevel(current)
 	case "ctrl+w":
 		before := current.FilterCursorPos()
 		if !current.DeleteFilterWordBackward() {
-			return false
+			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
 		events.Filter.WordBackspace(current.ID, current.Filter)
 		m.syncViewport(current)
-		return true
+		return true, m.ensurePreviewForLevel(current)
 	case "ctrl+a":
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorStart() {
-			return false
+			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
-		return true
+		return true, nil
 	case "ctrl+e":
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorEnd() {
-			return false
+			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
-		return true
+		return true, nil
 	case "alt+b":
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorWordBackward() {
-			return false
+			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
-		return true
+		return true, nil
 	case "alt+f":
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorWordForward() {
-			return false
+			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
-		return true
+		return true, nil
 	}
 	switch msg.Type {
 	case tea.KeyBackspace, tea.KeyCtrlH:
-		return m.removeFilterRune()
+		if m.removeFilterRune() {
+			return true, m.ensurePreviewForLevel(current)
+		}
+		return false, nil
 	case tea.KeyRunes:
 		if msg.Alt {
-			return false
+			return false, nil
 		}
 		if len(msg.Runes) == 0 {
-			return false
+			return false, nil
 		}
 		for _, r := range msg.Runes {
 			if unicode.IsControl(r) {
-				return false
+				return false, nil
 			}
 			if unicode.IsSpace(r) {
 				// allow the dedicated space handler to manage spaces
-				return false
+				return false, nil
 			}
 		}
-		return m.appendToFilter(string(msg.Runes))
+		if m.appendToFilter(string(msg.Runes)) {
+			return true, m.ensurePreviewForLevel(current)
+		}
+		return false, nil
 	case tea.KeySpace:
-		return m.appendToFilter(" ")
+		if m.appendToFilter(" ") {
+			return true, m.ensurePreviewForLevel(current)
+		}
+		return false, nil
 	case tea.KeyLeft:
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorRuneBackward() {
-			return false
+			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
-		return true
+		return true, nil
 	case tea.KeyRight:
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorRuneForward() {
-			return false
+			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 func (m *Model) appendToFilter(text string) bool {

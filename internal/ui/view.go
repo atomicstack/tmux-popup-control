@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const previewMaxDisplayLines = 20
+
 type styledLine struct {
 	text          string
 	style         *lipgloss.Style
@@ -95,6 +97,30 @@ func (m *Model) View() string {
 			}
 		}
 	}
+	if preview := m.activePreview(); shouldRenderPreview(preview) {
+		lines = append(lines, styledLine{})
+		title := previewTitleText(preview)
+		titleStyle := styles.Info
+		if styles.PreviewTitle != nil {
+			titleStyle = styles.PreviewTitle
+		}
+		lines = append(lines, styledLine{text: title, style: titleStyle})
+		if preview.err != "" {
+			errStyle := styles.Error
+			if styles.PreviewError != nil {
+				errStyle = styles.PreviewError
+			}
+			lines = append(lines, styledLine{text: preview.err, style: errStyle})
+		} else {
+			bodyStyle := styles.Info
+			if styles.PreviewBody != nil {
+				bodyStyle = styles.PreviewBody
+			}
+			for _, line := range previewDisplayLines(preview) {
+				lines = append(lines, styledLine{text: line, style: bodyStyle})
+			}
+		}
+	}
 	if m.errMsg != "" {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error})
@@ -177,6 +203,48 @@ func headerSegmentForLevel(l *level) string {
 		return ""
 	}
 	return strings.Join(fields, " ")
+}
+
+func shouldRenderPreview(data *previewData) bool {
+	if data == nil {
+		return false
+	}
+	if data.err != "" {
+		return true
+	}
+	if len(data.lines) > 0 {
+		return true
+	}
+	return data.loading
+}
+
+func previewTitleText(data *previewData) string {
+	label := strings.TrimSpace(data.label)
+	if label == "" {
+		label = strings.TrimSpace(data.target)
+	}
+	if label == "" {
+		label = "(unknown)"
+	}
+	status := ""
+	if data.loading && data.err == "" {
+		status = " (loading…)"
+	}
+	return fmt.Sprintf("Preview: %s%s", label, status)
+}
+
+func previewDisplayLines(data *previewData) []string {
+	lines := data.lines
+	if len(lines) == 0 {
+		if data.loading {
+			return []string{"Loading preview…"}
+		}
+		return []string{}
+	}
+	if previewMaxDisplayLines > 0 && len(lines) > previewMaxDisplayLines {
+		return lines[len(lines)-previewMaxDisplayLines:]
+	}
+	return lines
 }
 
 func (m *Model) handleWindowSizeMsg(msg tea.Msg) tea.Cmd {

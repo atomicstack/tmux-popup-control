@@ -152,7 +152,7 @@ func PaneSwitchAction(ctx Context, item Item) tea.Cmd {
 	label := item.Label
 	return func() tea.Msg {
 		events.Pane.Switch(target)
-		if err := switchPaneFn(ctx.SocketPath, target); err != nil {
+		if err := switchPaneFn(ctx.SocketPath, ctx.ClientID, target); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Switched to %s", label)}

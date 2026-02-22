@@ -18,6 +18,7 @@ func NewSession(socketPath, name string) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	_, err = client.NewSession(&gotmux.SessionOptions{Name: name})
 	return err
 }
@@ -27,6 +28,7 @@ func RenameSession(socketPath, target, newName string) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	trimmedTarget := strings.TrimSpace(target)
 	if trimmedTarget == "" {
 		return fmt.Errorf("session target required")
@@ -49,6 +51,7 @@ func DetachSessions(socketPath string, targets []string) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	for _, target := range targets {
 		trimmed := strings.TrimSpace(target)
 		if trimmed == "" {

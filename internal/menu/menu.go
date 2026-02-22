@@ -23,6 +23,7 @@ type Level struct {
 // Context carries runtime data needed by loader functions.
 type Context struct {
 	SocketPath           string
+	ClientID             string
 	Sessions             []SessionEntry
 	Current              string
 	IncludeCurrent       bool

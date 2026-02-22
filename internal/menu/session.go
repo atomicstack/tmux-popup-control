@@ -51,7 +51,7 @@ func SessionNewAction(ctx Context, item Item) tea.Cmd {
 func SessionSwitchAction(ctx Context, item Item) tea.Cmd {
 	return func() tea.Msg {
 		events.Session.Switch(item.ID)
-		if err := tmux.SwitchClient(ctx.SocketPath, item.ID); err != nil {
+		if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, item.ID); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Switched to %s", item.Label)}

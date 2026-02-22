@@ -96,7 +96,7 @@ func ResizePane(socketPath, direction string, amount int) error {
 	return runExecCommand("tmux", args...).Run()
 }
 
-func SwitchPane(socketPath, target string) error {
+func SwitchPane(socketPath, clientID, target string) error {
 	parts := strings.SplitN(target, ":", 2)
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid pane target %q", target)
@@ -108,7 +108,7 @@ func SwitchPane(socketPath, target string) error {
 		return fmt.Errorf("invalid pane target %q", target)
 	}
 	window := fmt.Sprintf("%s:%s", session, windowParts[0])
-	if err := SwitchClient(socketPath, session); err != nil {
+	if err := SwitchClient(socketPath, clientID, session); err != nil {
 		return err
 	}
 	if err := SelectWindow(socketPath, window); err != nil {

@@ -22,7 +22,7 @@ func TestSessionSwitchItemsFiltersCurrent(t *testing.T) {
 }
 
 func TestMenuHeaderRootLevel(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	got := m.menuHeader()
 	want := defaultRootTitle
 	if got != want {
@@ -31,7 +31,7 @@ func TestMenuHeaderRootLevel(t *testing.T) {
 }
 
 func TestMenuHeaderNestedLevels(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	m.stack = append(m.stack, newLevel("session", "session", nil, nil))
 	got := m.menuHeader()
 	want := "session"
@@ -41,7 +41,7 @@ func TestMenuHeaderNestedLevels(t *testing.T) {
 }
 
 func TestMenuHeaderDeepLevels(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	m.stack = append(m.stack, newLevel("pane", "pane", nil, nil))
 	m.stack = append(m.stack, newLevel("pane:resize", "Resize", nil, nil))
 	m.stack = append(m.stack, newLevel("pane:resize:left", "Left", nil, nil))
@@ -62,7 +62,7 @@ func TestMenuHeaderDeepLevels(t *testing.T) {
 }
 
 func TestRootMenuOverrideSetsInitialLevel(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "window")
+	m := NewModel("", 0, 0, false, false, nil, "window", "")
 	if got := m.stack[0].ID; got != "window" {
 		t.Fatalf("expected root id window, got %s", got)
 	}
@@ -75,7 +75,7 @@ func TestRootMenuOverrideSetsInitialLevel(t *testing.T) {
 }
 
 func TestRootMenuOverrideIncludesRootInHeaderBreadcrumb(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "window")
+	m := NewModel("", 0, 0, false, false, nil, "window", "")
 	m.stack = append(m.stack, newLevel("window:swap", "swap", nil, nil))
 	if header := m.menuHeader(); header != "window→swap" {
 		t.Fatalf("expected breadcrumb window→swap, got %s", header)
@@ -83,7 +83,7 @@ func TestRootMenuOverrideIncludesRootInHeaderBreadcrumb(t *testing.T) {
 }
 
 func TestInvalidRootMenuFallsBackToDefault(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "does-not-exist")
+	m := NewModel("", 0, 0, false, false, nil, "does-not-exist", "")
 	if got := m.stack[0].ID; got != "root" {
 		t.Fatalf("expected default root id, got %s", got)
 	}
@@ -194,7 +194,7 @@ func TestLevelCursorHomeEnd(t *testing.T) {
 }
 
 func TestStartPaneSwapAddsLevel(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "")
+	m := NewModel("", 0, 0, false, false, nil, "", "")
 	m.panes.SetEntries([]menu.PaneEntry{{ID: "a", Label: "paneA"}, {ID: "b", Label: "paneB"}})
 	initialLevels := len(m.stack)
 	m.startPaneSwap(menu.PaneSwapPrompt{Context: m.menuContext(), First: menu.Item{ID: "a", Label: "paneA"}})

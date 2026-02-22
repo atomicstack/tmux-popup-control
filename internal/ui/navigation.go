@@ -25,6 +25,9 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	if current.ID == "pane:swap-target" {
 		m.pendingPaneSwap = nil
 	}
+	if current != nil {
+		m.clearPreview(current.ID)
+	}
 	parent := m.stack[len(m.stack)-2]
 	m.stack = m.stack[:len(m.stack)-1]
 	if parent != nil {
@@ -40,7 +43,7 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	}
 	m.errMsg = ""
 	m.forceClearInfo()
-	return nil
+	return m.ensurePreviewForLevel(parent)
 }
 
 func (m *Model) handleEnterKey() tea.Cmd {
@@ -128,69 +131,104 @@ func (m *Model) handleEnterKey() tea.Cmd {
 	return nil
 }
 
-func (m *Model) moveCursorUp() {
-	if current := m.currentLevel(); current != nil {
-		if n := len(current.Items); n > 0 {
-			if current.Cursor > 0 {
-				current.Cursor--
-			} else {
-				current.Cursor = n - 1
-			}
+func (m *Model) moveCursorUp() bool {
+	current := m.currentLevel()
+	if current == nil {
+		return false
+	}
+	if n := len(current.Items); n > 0 {
+		old := current.Cursor
+		if current.Cursor > 0 {
+			current.Cursor--
+		} else {
+			current.Cursor = n - 1
+		}
+		if old != current.Cursor {
 			events.UI.MenuCursor(current.ID, current.Cursor)
 			m.syncViewport(current)
+			return true
 		}
 	}
+	return false
 }
 
-func (m *Model) moveCursorDown() {
-	if current := m.currentLevel(); current != nil {
-		if n := len(current.Items); n > 0 {
-			if current.Cursor < n-1 {
-				current.Cursor++
-			} else {
-				current.Cursor = 0
-			}
+func (m *Model) moveCursorDown() bool {
+	current := m.currentLevel()
+	if current == nil {
+		return false
+	}
+	if n := len(current.Items); n > 0 {
+		old := current.Cursor
+		if current.Cursor < n-1 {
+			current.Cursor++
+		} else {
+			current.Cursor = 0
+		}
+		if old != current.Cursor {
 			events.UI.MenuCursor(current.ID, current.Cursor)
 			m.syncViewport(current)
+			return true
 		}
 	}
+	return false
 }
 
-func (m *Model) moveCursorPageUp() {
-	if current := m.currentLevel(); current != nil {
-		if moved := current.MoveCursorPageUp(m.maxVisibleItems()); moved {
-			events.UI.MenuCursor(current.ID, current.Cursor)
-		}
-		m.syncViewport(current)
+func (m *Model) moveCursorPageUp() bool {
+	current := m.currentLevel()
+	if current == nil {
+		return false
 	}
+	if moved := current.MoveCursorPageUp(m.maxVisibleItems()); moved {
+		events.UI.MenuCursor(current.ID, current.Cursor)
+		m.syncViewport(current)
+		return true
+	}
+	m.syncViewport(current)
+	return false
 }
 
-func (m *Model) moveCursorPageDown() {
-	if current := m.currentLevel(); current != nil {
-		if moved := current.MoveCursorPageDown(m.maxVisibleItems()); moved {
-			events.UI.MenuCursor(current.ID, current.Cursor)
-		}
-		m.syncViewport(current)
+func (m *Model) moveCursorPageDown() bool {
+	current := m.currentLevel()
+	if current == nil {
+		return false
 	}
+	if moved := current.MoveCursorPageDown(m.maxVisibleItems()); moved {
+		events.UI.MenuCursor(current.ID, current.Cursor)
+		m.syncViewport(current)
+		return true
+	}
+	m.syncViewport(current)
+	return false
 }
 
-func (m *Model) moveCursorHome() {
-	if current := m.currentLevel(); current != nil {
-		if moved := current.MoveCursorHome(); moved {
-			events.UI.MenuCursor(current.ID, current.Cursor)
-		}
-		m.syncViewport(current)
+func (m *Model) moveCursorHome() bool {
+	current := m.currentLevel()
+	if current == nil {
+		return false
 	}
+	if moved := current.MoveCursorHome(); moved {
+		events.UI.MenuCursor(current.ID, current.Cursor)
+		m.syncViewport(current)
+		return true
+	}
+	m.syncViewport(current)
+	return false
 }
 
-func (m *Model) moveCursorEnd() {
-	if current := m.currentLevel(); current != nil {
-		if moved := current.MoveCursorEnd(); moved {
-			events.UI.MenuCursor(current.ID, current.Cursor)
-		}
-		m.syncViewport(current)
+func (m *Model) moveCursorEnd() bool {
+	current := m.currentLevel()
+	if current == nil {
+		return false
 	}
+	if moved := current.MoveCursorEnd(); moved {
+		events.UI.MenuCursor(current.ID, current.Cursor)
+		m.syncViewport(current)
+		return true
+	}
+	m.syncViewport(current)
+	return false
 }
+
 
 func (m *Model) syncViewport(l *level) {
 	if l == nil {
@@ -213,9 +251,10 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	}
-	if m.handleTextInput(keyMsg) {
-		return nil
+	if handled, cmd := m.handleTextInput(keyMsg); handled {
+		return cmd
 	}
+	var previewCmd tea.Cmd
 	switch keyMsg.String() {
 	case "ctrl+c", "q":
 		return tea.Quit
@@ -224,19 +263,31 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	case "enter":
 		return m.handleEnterKey()
 	case "up":
-		m.moveCursorUp()
+		if m.moveCursorUp() {
+			previewCmd = m.ensurePreviewForCurrentLevel()
+		}
 	case "down":
-		m.moveCursorDown()
+		if m.moveCursorDown() {
+			previewCmd = m.ensurePreviewForCurrentLevel()
+		}
 	case "pgup":
-		m.moveCursorPageUp()
+		if m.moveCursorPageUp() {
+			previewCmd = m.ensurePreviewForCurrentLevel()
+		}
 	case "pgdown":
-		m.moveCursorPageDown()
+		if m.moveCursorPageDown() {
+			previewCmd = m.ensurePreviewForCurrentLevel()
+		}
 	case "home":
-		m.moveCursorHome()
+		if m.moveCursorHome() {
+			previewCmd = m.ensurePreviewForCurrentLevel()
+		}
 	case "end":
-		m.moveCursorEnd()
+		if m.moveCursorEnd() {
+			previewCmd = m.ensurePreviewForCurrentLevel()
+		}
 	}
-	return nil
+	return previewCmd
 }
 
 func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
@@ -260,12 +311,13 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	m.applyNodeSettings(level)
 	m.syncViewport(level)
 	m.stack = append(m.stack, level)
+	cmd := m.ensurePreviewForLevel(level)
 	if len(level.Items) == 0 {
 		m.setInfo("No entries found.")
 	} else if m.infoMsg != "" {
 		m.clearInfo()
 	}
-	return nil
+	return cmd
 }
 
 func (m *Model) applyNodeSettings(l *level) {

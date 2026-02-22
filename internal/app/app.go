@@ -27,9 +27,10 @@ func Run(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("resolve socket path: %w", err)
 	}
+	clientID := tmux.CurrentClientID(socketPath)
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	defer watcher.Stop()
-	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu)
+	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu, clientID)
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	_, err = program.Run()
 	if errors.Is(err, tea.ErrProgramKilled) {

@@ -70,6 +70,7 @@ type categoryLoadedMsg struct {
 func (m *Model) menuContext() menu.Context {
 	ctx := menu.Context{
 		SocketPath:           m.socketPath,
+		ClientID:             m.clientID,
 		Sessions:             m.sessions.Entries(),
 		Current:              m.sessions.Current(),
 		IncludeCurrent:       m.sessions.IncludeCurrent(),

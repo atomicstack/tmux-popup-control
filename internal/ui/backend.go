@@ -30,11 +30,15 @@ func (m *Model) handleBackendEventMsg(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	m.applyBackendEvent(eventMsg.event)
+	cmd := m.applyBackendEvent(eventMsg.event)
 	if m.backend != nil {
-		return waitForBackendEvent(m.backend)
+		waitCmd := waitForBackendEvent(m.backend)
+		if cmd != nil {
+			return tea.Batch(cmd, waitCmd)
+		}
+		return waitCmd
 	}
-	return nil
+	return cmd
 }
 
 func (m *Model) handleBackendDoneMsg(msg tea.Msg) tea.Cmd {
@@ -42,18 +46,19 @@ func (m *Model) handleBackendDoneMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) applyBackendEvent(evt backend.Event) {
+func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 	if m.backendState == nil {
 		m.backendState = make(map[backend.Kind]error)
 	}
 	m.backendState[evt.Kind] = evt.Err
 	if evt.Err != nil {
 		m.backendLastErr = evt.Err.Error()
-		return
+		return nil
 	}
 
 	res := m.dispatcher.Handle(evt)
 	ctx := m.menuContext()
+	var previewCmd tea.Cmd
 
 	if res.SessionsUpdated {
 		if lvl := m.findLevelByID("session:switch"); lvl != nil {
@@ -77,6 +82,9 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 		}
 		if m.sessionForm != nil {
 			m.sessionForm.SetSessions(ctx.Sessions)
+		}
+		if current := m.currentLevel(); current != nil && current.ID == "session:switch" {
+			previewCmd = m.ensurePreviewForLevel(current)
 		}
 	}
 
@@ -114,6 +122,9 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 			m.applyNodeSettings(lvl)
 			m.syncViewport(lvl)
 		}
+		if current := m.currentLevel(); current != nil && current.ID == "window:switch" {
+			previewCmd = m.ensurePreviewForLevel(current)
+		}
 	}
 
 	if res.PanesUpdated {
@@ -147,11 +158,15 @@ func (m *Model) applyBackendEvent(evt backend.Event) {
 		if m.paneForm != nil {
 			m.paneForm.SyncContext(ctx)
 		}
+		if current := m.currentLevel(); current != nil && current.ID == "pane:switch" {
+			previewCmd = m.ensurePreviewForLevel(current)
+		}
 	}
 
 	if warn, _ := m.hasBackendIssue(); !warn {
 		m.backendLastErr = ""
 	}
+	return previewCmd
 }
 
 func (m *Model) hasBackendIssue() (bool, string) {

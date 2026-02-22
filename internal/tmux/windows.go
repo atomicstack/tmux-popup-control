@@ -7,12 +7,17 @@ import (
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
-func SwitchClient(socketPath, target string) error {
+func SwitchClient(socketPath, clientID, target string) error {
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return err
 	}
-	return client.SwitchClient(&gotmux.SwitchClientOptions{TargetSession: target})
+	defer client.Close()
+	opts := &gotmux.SwitchClientOptions{TargetSession: target}
+	if strings.TrimSpace(clientID) != "" {
+		opts.TargetClient = clientID
+	}
+	return client.SwitchClient(opts)
 }
 
 func SelectWindow(socketPath, target string) error {
@@ -20,6 +25,7 @@ func SelectWindow(socketPath, target string) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	window, err := findWindow(client, target)
 	if err != nil {
 		return err
@@ -35,6 +41,7 @@ func KillWindow(socketPath, target string) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	window, err := findWindow(client, target)
 	if err != nil {
 		return err
@@ -68,6 +75,7 @@ func RenameWindow(socketPath, target, newName string) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	window, err := findWindow(client, target)
 	if err != nil {
 		return err
@@ -126,6 +134,7 @@ func KillWindows(socketPath string, targets []string) error {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	for _, target := range targets {
 		target = strings.TrimSpace(target)
 		if target == "" {

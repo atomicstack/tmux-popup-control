@@ -107,6 +107,7 @@ type fakeClient struct {
 	clientsErr     error
 	switchErr      error
 	switchCalls    int
+	lastSwitchOpts *gotmux.SwitchClientOptions
 	getSessions    map[string]*gotmux.Session
 	newErr         error
 	windowHandles  map[string]windowHandle
@@ -141,8 +142,14 @@ func (f *fakeClient) ListClients() ([]*gotmux.Client, error) {
 	return f.clients, nil
 }
 
-func (f *fakeClient) SwitchClient(*gotmux.SwitchClientOptions) error {
+func (f *fakeClient) SwitchClient(opts *gotmux.SwitchClientOptions) error {
 	f.switchCalls++
+	if opts != nil {
+		copy := *opts
+		f.lastSwitchOpts = &copy
+	} else {
+		f.lastSwitchOpts = nil
+	}
 	return f.switchErr
 }
 
@@ -325,6 +332,54 @@ func TestFetchSessions(t *testing.T) {
 	}
 	if !snap.Sessions[0].Attached {
 		t.Fatalf("expected attached session")
+	}
+}
+
+func TestFetchSessionsCurrentFromTmuxPane(t *testing.T) {
+	// When multiple clients are attached to different sessions, currentSessionName
+	// should use TMUX_PANE → display-message to identify the launching client's
+	// session rather than blindly picking the first entry from ListClients.
+	fake := &fakeClient{
+		sessions: []*gotmux.Session{
+			{Name: "work", Windows: 1, Attached: 1},
+			{Name: "dev", Windows: 2, Attached: 1},
+		},
+		clients: []*gotmux.Client{
+			{Session: "work"}, // first client — wrong session
+			{Session: "dev"},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_PANE", "%5")
+	withStubCommander(t, func(_ string, args ...string) commander {
+		if containsArg(args, "display-message") {
+			return &stubCommander{output: []byte("dev\n")}
+		}
+		if containsArg(args, "list-sessions") {
+			return &stubCommander{output: []byte("work\twork\ndev\tdev\n")}
+		}
+		return &stubCommander{}
+	})
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
+	snap, err := FetchSessions("sock")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if snap.Current != "dev" {
+		t.Fatalf("expected current=dev (from TMUX_PANE), got %q", snap.Current)
+	}
+	for _, s := range snap.Sessions {
+		switch s.Name {
+		case "dev":
+			if !s.Current {
+				t.Fatalf("expected dev session to be marked current")
+			}
+		case "work":
+			if s.Current {
+				t.Fatalf("expected work session NOT to be marked current")
+			}
+		}
 	}
 }
 
@@ -871,10 +926,10 @@ func TestKillSessionsPropagatesError(t *testing.T) {
 }
 
 func TestSwitchPaneValidatesTarget(t *testing.T) {
-	if err := SwitchPane("", "dev"); err == nil || !strings.Contains(err.Error(), "invalid pane target") {
+	if err := SwitchPane("", "", "dev"); err == nil || !strings.Contains(err.Error(), "invalid pane target") {
 		t.Fatalf("expected validation error, got %v", err)
 	}
-	if err := SwitchPane("", "dev:0"); err == nil || !strings.Contains(err.Error(), "invalid pane target") {
+	if err := SwitchPane("", "", "dev:0"); err == nil || !strings.Contains(err.Error(), "invalid pane target") {
 		t.Fatalf("expected validation error, got %v", err)
 	}
 }
@@ -895,11 +950,14 @@ func TestSwitchPaneRunsCommands(t *testing.T) {
 		return &stubCommander{}
 	})
 
-	if err := SwitchPane("sock", "dev:0.%0"); err != nil {
+	if err := SwitchPane("sock", "client-9", "dev:0.%0"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if fake.switchCalls != 1 {
 		t.Fatalf("expected switch client call, got %d", fake.switchCalls)
+	}
+	if fake.lastSwitchOpts == nil || fake.lastSwitchOpts.TargetClient != "client-9" {
+		t.Fatalf("expected target client to be set, got %+v", fake.lastSwitchOpts)
 	}
 	if handle.selectCalls != 1 {
 		t.Fatalf("expected select call, got %d", handle.selectCalls)
@@ -915,5 +973,22 @@ func TestSwitchPaneRunsCommands(t *testing.T) {
 	}
 	if !foundSelectPane {
 		t.Fatalf("expected select-pane command, calls: %#v", runCalls)
+	}
+}
+
+func TestSwitchClientTargetsRequestedClient(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	if err := SwitchClient("", "client-42", "dev"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fake.lastSwitchOpts == nil {
+		t.Fatalf("expected switch opts recorded")
+	}
+	if fake.lastSwitchOpts.TargetClient != "client-42" {
+		t.Fatalf("expected target client to be set, got %+v", fake.lastSwitchOpts)
+	}
+	if fake.lastSwitchOpts.TargetSession != "dev" {
+		t.Fatalf("expected target session dev, got %s", fake.lastSwitchOpts.TargetSession)
 	}
 }
