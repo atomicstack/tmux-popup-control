@@ -36,6 +36,8 @@ Here’s what’s happened so far:
 - Switch actions now detect the invoking tmux client via `display-message`, pass that client id through the UI/menu context, and target it in `switch-client` calls so pane/window/session switches work again even with the new attach-based control transport; session/window previews fall back to cached snapshot data so they display reliably without extra tmux CLI calls.
 - Every control-mode client we spawn (sessions/windows helpers, snapshots, switch-client flows) now calls `Close()` once finished, so tmux-popup-control no longer leaks background `tmux -C` processes after exiting.
 
+- Session:switch and window:switch previews now capture the active pane's content via `tmux capture-pane` (async, same as pane:switch) rather than a static window/pane list; `activePaneIDForSession` and `activePaneIDForWindow` helpers find the best pane from cached state, falling back to text lists when no pane data is available. `maxVisibleItems()` now subtracts the preview block height (blank + title + content lines) from the item viewport budget so previews are never clipped off-screen by `limitHeight`; a 3-line reservation holds space while the async capture is in flight. `handlePreviewLoadedMsg` calls `syncViewport` after storing loaded data so the cursor stays visible with the updated budget. New unit tests cover the pane-capture path, the `Current`-pane preference, the window-list fallback, and the `maxVisibleItems` shrinkage.
+
 Outstanding work from the broader plan:
 - (TBD) Identify further UI cleanups or feature work once the refactor settles.
 - Review whether remaining tmux helpers (e.g., LinkWindow/MoveWindow/SwapWindows, pane move/break flows) need similar handle abstractions or expanded fake scenarios.
