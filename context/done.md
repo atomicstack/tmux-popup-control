@@ -27,9 +27,14 @@ Here’s what’s happened so far:
 - Snapshot loading became resilient to control-mode races: session/window/pane fetchers fall back to direct tmux calls, fill in missing session IDs, and ignore vanished resources instead of failing whole queries.
 - Session/window helpers pick up more fallbacks (e.g., renames, kills) so actions succeed even when stale data races with tmux; tests now disable throttling via control-mode and validate the new behaviour.
 - The test harness logs and tears down each tmux server via control mode (`KillServer`), clearing `TMUX` env vars so we never reuse the user’s session and preventing orphaned tmux processes between runs.
- - Hardened the vendored gotmuxcc router so event emission respects router shutdown, avoiding `send on closed channel` panics when tmux exits during tests.
- - internal/tmux session detach/kill helpers now poll for control-mode visibility, fall back to direct tmux commands, and wait for `has-session` to fail so integration tests stop flaking when new sessions race control-mode.
- - gotmuxcc control transport now issues a one-shot `attach-session` to the first existing session when available, preventing throwaway sessions while keeping switch menus populated; unit tests cover the detection path.
+- Hardened the vendored gotmuxcc router so event emission respects router shutdown, avoiding `send on closed channel` panics when tmux exits during tests.
+- internal/tmux session detach/kill helpers now poll for control-mode visibility, fall back to direct tmux commands, and wait for `has-session` to fail so integration tests stop flaking when new sessions race control-mode.
+- gotmuxcc control transport now issues a one-shot `attach-session` to the first existing session when available, preventing throwaway sessions while keeping switch menus populated; unit tests cover the detection path.
+- Planned the preview feature architecture: previews will live alongside the UI model with per-level state, fire asynchronous `tmux` fetch commands for sessions/windows/panes, and render via a dedicated preview section in the View so cursor moves never block the TUI.
+- Added tmux preview helpers (session/window listings plus pane capture) and new UI preview plumbing that fires asynchronous commands whenever the session/window/pane switch menus change selection, tracking requests via per-level state and tests so stale responses are ignored without blocking cursor motion.
+- Rendered the preview block inside the TUI with new themed styles, trimming output to a manageable height and surfacing either content, loading state, or errors; view/unit tests cover the new presentation.
+- Switch actions now detect the invoking tmux client via `display-message`, pass that client id through the UI/menu context, and target it in `switch-client` calls so pane/window/session switches work again even with the new attach-based control transport; session/window previews fall back to cached snapshot data so they display reliably without extra tmux CLI calls.
+- Every control-mode client we spawn (sessions/windows helpers, snapshots, switch-client flows) now calls `Close()` once finished, so tmux-popup-control no longer leaks background `tmux -C` processes after exiting.
 
 Outstanding work from the broader plan:
 - (TBD) Identify further UI cleanups or feature work once the refactor settles.
