@@ -8,32 +8,18 @@ import (
 )
 
 func SwitchClient(socketPath, clientID, target string) error {
-	client, err := newTmux(socketPath)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	opts := &gotmux.SwitchClientOptions{TargetSession: target}
+	args := baseArgs(socketPath)
+	args = append(args, "switch-client")
 	if strings.TrimSpace(clientID) != "" {
-		opts.TargetClient = clientID
+		args = append(args, "-c", clientID)
 	}
-	return client.SwitchClient(opts)
+	args = append(args, "-t", target)
+	return runExecCommand("tmux", args...).Run()
 }
 
 func SelectWindow(socketPath, target string) error {
-	client, err := newTmux(socketPath)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	window, err := findWindow(client, target)
-	if err != nil {
-		return err
-	}
-	if window == nil {
-		return fmt.Errorf("window %s not found", target)
-	}
-	return window.Select()
+	args := append(baseArgs(socketPath), "select-window", "-t", target)
+	return runExecCommand("tmux", args...).Run()
 }
 
 func KillWindow(socketPath, target string) error {

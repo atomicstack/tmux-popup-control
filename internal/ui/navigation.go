@@ -251,15 +251,18 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	}
+	// Handle quit and escape before filter input so they always work.
+	switch keyMsg.String() {
+	case "ctrl+c":
+		return tea.Quit
+	case "esc":
+		return m.handleEscapeKey()
+	}
 	if handled, cmd := m.handleTextInput(keyMsg); handled {
 		return cmd
 	}
 	var previewCmd tea.Cmd
 	switch keyMsg.String() {
-	case "ctrl+c", "q":
-		return tea.Quit
-	case "esc":
-		return m.handleEscapeKey()
 	case "enter":
 		return m.handleEnterKey()
 	case "up":

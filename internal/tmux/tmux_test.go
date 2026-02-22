@@ -794,33 +794,31 @@ func TestFetchPanesParsesOutput(t *testing.T) {
 	}
 }
 
-func TestSelectWindowUsesHandle(t *testing.T) {
-	handle := &stubWindowHandle{}
-	fake := &fakeClient{
-		windows: []*gotmux.Window{
-			{Id: "@1"},
-		},
-	}
-	fake.useWindowHandles(t, map[string]*stubWindowHandle{"@1": handle})
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	if err := SelectWindow("", "@1"); err != nil {
+func TestSelectWindowRunsCommand(t *testing.T) {
+	var runCalls [][]string
+	withStubCommander(t, func(name string, args ...string) commander {
+		runCalls = append(runCalls, append([]string{name}, args...))
+		return &stubCommander{}
+	})
+	if err := SelectWindow("", "main:1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if handle.selectCalls != 1 {
-		t.Fatalf("expected select call, got %d", handle.selectCalls)
+	found := false
+	for _, call := range runCalls {
+		if call[0] == "tmux" && containsArg(call[1:], "select-window") && containsArg(call[1:], "main:1") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected select-window main:1 command; calls: %#v", runCalls)
 	}
 }
 
-func TestSelectWindowPropagatesHandleError(t *testing.T) {
-	handle := &stubWindowHandle{selectErr: errors.New("boom")}
-	fake := &fakeClient{
-		windows: []*gotmux.Window{
-			{Id: "@1"},
-		},
-	}
-	fake.useWindowHandles(t, map[string]*stubWindowHandle{"@1": handle})
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	if err := SelectWindow("", "@1"); err == nil || !strings.Contains(err.Error(), "boom") {
+func TestSelectWindowPropagatesError(t *testing.T) {
+	withStubCommander(t, func(string, ...string) commander {
+		return &stubCommander{runErr: errors.New("boom")}
+	})
+	if err := SelectWindow("", "main:1"); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected error, got %v", err)
 	}
 }
@@ -980,15 +978,6 @@ func TestSwitchPaneValidatesTarget(t *testing.T) {
 }
 
 func TestSwitchPaneRunsCommands(t *testing.T) {
-	handle := &stubWindowHandle{}
-	fake := &fakeClient{
-		windows: []*gotmux.Window{
-			{Id: "@1", Index: 0, ActiveSessionsList: []string{"dev"}},
-		},
-	}
-	fake.useWindowHandles(t, map[string]*stubWindowHandle{"@1": handle})
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-
 	var runCalls [][]string
 	withStubCommander(t, func(name string, args ...string) commander {
 		runCalls = append(runCalls, append([]string{name}, args...))
@@ -998,23 +987,35 @@ func TestSwitchPaneRunsCommands(t *testing.T) {
 	if err := SwitchPane("sock", "client-9", "dev:0.%0"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if fake.switchCalls != 1 {
-		t.Fatalf("expected switch client call, got %d", fake.switchCalls)
-	}
-	if fake.lastSwitchOpts == nil || fake.lastSwitchOpts.TargetClient != "client-9" {
-		t.Fatalf("expected target client to be set, got %+v", fake.lastSwitchOpts)
-	}
-	if handle.selectCalls != 1 {
-		t.Fatalf("expected select call, got %d", handle.selectCalls)
-	}
+	foundSwitchClient := false
+	foundSelectWindow := false
 	foundSelectPane := false
 	for _, call := range runCalls {
-		if call[0] == "tmux" && containsArg(call[1:], "select-pane") {
-			foundSelectPane = true
-			if !strings.Contains(strings.Join(call[1:], " "), "-S sock") {
-				t.Fatalf("expected socket arg in %v", call)
+		if call[0] != "tmux" {
+			continue
+		}
+		args := call[1:]
+		if containsArg(args, "switch-client") && containsArg(args, "client-9") && containsArg(args, "dev") {
+			foundSwitchClient = true
+			if !strings.Contains(strings.Join(args, " "), "-S sock") {
+				t.Fatalf("expected socket arg in switch-client call %v", call)
 			}
 		}
+		if containsArg(args, "select-window") && containsArg(args, "dev:0") {
+			foundSelectWindow = true
+		}
+		if containsArg(args, "select-pane") {
+			foundSelectPane = true
+			if !strings.Contains(strings.Join(args, " "), "-S sock") {
+				t.Fatalf("expected socket arg in select-pane call %v", call)
+			}
+		}
+	}
+	if !foundSwitchClient {
+		t.Fatalf("expected switch-client command, calls: %#v", runCalls)
+	}
+	if !foundSelectWindow {
+		t.Fatalf("expected select-window command, calls: %#v", runCalls)
 	}
 	if !foundSelectPane {
 		t.Fatalf("expected select-pane command, calls: %#v", runCalls)
@@ -1022,18 +1023,22 @@ func TestSwitchPaneRunsCommands(t *testing.T) {
 }
 
 func TestSwitchClientTargetsRequestedClient(t *testing.T) {
-	fake := &fakeClient{}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	var runCalls [][]string
+	withStubCommander(t, func(name string, args ...string) commander {
+		runCalls = append(runCalls, append([]string{name}, args...))
+		return &stubCommander{}
+	})
 	if err := SwitchClient("", "client-42", "dev"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if fake.lastSwitchOpts == nil {
-		t.Fatalf("expected switch opts recorded")
+	found := false
+	for _, call := range runCalls {
+		if call[0] == "tmux" && containsArg(call[1:], "switch-client") &&
+			containsArg(call[1:], "client-42") && containsArg(call[1:], "dev") {
+			found = true
+		}
 	}
-	if fake.lastSwitchOpts.TargetClient != "client-42" {
-		t.Fatalf("expected target client to be set, got %+v", fake.lastSwitchOpts)
-	}
-	if fake.lastSwitchOpts.TargetSession != "dev" {
-		t.Fatalf("expected target session dev, got %s", fake.lastSwitchOpts.TargetSession)
+	if !found {
+		t.Fatalf("expected switch-client with client-42 and dev; calls: %#v", runCalls)
 	}
 }

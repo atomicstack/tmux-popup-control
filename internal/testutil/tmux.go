@@ -143,5 +143,74 @@ func killTmuxServerControl(ctx context.Context, socket string) error {
 	return client.KillServer()
 }
 
-// TODO: launch the tmux-popup-control binary inside the temporary server and
-// verify the UI by comparing CapturePane output against golden files.
+// WaitForContent polls the given pane until its captured output contains
+// substr, returning the full output when found. The test fails if ctx expires.
+func WaitForContent(t *testing.T, ctx context.Context, socketPath, pane, substr string) string {
+	t.Helper()
+	for {
+		select {
+		case <-ctx.Done():
+			out, _ := CapturePane(t, socketPath, pane)
+			t.Fatalf("timeout waiting for %q in pane %s; last output:\n%s", substr, pane, out)
+			return ""
+		case <-time.After(50 * time.Millisecond):
+			out, err := CapturePane(t, socketPath, pane)
+			if err != nil {
+				if errors.Is(err, ErrPaneUnavailable) {
+					continue
+				}
+				t.Fatalf("capture-pane error waiting for %q: %v", substr, err)
+			}
+			if strings.Contains(out, substr) {
+				return out
+			}
+		}
+	}
+}
+
+// WaitForAbsent polls until the pane output no longer contains substr.
+// The test fails if ctx expires.
+func WaitForAbsent(t *testing.T, ctx context.Context, socketPath, pane, substr string) {
+	t.Helper()
+	for {
+		select {
+		case <-ctx.Done():
+			out, _ := CapturePane(t, socketPath, pane)
+			t.Fatalf("timeout waiting for %q to disappear from pane %s; last output:\n%s", substr, pane, out)
+		case <-time.After(50 * time.Millisecond):
+			out, err := CapturePane(t, socketPath, pane)
+			if err != nil {
+				if errors.Is(err, ErrPaneUnavailable) {
+					continue
+				}
+				t.Fatalf("capture-pane error waiting for absence of %q: %v", substr, err)
+			}
+			if !strings.Contains(out, substr) {
+				return
+			}
+		}
+	}
+}
+
+// SendKeys sends one or more named keys to a tmux pane (e.g. "Down", "Enter",
+// "Escape", "q"). Each call to tmux send-keys sends all provided keys in one
+// shot; use SendText for literal character input.
+func SendKeys(t *testing.T, socketPath, pane string, keys ...string) {
+	t.Helper()
+	if len(keys) == 0 {
+		return
+	}
+	args := append([]string{"send-keys", "-t", pane}, keys...)
+	if err := tmuxCommand(socketPath, args...).Run(); err != nil {
+		t.Fatalf("send-keys %v to pane %s: %v", keys, pane, err)
+	}
+}
+
+// SendText sends a literal string to a tmux pane without key-name lookup.
+// Use this for filter input (e.g. "alpha").
+func SendText(t *testing.T, socketPath, pane, text string) {
+	t.Helper()
+	if err := tmuxCommand(socketPath, "send-keys", "-l", "-t", pane, text).Run(); err != nil {
+		t.Fatalf("send-text %q to pane %s: %v", text, pane, err)
+	}
+}

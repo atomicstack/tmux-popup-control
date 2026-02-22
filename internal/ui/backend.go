@@ -60,6 +60,8 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 	ctx := m.menuContext()
 	var previewCmd tea.Cmd
 
+	currentLvl := m.currentLevel()
+
 	if res.SessionsUpdated {
 		if lvl := m.findLevelByID("session:switch"); lvl != nil {
 			items := sessionSwitchItems(ctx)
@@ -83,8 +85,8 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		if m.sessionForm != nil {
 			m.sessionForm.SetSessions(ctx.Sessions)
 		}
-		if current := m.currentLevel(); current != nil && current.ID == "session:switch" {
-			previewCmd = m.ensurePreviewForLevel(current)
+		if currentLvl != nil && currentLvl.ID == "session:switch" {
+			previewCmd = m.ensurePreviewForLevel(currentLvl)
 		}
 	}
 
@@ -122,8 +124,8 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 			m.applyNodeSettings(lvl)
 			m.syncViewport(lvl)
 		}
-		if current := m.currentLevel(); current != nil && current.ID == "window:switch" {
-			previewCmd = m.ensurePreviewForLevel(current)
+		if currentLvl != nil && currentLvl.ID == "window:switch" {
+			previewCmd = m.ensurePreviewForLevel(currentLvl)
 		}
 	}
 
@@ -158,8 +160,8 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		if m.paneForm != nil {
 			m.paneForm.SyncContext(ctx)
 		}
-		if current := m.currentLevel(); current != nil && current.ID == "pane:switch" {
-			previewCmd = m.ensurePreviewForLevel(current)
+		if currentLvl != nil && currentLvl.ID == "pane:switch" {
+			previewCmd = m.ensurePreviewForLevel(currentLvl)
 		}
 	}
 

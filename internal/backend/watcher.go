@@ -64,9 +64,15 @@ func (w *Watcher) Events() <-chan Event {
 	return w.events
 }
 
-// Stop stops the watcher and waits for goroutines to exit.
+// Stop cancels the watcher. Pollers exit after their current fetch completes;
+// use Wait if a clean drain is required (e.g. in tests).
 func (w *Watcher) Stop() {
 	w.cancel()
+}
+
+// Wait blocks until all poller goroutines have exited and the events channel
+// is closed. Call after Stop when a clean shutdown is required.
+func (w *Watcher) Wait() {
 	w.wg.Wait()
 }
 
