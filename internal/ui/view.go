@@ -281,6 +281,17 @@ func (m *Model) maxVisibleItems() int {
 	if m.showFooter {
 		used += 2
 	}
+	if preview := m.activePreview(); shouldRenderPreview(preview) {
+		used += 2 // blank separator + title line
+		if preview.err != "" {
+			used++ // one line for the error text
+		} else {
+			used += len(previewDisplayLines(preview))
+		}
+	} else if current := m.currentLevel(); current != nil && previewKindForLevel(current.ID) != previewKindNone {
+		// Reserve space for the preview that is about to load.
+		used += 3 // blank + title + "Loading preview…"
+	}
 	remain := m.height - used
 	if remain < 1 {
 		return 1

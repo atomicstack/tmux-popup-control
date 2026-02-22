@@ -94,26 +94,28 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 			}
 		}
 	case previewKindSession:
-		lines := m.sessionPreviewLines(target)
-		return func() tea.Msg {
-			return previewLoadedMsg{
-				levelID: levelID,
-				kind:    kind,
-				target:  target,
-				seq:     seq,
-				lines:   lines,
+		paneID := m.activePaneIDForSession(target)
+		if paneID == "" {
+			lines := m.sessionPreviewLines(target)
+			return func() tea.Msg {
+				return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines}
 			}
 		}
-	case previewKindWindow:
-		lines := m.windowPreviewLines(target)
 		return func() tea.Msg {
-			return previewLoadedMsg{
-				levelID: levelID,
-				kind:    kind,
-				target:  target,
-				seq:     seq,
-				lines:   lines,
+			lines, err := panePreviewFn(socket, paneID)
+			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines, err: err}
+		}
+	case previewKindWindow:
+		paneID := m.activePaneIDForWindow(target)
+		if paneID == "" {
+			lines := m.windowPreviewLines(target)
+			return func() tea.Msg {
+				return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines}
 			}
+		}
+		return func() tea.Msg {
+			lines, err := panePreviewFn(socket, paneID)
+			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines, err: err}
 		}
 	default:
 		return nil
@@ -122,6 +124,50 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 
 func (m *Model) ensurePreviewForCurrentLevel() tea.Cmd {
 	return m.ensurePreviewForLevel(m.currentLevel())
+}
+
+// activePaneIDForSession returns the pane item ID to capture for a session preview.
+// It prefers the session's currently active pane; falls back to the first pane found.
+func (m *Model) activePaneIDForSession(session string) string {
+	target := strings.TrimSpace(session)
+	if target == "" {
+		return ""
+	}
+	var fallback string
+	for _, entry := range m.panes.Entries() {
+		if strings.TrimSpace(entry.Session) != target {
+			continue
+		}
+		if entry.Current {
+			return entry.ID
+		}
+		if fallback == "" {
+			fallback = entry.ID
+		}
+	}
+	return fallback
+}
+
+// activePaneIDForWindow returns the pane item ID to capture for a window preview.
+// It prefers the window's currently active pane; falls back to the first pane found.
+func (m *Model) activePaneIDForWindow(window string) string {
+	target := strings.TrimSpace(window)
+	if target == "" {
+		return ""
+	}
+	var fallback string
+	for _, entry := range m.panes.Entries() {
+		if !windowMatchesTarget(entry, target) {
+			continue
+		}
+		if entry.Current {
+			return entry.ID
+		}
+		if fallback == "" {
+			fallback = entry.ID
+		}
+	}
+	return fallback
 }
 
 func (m *Model) clearPreview(levelID string) {
@@ -178,6 +224,8 @@ func (m *Model) handlePreviewLoadedMsg(msg tea.Msg) tea.Cmd {
 		data.err = ""
 		data.lines = update.lines
 	}
+	// Re-sync the viewport so the cursor stays visible with the updated item height budget.
+	m.syncViewport(m.currentLevel())
 	return nil
 }
 
