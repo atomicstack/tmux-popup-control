@@ -2,67 +2,32 @@ package tmux
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
 const panePreviewDefaultLines = 40
 
-var (
-	sessionPreviewFormat = "#{?window_active,*, } #{window_index}: #{window_name}"
-	windowPreviewFormat  = "#{?pane_active,*, } #{pane_index}: #{pane_title} (#{pane_current_command})"
-)
+// ansiEscapeRe matches ANSI/VT100 escape sequences so they can be stripped
+// before the captured pane content is shown in the text preview panel.
+var ansiEscapeRe = regexp.MustCompile(`\x1b(?:\[[0-9;?]*[A-Za-z]|[A-Za-z=><\\])`)
 
-// SessionPreview returns a textual description of the windows that belong to a session.
-func SessionPreview(socketPath, session string) ([]string, error) {
-	target := strings.TrimSpace(session)
-	if target == "" {
-		return nil, fmt.Errorf("session name required")
-	}
-	args := append(baseArgs(socketPath), "list-windows", "-t", target, "-F", sessionPreviewFormat)
-	cmd := runExecCommand("tmux", args...)
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("list-windows %s: %w", target, err)
-	}
-	lines := splitPreviewLines(string(output), false)
-	if len(lines) == 0 {
-		return []string{"(no windows)"}, nil
-	}
-	return lines, nil
-}
-
-// WindowPreview returns a textual description of the panes contained in a window.
-func WindowPreview(socketPath, window string) ([]string, error) {
-	target := strings.TrimSpace(window)
-	if target == "" {
-		return nil, fmt.Errorf("window target required")
-	}
-	args := append(baseArgs(socketPath), "list-panes", "-t", target, "-F", windowPreviewFormat)
-	cmd := runExecCommand("tmux", args...)
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("list-panes %s: %w", target, err)
-	}
-	lines := splitPreviewLines(string(output), false)
-	if len(lines) == 0 {
-		return []string{"(no panes)"}, nil
-	}
-	return lines, nil
-}
-
-// PanePreview captures the contents of a pane for display.
+// PanePreview captures the contents of a pane for display using a direct
+// tmux subprocess call (rather than the control-mode transport) so that the
+// raw pane content is retrieved reliably regardless of any control-mode
+// quirks with capture-pane.
 func PanePreview(socketPath, pane string) ([]string, error) {
 	target := strings.TrimSpace(pane)
 	if target == "" {
 		return nil, fmt.Errorf("pane target required")
 	}
-	args := append(baseArgs(socketPath), "capture-pane", "-ep", "-S", fmt.Sprintf("-%d", panePreviewDefaultLines), "-t", target)
-	cmd := runExecCommand("tmux", args...)
-	output, err := cmd.Output()
+	args := append(baseArgs(socketPath), "capture-pane", "-p", "-t", target, "-S", fmt.Sprintf("-%d", panePreviewDefaultLines))
+	out, err := runExecCommand("tmux", args...).Output()
 	if err != nil {
 		return nil, fmt.Errorf("capture-pane %s: %w", target, err)
 	}
-	lines := splitPreviewLines(string(output), true)
+	text := ansiEscapeRe.ReplaceAllString(string(out), "")
+	lines := splitPreviewLines(text, true)
 	if len(lines) == 0 {
 		return []string{"(pane is empty)"}, nil
 	}

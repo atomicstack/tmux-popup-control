@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 func RenamePane(socketPath, target, newTitle string) error {
@@ -15,22 +17,29 @@ func RenamePane(socketPath, target, newTitle string) error {
 	if trimmedTitle == "" {
 		return fmt.Errorf("pane title required")
 	}
-	args := append(baseArgs(socketPath), "rename-pane", "-t", trimmedTarget, trimmedTitle)
-	return runExecCommand("tmux", args...).Run()
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	return client.RenamePane(trimmedTarget, trimmedTitle)
 }
 
 func KillPanes(socketPath string, targets []string) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	args := baseArgs(socketPath)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
 	for _, target := range targets {
 		t := strings.TrimSpace(target)
 		if t == "" {
 			continue
 		}
-		cmd := runExecCommand("tmux", append(args, "kill-pane", "-t", t)...)
-		if err := cmd.Run(); err != nil {
+		if _, err := client.Command("kill-pane", "-t", t); err != nil {
 			return err
 		}
 	}
@@ -41,40 +50,57 @@ func SwapPanes(socketPath, first, second string) error {
 	if strings.TrimSpace(first) == "" || strings.TrimSpace(second) == "" {
 		return fmt.Errorf("pane ids required")
 	}
-	args := append(baseArgs(socketPath), "swap-pane", "-s", first, "-t", second)
-	return runExecCommand("tmux", args...).Run()
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	return client.SwapPanes(first, second)
 }
 
 func MovePane(socketPath, source, target string) error {
 	if strings.TrimSpace(source) == "" {
 		return fmt.Errorf("pane source required")
 	}
-	args := append(baseArgs(socketPath), "move-pane", "-s", source)
-	if strings.TrimSpace(target) != "" {
-		args = append(args, "-t", target)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
 	}
-	return runExecCommand("tmux", args...).Run()
+	defer client.Close()
+	return client.MovePane(source, target)
 }
 
 func BreakPane(socketPath, source, destination string) error {
 	if strings.TrimSpace(source) == "" {
 		return fmt.Errorf("pane source required")
 	}
-	args := append(baseArgs(socketPath), "break-pane", "-s", source)
-	if strings.TrimSpace(destination) != "" {
-		args = append(args, "-t", destination)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
 	}
-	return runExecCommand("tmux", args...).Run()
+	defer client.Close()
+	return client.BreakPane(source, destination)
 }
 
+// SelectLayout applies a layout to the current window via control-mode.
+// No explicit window target is used; tmux applies the layout to whatever
+// window is currently active for the control-mode session.
 func SelectLayout(socketPath, layout string) error {
 	if strings.TrimSpace(layout) == "" {
 		return fmt.Errorf("layout required")
 	}
-	args := append(baseArgs(socketPath), "select-layout", layout)
-	return runExecCommand("tmux", args...).Run()
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	_, err = client.Command("select-layout", layout)
+	return err
 }
 
+// ResizePane resizes the current pane via control-mode.
+// No explicit pane target is used; tmux applies the resize to the
+// currently active pane.
 func ResizePane(socketPath, direction string, amount int) error {
 	if amount <= 0 {
 		return fmt.Errorf("amount must be positive")
@@ -92,8 +118,13 @@ func ResizePane(socketPath, direction string, amount int) error {
 	default:
 		return fmt.Errorf("unknown direction %q", direction)
 	}
-	args := append(baseArgs(socketPath), "resize-pane", flag, strconv.Itoa(amount))
-	return runExecCommand("tmux", args...).Run()
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	_, err = client.Command("resize-pane", flag, strconv.Itoa(amount))
+	return err
 }
 
 func SwitchPane(socketPath, clientID, target string) error {
@@ -108,12 +139,20 @@ func SwitchPane(socketPath, clientID, target string) error {
 		return fmt.Errorf("invalid pane target %q", target)
 	}
 	window := fmt.Sprintf("%s:%s", session, windowParts[0])
-	if err := SwitchClient(socketPath, clientID, session); err != nil {
+	client, err := newTmux(socketPath)
+	if err != nil {
 		return err
 	}
-	if err := SelectWindow(socketPath, window); err != nil {
+	defer client.Close()
+	switchOpts := &gotmux.SwitchClientOptions{TargetSession: session}
+	if strings.TrimSpace(clientID) != "" {
+		switchOpts.TargetClient = clientID
+	}
+	if err := client.SwitchClient(switchOpts); err != nil {
 		return err
 	}
-	args := append(baseArgs(socketPath), "select-pane", "-t", target)
-	return runExecCommand("tmux", args...).Run()
+	if err := client.SelectWindow(window); err != nil {
+		return err
+	}
+	return client.SelectPane(target)
 }

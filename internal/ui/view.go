@@ -9,7 +9,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const previewMaxDisplayLines = 20
+const (
+	previewMaxDisplayLines = 20  // used by inline (vertical) preview only
+	previewPanelMinWidth   = 40  // minimum cols for the preview panel; below this no split
+	previewPanelFraction   = 0.6 // fraction of total width given to the preview panel
+)
+
+// previewBorder styles used when drawing the preview box.
+var (
+	previewBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	previewScrollStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+)
 
 type styledLine struct {
 	text          string
@@ -17,6 +27,38 @@ type styledLine struct {
 	highlightFrom int
 }
 
+// hasSidePreview reports whether the current level should be rendered with the
+// preview panel on the right rather than inline below the items.
+func (m *Model) hasSidePreview() bool {
+	current := m.currentLevel()
+	if current == nil {
+		return false
+	}
+	if previewKindForLevel(current.ID) == previewKindNone {
+		return false
+	}
+	return m.previewPanelWidth() > 0
+}
+
+// previewPanelWidth returns the width in columns for the right-hand preview
+// panel.  Returns 0 when the terminal is too narrow to split.
+func (m *Model) previewPanelWidth() int {
+	if m.width <= 0 {
+		return 0
+	}
+	w := int(float64(m.width) * previewPanelFraction)
+	if w < previewPanelMinWidth {
+		return 0
+	}
+	return w
+}
+
+// menuColumnWidth returns the width available for the left-hand menu column.
+func (m *Model) menuColumnWidth() int {
+	return m.width - m.previewPanelWidth()
+}
+
+// View implements tea.Model.
 func (m *Model) View() string {
 	header := m.menuHeader()
 	switch m.mode {
@@ -33,18 +75,19 @@ func (m *Model) View() string {
 			return m.viewSessionFormWithHeader(header)
 		}
 	}
+	if m.hasSidePreview() {
+		return m.viewSideBySide(header)
+	}
+	return m.viewVertical(header)
+}
+
+// viewVertical is the standard single-column layout with an optional inline
+// preview block below the menu items (used when the terminal is too narrow for
+// side-by-side, or on non-preview menu levels).
+func (m *Model) viewVertical(header string) string {
 	lines := make([]styledLine, 0, 16)
 	if header != "" {
 		lines = append(lines, styledLine{text: header, style: styles.Header})
-	}
-	if m.loading {
-		label := m.pendingLabel
-		if label == "" {
-			label = m.pendingID
-		}
-		if label == "" {
-			label = "items"
-		}
 	}
 	if current := m.currentLevel(); current != nil {
 		m.syncViewport(current)
@@ -73,27 +116,7 @@ func (m *Model) View() string {
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
-				prefix := "  "
-				lineStyle := styles.Item
-				selectDisplay := ""
-				if current.MultiSelect {
-					mark := " "
-					if current.IsSelected(item.ID) {
-						mark = "✓"
-					}
-					selectDisplay = fmt.Sprintf("[%s] ", mark)
-				}
-				if idx == current.Cursor {
-					prefix = "▌ "
-					lineStyle = styles.SelectedItem
-				}
-				lineText := selectDisplay + item.Label
-				fullText := fmt.Sprintf("%s%s", prefix, lineText)
-				highlightFrom := 0
-				if lineStyle == styles.SelectedItem {
-					highlightFrom = len([]rune(prefix)) + len([]rune(selectDisplay))
-				}
-				lines = append(lines, styledLine{text: fullText, style: lineStyle, highlightFrom: highlightFrom})
+				lines = append(lines, m.buildItemLine(item.ID, item.Label, idx, current))
 			}
 		}
 	}
@@ -133,13 +156,282 @@ func (m *Model) View() string {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: "↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit", style: styles.Footer})
 	}
-
 	promptText, _ := m.filterPrompt()
 	lines = append(lines, styledLine{text: promptText})
-
 	lines = limitHeight(lines, m.height, m.width)
 	lines = applyWidth(lines, m.width)
 	return renderLines(lines)
+}
+
+// viewSideBySide renders the menu on the left and a preview panel on the right.
+func (m *Model) viewSideBySide(header string) string {
+	menuW := m.menuColumnWidth()
+	prevW := m.previewPanelWidth()
+
+	// --- Left column: menu items, errors, footer, filter prompt ---
+	contentLines := make([]styledLine, 0, 16)
+	if header != "" {
+		contentLines = append(contentLines, styledLine{text: header, style: styles.Header})
+	}
+	if current := m.currentLevel(); current != nil {
+		m.syncViewport(current)
+		start := 0
+		displayItems := current.Items
+		if maxItems := m.maxVisibleItems(); maxItems > 0 && len(displayItems) > maxItems {
+			start = current.ViewportOffset
+			if start < 0 {
+				start = 0
+			}
+			if start+maxItems > len(displayItems) {
+				start = len(displayItems) - maxItems
+				if start < 0 {
+					start = 0
+				}
+				current.ViewportOffset = start
+			}
+			displayItems = displayItems[start : start+maxItems]
+		}
+		if len(current.Items) == 0 {
+			msg := "(no entries)"
+			if current.Filter != "" {
+				msg = fmt.Sprintf("No matches for %q", current.Filter)
+			}
+			contentLines = append(contentLines, styledLine{text: msg, style: styles.Info})
+		} else {
+			for i, item := range displayItems {
+				idx := start + i
+				contentLines = append(contentLines, m.buildItemLine(item.ID, item.Label, idx, current))
+			}
+		}
+	}
+	if m.errMsg != "" {
+		contentLines = append(contentLines, styledLine{})
+		contentLines = append(contentLines, styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error})
+	}
+	if info := m.currentInfo(); info != "" {
+		contentLines = append(contentLines, styledLine{})
+		contentLines = append(contentLines, styledLine{text: info, style: styles.Info})
+	}
+	if m.showFooter {
+		contentLines = append(contentLines, styledLine{})
+		contentLines = append(contentLines, styledLine{text: "↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit", style: styles.Footer})
+	}
+
+	// Pad content lines so the filter prompt sits at the very bottom.
+	targetContentRows := m.height - 1
+	if targetContentRows < 0 {
+		targetContentRows = 0
+	}
+	// Truncate if over budget.
+	if len(contentLines) > targetContentRows {
+		contentLines = contentLines[:targetContentRows]
+	}
+	// Pad with blanks if under budget.
+	for len(contentLines) < targetContentRows {
+		contentLines = append(contentLines, styledLine{})
+	}
+
+	promptText, _ := m.filterPrompt()
+	leftLines := append(contentLines, styledLine{text: promptText})
+	leftLines = applyWidth(leftLines, menuW)
+	leftStr := renderLines(leftLines)
+
+	// --- Right column: preview panel ---
+	rightStr := m.renderPreviewPanel(m.activePreview(), prevW, m.height)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftStr, rightStr)
+}
+
+// buildItemLine constructs a single styledLine for a menu item.
+func (m *Model) buildItemLine(id, label string, idx int, current *level) styledLine {
+	prefix := "  "
+	lineStyle := styles.Item
+	selectDisplay := ""
+	if current.MultiSelect {
+		mark := " "
+		if current.IsSelected(id) {
+			mark = "✓"
+		}
+		selectDisplay = fmt.Sprintf("[%s] ", mark)
+	}
+	if idx == current.Cursor {
+		prefix = "▌ "
+		lineStyle = styles.SelectedItem
+	}
+	lineText := selectDisplay + label
+	fullText := fmt.Sprintf("%s%s", prefix, lineText)
+	highlightFrom := 0
+	if lineStyle == styles.SelectedItem {
+		highlightFrom = len([]rune(prefix)) + len([]rune(selectDisplay))
+	}
+	return styledLine{text: fullText, style: lineStyle, highlightFrom: highlightFrom}
+}
+
+// renderPreviewPanel builds the bordered preview box as a string with exactly
+// height rows and totalWidth columns.
+func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int) string {
+	const (
+		tlc = "╭"
+		trc = "╮"
+		blc = "╰"
+		brc = "╯"
+		hz  = "─"
+		vt  = "│"
+	)
+
+	innerW := totalWidth - 2
+	innerH := height - 2
+	if innerW < 1 {
+		innerW = 1
+	}
+	if innerH < 1 {
+		innerH = 1
+	}
+
+	// Gather content and metadata.
+	titleLabel := "Preview"
+	scrollInfo := ""
+	var contentLines []string
+	var errLine string
+
+	if preview != nil {
+		lbl := strings.TrimSpace(preview.label)
+		if lbl == "" {
+			lbl = strings.TrimSpace(preview.target)
+		}
+		if lbl != "" {
+			titleLabel = "Preview: " + lbl
+		}
+
+		if preview.err != "" {
+			errLine = preview.err
+		} else if len(preview.lines) > 0 {
+			// Clamp scroll offset.
+			maxOffset := len(preview.lines) - innerH
+			if maxOffset < 0 {
+				maxOffset = 0
+			}
+			if preview.scrollOffset > maxOffset {
+				preview.scrollOffset = maxOffset
+			}
+			if preview.scrollOffset < 0 {
+				preview.scrollOffset = 0
+			}
+			end := preview.scrollOffset + innerH
+			if end > len(preview.lines) {
+				end = len(preview.lines)
+			}
+			contentLines = preview.lines[preview.scrollOffset:end]
+			lastVisible := preview.scrollOffset + len(contentLines)
+			scrollInfo = fmt.Sprintf(" %d/%d ", lastVisible, len(preview.lines))
+		} else if preview.loading {
+			contentLines = []string{"Loading…"}
+		}
+	} else {
+		contentLines = []string{"Loading…"}
+	}
+
+	// Build top border: ╭─ title ──────────── scrollInfo ─╮
+	// Available inner width: innerW (between the two corner chars).
+	// We put 1 hz on each side of the title/scrollInfo.
+	titleSeg := " " + titleLabel + " "
+	scrollSeg := scrollInfo
+	// Total fixed chars: tlc + hz + titleSeg + <dashes> + scrollSeg + hz + trc
+	// = 2 + len(titleSeg) + dashes + len(scrollSeg) + 2 = totalWidth
+	// → dashes = totalWidth - 4 - len(titleSeg) - len(scrollSeg)
+	dashes := totalWidth - 4 - len([]rune(titleSeg)) - len([]rune(scrollSeg))
+	if dashes < 0 {
+		// Too narrow for scroll info; drop it.
+		scrollSeg = ""
+		dashes = totalWidth - 4 - len([]rune(titleSeg))
+	}
+	if dashes < 0 {
+		// Still too narrow; truncate title.
+		titleSeg = " … "
+		dashes = totalWidth - 4 - len([]rune(titleSeg))
+	}
+	if dashes < 0 {
+		dashes = 0
+	}
+	topLine := previewBorderStyle.Render(tlc+hz) +
+		styles.PreviewTitle.Render(titleSeg) +
+		previewBorderStyle.Render(strings.Repeat(hz, dashes)) +
+		previewScrollStyle.Render(scrollSeg) +
+		previewBorderStyle.Render(hz+trc)
+
+	// Build bottom border: ╰────────────────────────────────╯
+	bottomLine := previewBorderStyle.Render(blc + strings.Repeat(hz, innerW) + brc)
+
+	// Determine body style.
+	bodyStyle := styles.PreviewBody
+	if errLine != "" {
+		bodyStyle = styles.PreviewError
+		contentLines = []string{errLine}
+	}
+
+	// Build content rows — pad/truncate to innerH rows, each innerW wide.
+	rows := make([]string, 0, height)
+	rows = append(rows, topLine)
+	for i := 0; i < innerH; i++ {
+		var content string
+		if i < len(contentLines) {
+			content = contentLines[i]
+		}
+		// Truncate.
+		runes := []rune(content)
+		if len(runes) > innerW {
+			content = string(runes[:innerW-1]) + "…"
+		}
+		// Pad.
+		if len([]rune(content)) < innerW {
+			content = content + strings.Repeat(" ", innerW-len([]rune(content)))
+		}
+		var styledContent string
+		if bodyStyle != nil {
+			styledContent = bodyStyle.Render(content)
+		} else {
+			styledContent = content
+		}
+		rows = append(rows, previewBorderStyle.Render(vt)+styledContent+previewBorderStyle.Render(vt))
+	}
+	rows = append(rows, bottomLine)
+	return strings.Join(rows, "\n")
+}
+
+// handleMouseMsg handles mouse wheel events to scroll the preview panel.
+func (m *Model) handleMouseMsg(msg tea.Msg) tea.Cmd {
+	ev, ok := msg.(tea.MouseMsg)
+	if !ok {
+		return nil
+	}
+	if !m.hasSidePreview() {
+		return nil
+	}
+	preview := m.activePreview()
+	if preview == nil || preview.loading {
+		return nil
+	}
+	innerH := m.height - 2
+	if innerH < 1 {
+		innerH = 1
+	}
+	switch ev.Button {
+	case tea.MouseButtonWheelUp:
+		preview.scrollOffset -= 3
+		if preview.scrollOffset < 0 {
+			preview.scrollOffset = 0
+		}
+	case tea.MouseButtonWheelDown:
+		maxOffset := len(preview.lines) - innerH
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		preview.scrollOffset += 3
+		if preview.scrollOffset > maxOffset {
+			preview.scrollOffset = maxOffset
+		}
+	}
+	return nil
 }
 
 func (m *Model) menuHeader() string {
@@ -281,16 +573,20 @@ func (m *Model) maxVisibleItems() int {
 	if m.showFooter {
 		used += 2
 	}
-	if preview := m.activePreview(); shouldRenderPreview(preview) {
-		used += 2 // blank separator + title line
-		if preview.err != "" {
-			used++ // one line for the error text
-		} else {
-			used += len(previewDisplayLines(preview))
+	// In side-by-side mode the full height is available for the left column;
+	// no preview rows need to be reserved.
+	if !m.hasSidePreview() {
+		if preview := m.activePreview(); shouldRenderPreview(preview) {
+			used += 2 // blank separator + title line
+			if preview.err != "" {
+				used++ // one line for the error text
+			} else {
+				used += len(previewDisplayLines(preview))
+			}
+		} else if current := m.currentLevel(); current != nil && previewKindForLevel(current.ID) != previewKindNone {
+			// Reserve space for the preview that is about to load.
+			used += 3 // blank + title + "Loading preview…"
 		}
-	} else if current := m.currentLevel(); current != nil && previewKindForLevel(current.ID) != previewKindNone {
-		// Reserve space for the preview that is about to load.
-		used += 3 // blank + title + "Loading preview…"
 	}
 	remain := m.height - used
 	if remain < 1 {
@@ -345,15 +641,17 @@ func applyWidth(lines []styledLine, width int) []styledLine {
 	if width <= 0 {
 		return lines
 	}
-	out := make([]styledLine, len(lines))
+	out := make([]string, 0, len(lines))
+	_ = out // built below
+	result := make([]styledLine, len(lines))
 	for i, line := range lines {
-		out[i] = styledLine{
+		result[i] = styledLine{
 			text:          truncateText(line.text, width),
 			style:         line.style,
 			highlightFrom: line.highlightFrom,
 		}
 	}
-	return out
+	return result
 }
 
 func renderLines(lines []styledLine) string {

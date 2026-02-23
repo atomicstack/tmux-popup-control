@@ -8,18 +8,25 @@ import (
 )
 
 func SwitchClient(socketPath, clientID, target string) error {
-	args := baseArgs(socketPath)
-	args = append(args, "switch-client")
-	if strings.TrimSpace(clientID) != "" {
-		args = append(args, "-c", clientID)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
 	}
-	args = append(args, "-t", target)
-	return runExecCommand("tmux", args...).Run()
+	defer client.Close()
+	opts := &gotmux.SwitchClientOptions{TargetSession: target}
+	if strings.TrimSpace(clientID) != "" {
+		opts.TargetClient = clientID
+	}
+	return client.SwitchClient(opts)
 }
 
 func SelectWindow(socketPath, target string) error {
-	args := append(baseArgs(socketPath), "select-window", "-t", target)
-	return runExecCommand("tmux", args...).Run()
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	return client.SelectWindow(target)
 }
 
 func KillWindow(socketPath, target string) error {
@@ -28,28 +35,25 @@ func KillWindow(socketPath, target string) error {
 		return err
 	}
 	defer client.Close()
-	window, err := findWindow(client, target)
-	if err != nil {
-		return err
-	}
-	if window == nil {
-		return fmt.Errorf("window %s not found", target)
-	}
-	return window.Kill()
+	_, err = client.Command("kill-window", "-t", strings.TrimSpace(target))
+	return err
 }
 
 func UnlinkWindows(socketPath string, targets []string) error {
 	if len(targets) == 0 {
 		return nil
 	}
-	args := baseArgs(socketPath)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
 	for _, target := range targets {
 		t := strings.TrimSpace(target)
 		if t == "" {
 			continue
 		}
-		cmd := runExecCommand("tmux", append(args, "unlink-window", "-k", "-t", t)...)
-		if err := cmd.Run(); err != nil {
+		if err := client.UnlinkWindow(t); err != nil {
 			return err
 		}
 	}
@@ -67,46 +71,44 @@ func RenameWindow(socketPath, target, newName string) error {
 		return err
 	}
 	if window == nil {
-		args := append(baseArgs(socketPath), "rename-window", "-t", target, newName)
-		if err := runExecCommand("tmux", args...).Run(); err != nil {
-			return fmt.Errorf("window %s not found", target)
-		}
-		return nil
+		// Fall back to renaming by target string via control-mode.
+		_, err = client.Command("rename-window", "-t", target, newName)
+		return err
 	}
 	return window.Rename(newName)
 }
 
 func LinkWindow(socketPath, source, targetSession string) error {
-	args := make([]string, 0, 8)
-	if socketPath != "" {
-		args = append(args, "-S", socketPath)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
 	}
-	args = append(args, "link-window", "-a", "-s", source, "-t", targetSession)
-	if err := runExecCommand("tmux", args...).Run(); err != nil {
+	defer client.Close()
+	if err := client.LinkWindow(source, targetSession); err != nil {
 		return fmt.Errorf("failed to link window %s to %s: %w", source, targetSession, err)
 	}
 	return nil
 }
 
 func MoveWindow(socketPath, source, targetSession string) error {
-	args := make([]string, 0, 8)
-	if socketPath != "" {
-		args = append(args, "-S", socketPath)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
 	}
-	args = append(args, "move-window", "-a", "-s", source, "-t", targetSession)
-	if err := runExecCommand("tmux", args...).Run(); err != nil {
+	defer client.Close()
+	if err := client.MoveWindowToSession(source, targetSession); err != nil {
 		return fmt.Errorf("failed to move window %s to %s: %w", source, targetSession, err)
 	}
 	return nil
 }
 
 func SwapWindows(socketPath, first, second string) error {
-	args := make([]string, 0, 8)
-	if socketPath != "" {
-		args = append(args, "-S", socketPath)
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
 	}
-	args = append(args, "swap-window", "-s", first, "-t", second)
-	if err := runExecCommand("tmux", args...).Run(); err != nil {
+	defer client.Close()
+	if err := client.SwapWindows(first, second); err != nil {
 		return fmt.Errorf("failed to swap windows %s and %s: %w", first, second, err)
 	}
 	return nil
@@ -126,18 +128,7 @@ func KillWindows(socketPath string, targets []string) error {
 		if target == "" {
 			continue
 		}
-		window, err := findWindow(client, target)
-		if err != nil {
-			return err
-		}
-		if window == nil {
-			args := append(baseArgs(socketPath), "kill-window", "-t", target)
-			if err := runExecCommand("tmux", args...).Run(); err != nil {
-				return fmt.Errorf("window %s not found", target)
-			}
-			continue
-		}
-		if err := window.Kill(); err != nil {
+		if _, err := client.Command("kill-window", "-t", target); err != nil {
 			return err
 		}
 	}

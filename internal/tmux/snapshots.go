@@ -25,8 +25,8 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 			sessions = fallback
 		}
 	}
-	labelMap := fetchSessionLabels(socketPath, os.Getenv("TMUX_POPUP_CONTROL_SESSION_FORMAT"))
-	currentName := currentSessionName(socketPath, client)
+	labelMap := fetchSessionLabels(client, os.Getenv("TMUX_POPUP_CONTROL_SESSION_FORMAT"))
+	currentName := currentSessionName(client)
 	realClients := realAttachedClients(client)
 	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
 	out := make([]Session, 0, len(sessions))
@@ -59,7 +59,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	if err != nil {
 		return WindowSnapshot{}, err
 	}
-	lines, err := fetchWindowLines(socketPath)
+	lines, err := fetchWindowLines(client)
 	if err != nil {
 		lines = fallbackWindowLines(allWindows)
 	}
@@ -67,7 +67,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	for _, w := range allWindows {
 		windowMap[w.Id] = w
 	}
-	currentSession := currentSessionName(socketPath, client)
+	currentSession := currentSessionName(client)
 	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
 	var snapshot WindowSnapshot
 	snapshot.IncludeCurrent = includeCurrent
@@ -144,7 +144,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	if err != nil {
 		return PaneSnapshot{}, err
 	}
-	lines, err := fetchPaneLines(socketPath)
+	lines, err := fetchPaneLines(client)
 	if err != nil {
 		lines = fallbackPaneLines(allPanes)
 	}
@@ -196,6 +196,10 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	return snapshot, nil
 }
 
+// fetchSessionsFallback is an exec-based fallback used only when the
+// control-mode ListSessions call returns no sessions (e.g. during a
+// race at startup). It is intentionally kept as a direct tmux invocation
+// so it still works if the control-mode transport is misbehaving.
 func fetchSessionsFallback(socketPath string) ([]*gotmux.Session, error) {
 	format := "#{session_name}\t#{session_windows}\t#{session_attached}"
 	args := make([]string, 0, 6)
@@ -233,7 +237,7 @@ func fetchSessionsFallback(socketPath string) ([]*gotmux.Session, error) {
 	return sessions, nil
 }
 
-func fetchSessionLabels(socketPath, envFormat string) map[string]string {
+func fetchSessionLabels(client tmuxClient, envFormat string) map[string]string {
 	labelExpr := strings.TrimSpace(envFormat)
 	if labelExpr != "" {
 		labelExpr = fmt.Sprintf("#S: %s", labelExpr)
@@ -241,17 +245,10 @@ func fetchSessionLabels(socketPath, envFormat string) map[string]string {
 		labelExpr = defaultSessionFormat
 	}
 	format := fmt.Sprintf("#{session_name}\t%s", labelExpr)
-	args := make([]string, 0, 4)
-	if socketPath != "" {
-		args = append(args, "-S", socketPath)
-	}
-	args = append(args, "list-sessions", "-F", format)
-	cmd := runExecCommand("tmux", args...)
-	output, err := cmd.Output()
+	lines, err := client.ListSessionsFormat(format)
 	if err != nil {
 		return map[string]string{}
 	}
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	labels := make(map[string]string, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -304,11 +301,10 @@ func realAttachedClients(client tmuxClient) map[string][]string {
 	return result
 }
 
-func currentSessionName(socketPath string, client tmuxClient) string {
+func currentSessionName(client tmuxClient) string {
 	if pane := strings.TrimSpace(os.Getenv("TMUX_PANE")); pane != "" {
-		args := append(baseArgs(socketPath), "display-message", "-t", pane, "-p", "#{session_name}")
-		if output, err := runExecCommand("tmux", args...).Output(); err == nil {
-			if name := strings.TrimSpace(string(output)); name != "" {
+		if name, err := client.DisplayMessage(pane, "#{session_name}"); err == nil {
+			if name = strings.TrimSpace(name); name != "" {
 				return name
 			}
 		}
@@ -340,7 +336,7 @@ type paneLine struct {
 	current     bool
 }
 
-func fetchWindowLines(socketPath string) ([]windowLine, error) {
+func fetchWindowLines(client tmuxClient) ([]windowLine, error) {
 	filter := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_WINDOW_FILTER"))
 	formatExpr := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_WINDOW_FORMAT"))
 	if formatExpr == "" {
@@ -348,28 +344,12 @@ func fetchWindowLines(socketPath string) ([]windowLine, error) {
 	}
 	labelFormat := fmt.Sprintf("#S:#{window_index}: %s", formatExpr)
 	format := fmt.Sprintf("#{window_id}\t#{session_name}:#{window_index}\t%s", labelFormat)
-	args := make([]string, 0, 8)
-	if socketPath != "" {
-		args = append(args, "-S", socketPath)
-	}
-	args = append(args, "list-windows")
-	if filter == "" {
-		args = append(args, "-a")
-	} else {
-		args = append(args, "-a", "-f", filter)
-	}
-	args = append(args, "-F", format)
-	output, err := runExecCommand("tmux", args...).Output()
+	rawLines, err := client.ListWindowsFormat("", filter, format)
 	if err != nil {
 		return nil, err
 	}
-	text := strings.TrimSpace(string(output))
-	if text == "" {
-		return []windowLine{}, nil
-	}
-	lines := strings.Split(text, "\n")
-	result := make([]windowLine, 0, len(lines))
-	for _, line := range lines {
+	result := make([]windowLine, 0, len(rawLines))
+	for _, line := range rawLines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -403,7 +383,7 @@ func fallbackWindowLines(windows []*gotmux.Window) []windowLine {
 	return lines
 }
 
-func fetchPaneLines(socketPath string) ([]paneLine, error) {
+func fetchPaneLines(client tmuxClient) ([]paneLine, error) {
 	filter := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_FILTER"))
 	formatExpr := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_FORMAT"))
 	if formatExpr == "" {
@@ -411,26 +391,12 @@ func fetchPaneLines(socketPath string) ([]paneLine, error) {
 	}
 	labelFormat := fmt.Sprintf("#S:#{window_index}.#{pane_index}: %s", formatExpr)
 	format := fmt.Sprintf("#{pane_id}\t#S:#{window_index}.#{pane_index}\t%s\t#{session_name}\t#{window_name}\t#{window_index}\t#{pane_index}\t#{?pane_active&&window_active&&session_attached,1,0}", labelFormat)
-	args := make([]string, 0, 8)
-	if socketPath != "" {
-		args = append(args, "-S", socketPath)
-	}
-	args = append(args, "list-panes", "-a")
-	if filter != "" {
-		args = append(args, "-f", filter)
-	}
-	args = append(args, "-F", format)
-	output, err := runExecCommand("tmux", args...).Output()
+	rawLines, err := client.ListPanesFormat("", filter, format)
 	if err != nil {
 		return nil, err
 	}
-	text := strings.TrimSpace(string(output))
-	if text == "" {
-		return []paneLine{}, nil
-	}
-	lines := strings.Split(text, "\n")
-	result := make([]paneLine, 0, len(lines))
-	for _, line := range lines {
+	result := make([]paneLine, 0, len(rawLines))
+	for _, line := range rawLines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

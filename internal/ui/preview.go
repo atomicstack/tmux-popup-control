@@ -19,13 +19,14 @@ const (
 )
 
 type previewData struct {
-	kind    previewKind
-	target  string
-	label   string
-	lines   []string
-	err     string
-	loading bool
-	seq     int
+	kind         previewKind
+	target       string
+	label        string
+	lines        []string
+	err          string
+	loading      bool
+	seq          int
+	scrollOffset int // position within lines; clamped by renderPreviewPanel
 }
 
 type previewLoadedMsg struct {
@@ -220,9 +221,17 @@ func (m *Model) handlePreviewLoadedMsg(msg tea.Msg) tea.Cmd {
 	if update.err != nil {
 		data.err = update.err.Error()
 		data.lines = nil
+		data.scrollOffset = 0
 	} else {
 		data.err = ""
 		data.lines = update.lines
+		// For pane captures start at the bottom so the most recent output is visible.
+		// renderPreviewPanel clamps this to the actual visible range.
+		if update.kind == previewKindPane {
+			data.scrollOffset = len(data.lines)
+		} else {
+			data.scrollOffset = 0
+		}
 	}
 	// Re-sync the viewport so the cursor stays visible with the updated item height budget.
 	m.syncViewport(m.currentLevel())

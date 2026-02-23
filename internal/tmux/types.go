@@ -106,15 +106,37 @@ var (
 )
 
 type tmuxClient interface {
-    ListSessions() ([]*gotmux.Session, error)
-    ListAllWindows() ([]*gotmux.Window, error)
-    ListAllPanes() ([]*gotmux.Pane, error)
-    ListClients() ([]*gotmux.Client, error)
-    SwitchClient(*gotmux.SwitchClientOptions) error
-    GetSessionByName(string) (*gotmux.Session, error)
-    NewSession(*gotmux.SessionOptions) (*gotmux.Session, error)
-    KillServer() error
-    Close() error
+	ListSessions() ([]*gotmux.Session, error)
+	ListAllWindows() ([]*gotmux.Window, error)
+	ListAllPanes() ([]*gotmux.Pane, error)
+	ListClients() ([]*gotmux.Client, error)
+	SwitchClient(*gotmux.SwitchClientOptions) error
+	GetSessionByName(string) (*gotmux.Session, error)
+	NewSession(*gotmux.SessionOptions) (*gotmux.Session, error)
+	KillServer() error
+	Close() error
+	// Pane operations (control-mode).
+	RenamePane(target, title string) error
+	SwapPanes(first, second string) error
+	MovePane(source, target string) error
+	BreakPane(source, destination string) error
+	JoinPane(source, target string) error
+	SelectPane(target string) error
+	// Window operations (control-mode).
+	UnlinkWindow(target string) error
+	LinkWindow(source, targetSession string) error
+	MoveWindowToSession(source, targetSession string) error
+	SwapWindows(first, second string) error
+	SelectWindow(target string) error
+	// Display and custom-format queries (control-mode).
+	DisplayMessage(target, format string) (string, error)
+	ListSessionsFormat(format string) ([]string, error)
+	ListWindowsFormat(target, filter, format string) ([]string, error)
+	ListPanesFormat(target, filter, format string) ([]string, error)
+	// Raw command for operations that have no explicit target
+	// (e.g. select-layout, resize-pane without a pane ID,
+	// kill-pane without a Tmux-level method).
+	Command(parts ...string) (string, error)
 }
 
 type commander interface {

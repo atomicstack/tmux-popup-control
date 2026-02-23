@@ -205,6 +205,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(backendDoneMsg{}):        m.handleBackendDoneMsg,
 		reflect.TypeOf(menu.CommandPromptMsg{}): m.handleCommandPromptMsg,
 		reflect.TypeOf(previewLoadedMsg{}):      m.handlePreviewLoadedMsg,
+		reflect.TypeOf(tea.MouseMsg{}):          m.handleMouseMsg,
 	}
 }
 

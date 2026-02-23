@@ -6,7 +6,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -97,21 +96,61 @@ func (s *stubSessionHandle) Kill() error {
 }
 
 type fakeClient struct {
-	sessions       []*gotmux.Session
-	sessionsErr    error
-	windows        []*gotmux.Window
-	windowsErr     error
-	panes          []*gotmux.Pane
-	panesErr       error
-	clients        []*gotmux.Client
-	clientsErr     error
-	switchErr      error
-	switchCalls    int
+	sessions    []*gotmux.Session
+	sessionsErr error
+	windows     []*gotmux.Window
+	windowsErr  error
+	panes       []*gotmux.Pane
+	panesErr    error
+	clients     []*gotmux.Client
+	clientsErr  error
+	switchErr   error
+	switchCalls int
 	lastSwitchOpts *gotmux.SwitchClientOptions
 	getSessions    map[string]*gotmux.Session
 	newErr         error
 	windowHandles  map[string]windowHandle
 	sessionHandles map[string]sessionHandle
+
+	// Pane operations.
+	renamePaneCalls [][]string
+	renamePaneErr   error
+	swapPanesCalls  [][]string
+	swapPanesErr    error
+	movePaneCalls   [][]string
+	movePaneErr     error
+	breakPaneCalls  [][]string
+	breakPaneErr    error
+	joinPaneCalls   int
+	joinPaneErr     error
+	selectPaneCalls []string
+	selectPaneErr   error
+	capturePaneFn   func(target string, op *gotmux.CaptureOptions) (string, error)
+
+	// Window operations.
+	unlinkWindowCalls []string
+	unlinkWindowErr   error
+	linkWindowCalls   int
+	linkWindowErr     error
+	moveWindowCalls   int
+	moveWindowErr     error
+	swapWindowsCalls  int
+	swapWindowsErr    error
+	selectWindowCalls []string
+	selectWindowErr   error
+
+	// Display and format queries.
+	displayMessageFn       func(target, format string) (string, error)
+	listSessionsFormatLines []string
+	listSessionsFormatErr   error
+	listWindowsFormatLines  []string
+	listWindowsFormatErr    error
+	listPanesFormatLines    []string
+	listPanesFormatErr      error
+
+	// Raw command.
+	commandCalls [][]string
+	commandErr   error
 }
 
 func (f *fakeClient) ListSessions() ([]*gotmux.Session, error) {
@@ -145,8 +184,8 @@ func (f *fakeClient) ListClients() ([]*gotmux.Client, error) {
 func (f *fakeClient) SwitchClient(opts *gotmux.SwitchClientOptions) error {
 	f.switchCalls++
 	if opts != nil {
-		copy := *opts
-		f.lastSwitchOpts = &copy
+		cp := *opts
+		f.lastSwitchOpts = &cp
 	} else {
 		f.lastSwitchOpts = nil
 	}
@@ -182,6 +221,111 @@ func (f *fakeClient) NewSession(opts *gotmux.SessionOptions) (*gotmux.Session, e
 func (f *fakeClient) KillServer() error { return nil }
 
 func (f *fakeClient) Close() error { return nil }
+
+// Pane operations.
+
+func (f *fakeClient) RenamePane(target, title string) error {
+	f.renamePaneCalls = append(f.renamePaneCalls, []string{target, title})
+	return f.renamePaneErr
+}
+
+func (f *fakeClient) SwapPanes(first, second string) error {
+	f.swapPanesCalls = append(f.swapPanesCalls, []string{first, second})
+	return f.swapPanesErr
+}
+
+func (f *fakeClient) MovePane(source, target string) error {
+	f.movePaneCalls = append(f.movePaneCalls, []string{source, target})
+	return f.movePaneErr
+}
+
+func (f *fakeClient) BreakPane(source, destination string) error {
+	f.breakPaneCalls = append(f.breakPaneCalls, []string{source, destination})
+	return f.breakPaneErr
+}
+
+func (f *fakeClient) JoinPane(source, target string) error {
+	f.joinPaneCalls++
+	return f.joinPaneErr
+}
+
+func (f *fakeClient) SelectPane(target string) error {
+	f.selectPaneCalls = append(f.selectPaneCalls, target)
+	return f.selectPaneErr
+}
+
+func (f *fakeClient) CapturePane(target string, op *gotmux.CaptureOptions) (string, error) {
+	if f.capturePaneFn != nil {
+		return f.capturePaneFn(target, op)
+	}
+	return "", nil
+}
+
+// Window operations.
+
+func (f *fakeClient) UnlinkWindow(target string) error {
+	f.unlinkWindowCalls = append(f.unlinkWindowCalls, target)
+	return f.unlinkWindowErr
+}
+
+func (f *fakeClient) LinkWindow(source, targetSession string) error {
+	f.linkWindowCalls++
+	return f.linkWindowErr
+}
+
+func (f *fakeClient) MoveWindowToSession(source, targetSession string) error {
+	f.moveWindowCalls++
+	return f.moveWindowErr
+}
+
+func (f *fakeClient) SwapWindows(first, second string) error {
+	f.swapWindowsCalls++
+	return f.swapWindowsErr
+}
+
+func (f *fakeClient) SelectWindow(target string) error {
+	f.selectWindowCalls = append(f.selectWindowCalls, target)
+	return f.selectWindowErr
+}
+
+// Display and format queries.
+
+func (f *fakeClient) DisplayMessage(target, format string) (string, error) {
+	if f.displayMessageFn != nil {
+		return f.displayMessageFn(target, format)
+	}
+	return "", nil
+}
+
+func (f *fakeClient) ListSessionsFormat(format string) ([]string, error) {
+	if f.listSessionsFormatErr != nil {
+		return nil, f.listSessionsFormatErr
+	}
+	return f.listSessionsFormatLines, nil
+}
+
+func (f *fakeClient) ListWindowsFormat(target, filter, format string) ([]string, error) {
+	if f.listWindowsFormatErr != nil {
+		return nil, f.listWindowsFormatErr
+	}
+	return f.listWindowsFormatLines, nil
+}
+
+func (f *fakeClient) ListPanesFormat(target, filter, format string) ([]string, error) {
+	if f.listPanesFormatErr != nil {
+		return nil, f.listPanesFormatErr
+	}
+	return f.listPanesFormatLines, nil
+}
+
+// Raw command.
+
+func (f *fakeClient) Command(parts ...string) (string, error) {
+	cp := make([]string, len(parts))
+	copy(cp, parts)
+	f.commandCalls = append(f.commandCalls, cp)
+	return "", f.commandErr
+}
 
 func (f *fakeClient) useWindowHandles(t *testing.T, handles map[string]*stubWindowHandle) {
 	t.Helper()
@@ -307,16 +451,12 @@ func TestFetchSessions(t *testing.T) {
 		clients: []*gotmux.Client{
 			{Session: "dev"},
 		},
+		listSessionsFormatLines: []string{"dev\tcustom label"},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	withStubCommander(t, func(_ string, args ...string) commander {
-		if containsArg(args, "list-sessions") {
-			return &stubCommander{output: []byte("dev\tcustom label\n")}
-		}
-		return &stubCommander{output: []byte{}, outputErr: fmt.Errorf("unexpected command: %v", args)}
-	})
 	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
 	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
+	t.Setenv("TMUX_PANE", "")
 	snap, err := FetchSessions("sock")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -348,14 +488,9 @@ func TestFetchSessionsControlModeClientNotCounted(t *testing.T) {
 			{Session: "aaa", ControlMode: true},  // gotmuxcc itself — should be ignored
 			{Session: "zzz", ControlMode: false}, // real terminal client
 		},
+		listSessionsFormatLines: []string{"aaa\taaa", "zzz\tzzz"},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	withStubCommander(t, func(_ string, args ...string) commander {
-		if containsArg(args, "list-sessions") {
-			return &stubCommander{output: []byte("aaa\taaa\nzzz\tzzz\n")}
-		}
-		return &stubCommander{}
-	})
 	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
 	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "1")
 	t.Setenv("TMUX_PANE", "")
@@ -393,18 +528,16 @@ func TestFetchSessionsCurrentFromTmuxPane(t *testing.T) {
 			{Session: "work"}, // first client — wrong session
 			{Session: "dev"},
 		},
+		listSessionsFormatLines: []string{"work\twork", "dev\tdev"},
+		displayMessageFn: func(target, format string) (string, error) {
+			if target == "%5" && format == "#{session_name}" {
+				return "dev", nil
+			}
+			return "", nil
+		},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	t.Setenv("TMUX_PANE", "%5")
-	withStubCommander(t, func(_ string, args ...string) commander {
-		if containsArg(args, "display-message") {
-			return &stubCommander{output: []byte("dev\n")}
-		}
-		if containsArg(args, "list-sessions") {
-			return &stubCommander{output: []byte("work\twork\ndev\tdev\n")}
-		}
-		return &stubCommander{}
-	})
 	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
 	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
 	snap, err := FetchSessions("sock")
@@ -431,29 +564,23 @@ func TestFetchSessionsCurrentFromTmuxPane(t *testing.T) {
 func TestFetchSessionsPropagatesError(t *testing.T) {
 	fake := &fakeClient{sessionsErr: errors.New("boom")}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	withStubCommander(t, func(string, ...string) commander { return &stubCommander{} })
 	if _, err := FetchSessions(""); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected error, got %v", err)
 	}
 }
 
 func TestFetchWindowLinesParsesOutput(t *testing.T) {
-	output := " @1\tdev:0\tdev:0 main\n%2\tdev:1\tcustom label "
-	var cmdName string
-	var cmdArgs []string
-	withStubCommander(t, func(name string, args ...string) commander {
-		cmdName = name
-		cmdArgs = args
-		return &stubCommander{output: []byte(output)}
-	})
+	fake := &fakeClient{
+		listWindowsFormatLines: []string{
+			" @1\tdev:0\tdev:0 main",
+			"%2\tdev:1\tcustom label ",
+		},
+	}
 	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FILTER", "")
 	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FORMAT", "#{window_name}")
-	lines, err := fetchWindowLines("sock")
+	lines, err := fetchWindowLines(fake)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if cmdName != "tmux" {
-		t.Fatalf("expected tmux command, got %q", cmdName)
 	}
 	if len(lines) != 2 {
 		t.Fatalf("expected two lines, got %d", len(lines))
@@ -464,16 +591,11 @@ func TestFetchWindowLinesParsesOutput(t *testing.T) {
 	if lines[1].label != "custom label" {
 		t.Fatalf("unexpected second line %#v", lines[1])
 	}
-	if !strings.Contains(strings.Join(cmdArgs, " "), "-S sock") {
-		t.Fatalf("expected socket arg in %v", cmdArgs)
-	}
 }
 
 func TestFetchWindowLinesFallsBackOnError(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return &stubCommander{outputErr: errors.New("boom")}
-	})
-	if _, err := fetchWindowLines(""); err == nil {
+	fake := &fakeClient{listWindowsFormatErr: errors.New("boom")}
+	if _, err := fetchWindowLines(fake); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -496,11 +618,13 @@ func TestFallbackWindowLines(t *testing.T) {
 }
 
 func TestFetchPaneLinesParsesOutput(t *testing.T) {
-	out := "%0\tdev:0.0\tlabel\tdev\tmain\t0\t0\t1\n%1\tdev:0.1\t\tdev\tmain\t0\t1\t0"
-	withStubCommander(t, func(string, ...string) commander {
-		return &stubCommander{output: []byte(out)}
-	})
-	lines, err := fetchPaneLines("")
+	fake := &fakeClient{
+		listPanesFormatLines: []string{
+			"%0\tdev:0.0\tlabel\tdev\tmain\t0\t0\t1",
+			"%1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
+		},
+	}
+	lines, err := fetchPaneLines(fake)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -516,10 +640,8 @@ func TestFetchPaneLinesParsesOutput(t *testing.T) {
 }
 
 func TestFetchPaneLinesError(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return &stubCommander{outputErr: errors.New("boom")}
-	})
-	if _, err := fetchPaneLines(""); err == nil {
+	fake := &fakeClient{listPanesFormatErr: errors.New("boom")}
+	if _, err := fetchPaneLines(fake); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -542,42 +664,36 @@ func TestRenamePaneValidation(t *testing.T) {
 	if err := RenamePane("", " %0 ", "  "); err == nil {
 		t.Fatalf("expected error for missing title")
 	}
-	var captured []string
-	withStubCommander(t, func(name string, args ...string) commander {
-		captured = append([]string{name}, args...)
-		return &stubCommander{runCalled: new(bool)}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := RenamePane("sock", " %0 ", " new "); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(strings.Join(captured, " "), "-S sock rename-pane -t %0 new") {
-		t.Fatalf("unexpected args %v", captured)
+	if len(fake.renamePaneCalls) != 1 ||
+		fake.renamePaneCalls[0][0] != "%0" ||
+		fake.renamePaneCalls[0][1] != "new" {
+		t.Fatalf("unexpected rename pane calls %#v", fake.renamePaneCalls)
 	}
 }
 
 func TestKillPanesSkipsBlank(t *testing.T) {
-	var mu sync.Mutex
-	var calls [][]string
-	withStubCommander(t, func(name string, args ...string) commander {
-		mu.Lock()
-		defer mu.Unlock()
-		calls = append(calls, append([]string{name}, args...))
-		return &stubCommander{runCalled: new(bool)}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	err := KillPanes("sock", []string{"  ", "%0", "\t%1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(calls) != 2 {
-		t.Fatalf("expected 2 commands, got %d", len(calls))
+	if len(fake.commandCalls) != 2 {
+		t.Fatalf("expected 2 command calls, got %d", len(fake.commandCalls))
 	}
-	for _, call := range calls {
-		if call[0] != "tmux" {
-			t.Fatalf("unexpected binary %v", call)
+	for _, call := range fake.commandCalls {
+		if len(call) < 3 || call[0] != "kill-pane" || call[1] != "-t" {
+			t.Fatalf("unexpected command call %#v", call)
 		}
-		if !strings.Contains(strings.Join(call[1:], " "), "-S sock kill-pane") {
-			t.Fatalf("unexpected args %v", call[1:])
-		}
+	}
+	targets := []string{fake.commandCalls[0][2], fake.commandCalls[1][2]}
+	if !containsArg(targets, "%0") || !containsArg(targets, "%1") {
+		t.Fatalf("expected %%0 and %%1 targets, got %v", targets)
 	}
 }
 
@@ -588,40 +704,35 @@ func TestSwapPanesValidation(t *testing.T) {
 	if err := SwapPanes("", "%0", ""); err == nil {
 		t.Fatalf("expected error for missing second")
 	}
-	var captured []string
-	withStubCommander(t, func(name string, args ...string) commander {
-		captured = append([]string{name}, args...)
-		return &stubCommander{}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := SwapPanes("sock", "%0", "%1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(strings.Join(captured, " "), "swap-pane -s %0 -t %1") {
-		t.Fatalf("unexpected args %v", captured)
+	if len(fake.swapPanesCalls) != 1 ||
+		fake.swapPanesCalls[0][0] != "%0" ||
+		fake.swapPanesCalls[0][1] != "%1" {
+		t.Fatalf("unexpected swap panes calls %#v", fake.swapPanesCalls)
 	}
 }
 
 func TestMovePaneAllowsOptionalTarget(t *testing.T) {
-	var captured []string
-	withStubCommander(t, func(name string, args ...string) commander {
-		captured = append([]string{name}, args...)
-		return &stubCommander{}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := MovePane("sock", "%0", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.Contains(strings.Join(captured, " "), "-t") {
-		t.Fatalf("did not expect target: %v", captured)
+	if len(fake.movePaneCalls) != 1 ||
+		fake.movePaneCalls[0][0] != "%0" ||
+		fake.movePaneCalls[0][1] != "" {
+		t.Fatalf("unexpected move pane calls for empty target %#v", fake.movePaneCalls)
 	}
-	withStubCommander(t, func(name string, args ...string) commander {
-		captured = append([]string{name}, args...)
-		return &stubCommander{}
-	})
+	fake.movePaneCalls = nil
 	if err := MovePane("sock", "%0", "%1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(strings.Join(captured, " "), "-t %1") {
-		t.Fatalf("expected target in args %v", captured)
+	if len(fake.movePaneCalls) != 1 || fake.movePaneCalls[0][1] != "%1" {
+		t.Fatalf("unexpected move pane calls with target %#v", fake.movePaneCalls)
 	}
 }
 
@@ -629,16 +740,15 @@ func TestBreakPaneValidation(t *testing.T) {
 	if err := BreakPane("", " ", ""); err == nil {
 		t.Fatalf("expected error for missing source")
 	}
-	var captured []string
-	withStubCommander(t, func(name string, args ...string) commander {
-		captured = append([]string{name}, args...)
-		return &stubCommander{}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := BreakPane("sock", "%0", "%1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(strings.Join(captured, " "), "-s %0 -t %1") {
-		t.Fatalf("unexpected args %v", captured)
+	if len(fake.breakPaneCalls) != 1 ||
+		fake.breakPaneCalls[0][0] != "%0" ||
+		fake.breakPaneCalls[0][1] != "%1" {
+		t.Fatalf("unexpected break pane calls %#v", fake.breakPaneCalls)
 	}
 }
 
@@ -646,9 +756,15 @@ func TestSelectLayoutValidation(t *testing.T) {
 	if err := SelectLayout("", "  "); err == nil {
 		t.Fatalf("expected error")
 	}
-	withStubCommander(t, func(string, ...string) commander { return &stubCommander{} })
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := SelectLayout("", "even-horizontal"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fake.commandCalls) != 1 ||
+		len(fake.commandCalls[0]) < 1 ||
+		fake.commandCalls[0][0] != "select-layout" {
+		t.Fatalf("unexpected command calls %#v", fake.commandCalls)
 	}
 }
 
@@ -659,36 +775,34 @@ func TestResizePaneValidation(t *testing.T) {
 	if err := ResizePane("", "weird", 1); err == nil {
 		t.Fatalf("expected error for direction")
 	}
-	var captured []string
-	withStubCommander(t, func(name string, args ...string) commander {
-		captured = append([]string{name}, args...)
-		return &stubCommander{}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := ResizePane("sock", "up", 3); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(strings.Join(captured, " "), "resize-pane -U 3") {
-		t.Fatalf("unexpected args %v", captured)
+	if len(fake.commandCalls) != 1 ||
+		fake.commandCalls[0][0] != "resize-pane" ||
+		fake.commandCalls[0][1] != "-U" ||
+		fake.commandCalls[0][2] != "3" {
+		t.Fatalf("unexpected command calls %#v", fake.commandCalls)
 	}
 }
 
 func TestUnlinkWindowsSkipsEmpty(t *testing.T) {
-	var calls int
-	withStubCommander(t, func(string, ...string) commander {
-		calls++
-		return &stubCommander{}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	err := UnlinkWindows("sock", []string{"", " dev:1 "})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if calls != 1 {
-		t.Fatalf("expected one command, got %d", calls)
+	if len(fake.unlinkWindowCalls) != 1 || fake.unlinkWindowCalls[0] != "dev:1" {
+		t.Fatalf("expected one unlink call for dev:1, got %#v", fake.unlinkWindowCalls)
 	}
 }
 
 func TestLinkMoveSwapWindows(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander { return &stubCommander{} })
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := LinkWindow("", "src", "dst"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -698,20 +812,21 @@ func TestLinkMoveSwapWindows(t *testing.T) {
 	if err := SwapWindows("", "a", "b"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if fake.linkWindowCalls != 1 || fake.moveWindowCalls != 1 || fake.swapWindowsCalls != 1 {
+		t.Fatalf("expected one call each, got link=%d move=%d swap=%d",
+			fake.linkWindowCalls, fake.moveWindowCalls, fake.swapWindowsCalls)
+	}
 
-	withStubCommander(t, func(string, ...string) commander {
-		return &stubCommander{runErr: errors.New("boom")}
-	})
+	fake2 := &fakeClient{linkWindowErr: errors.New("boom")}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake2, nil })
 	if err := LinkWindow("", "src", "dst"); err == nil || !strings.Contains(err.Error(), "failed to link window") {
-		t.Fatalf("expected wrapped error")
+		t.Fatalf("expected wrapped error, got %v", err)
 	}
 }
 
 func TestFetchSessionLabelsFallback(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return &stubCommander{outputErr: errors.New("boom")}
-	})
-	labels := fetchSessionLabels("", "")
+	fake := &fakeClient{listSessionsFormatErr: errors.New("boom")}
+	labels := fetchSessionLabels(fake, "")
 	if len(labels) != 0 {
 		t.Fatalf("expected empty map, got %#v", labels)
 	}
@@ -732,12 +847,10 @@ func TestFetchWindowsUsesFallbackLines(t *testing.T) {
 			{Id: "@1", Index: 0, Name: "main", Active: true, ActiveSessionsList: []string{"dev"}},
 			{Id: "%2", Index: 1, Name: "logs", Active: false, ActiveSessionsList: []string{"dev"}},
 		},
-		clients: []*gotmux.Client{{Session: "dev"}},
+		clients:              []*gotmux.Client{{Session: "dev"}},
+		listWindowsFormatErr: errors.New("boom"),
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	withStubCommander(t, func(string, ...string) commander {
-		return &stubCommander{outputErr: errors.New("boom")}
-	})
 	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "1")
 	snap, err := FetchWindows("")
 	if err != nil {
@@ -763,15 +876,12 @@ func TestFetchPanesParsesOutput(t *testing.T) {
 			{Id: "%0", Title: "top", CurrentCommand: "vim", Width: 80, Height: 20, Active: true},
 			{Id: "%1", Title: "tail", CurrentCommand: "tail", Width: 80, Height: 20, Active: false},
 		},
+		listPanesFormatLines: []string{
+			"%0\tdev:0.0\tlabel0\tdev\tmain\t0\t0\t1",
+			"%1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
+		},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	withStubCommander(t, func(_ string, args ...string) commander {
-		if containsArg(args, "list-panes") {
-			out := "%0\tdev:0.0\tlabel0\tdev\tmain\t0\t0\t1\n%1\tdev:0.1\t\tdev\tmain\t0\t1\t0"
-			return &stubCommander{output: []byte(out)}
-		}
-		return &stubCommander{outputErr: fmt.Errorf("unexpected command %v", args)}
-	})
 	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
 	snap, err := FetchPanes("")
 	if err != nil {
@@ -795,85 +905,57 @@ func TestFetchPanesParsesOutput(t *testing.T) {
 }
 
 func TestSelectWindowRunsCommand(t *testing.T) {
-	var runCalls [][]string
-	withStubCommander(t, func(name string, args ...string) commander {
-		runCalls = append(runCalls, append([]string{name}, args...))
-		return &stubCommander{}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := SelectWindow("", "main:1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
-	for _, call := range runCalls {
-		if call[0] == "tmux" && containsArg(call[1:], "select-window") && containsArg(call[1:], "main:1") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected select-window main:1 command; calls: %#v", runCalls)
+	if len(fake.selectWindowCalls) != 1 || fake.selectWindowCalls[0] != "main:1" {
+		t.Fatalf("unexpected select window calls %#v", fake.selectWindowCalls)
 	}
 }
 
 func TestSelectWindowPropagatesError(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return &stubCommander{runErr: errors.New("boom")}
-	})
+	fake := &fakeClient{selectWindowErr: errors.New("boom")}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := SelectWindow("", "main:1"); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("expected error, got %v", err)
 	}
 }
 
-func TestKillWindowUsesHandle(t *testing.T) {
-	handle := &stubWindowHandle{}
-	fake := &fakeClient{
-		windows: []*gotmux.Window{
-			{Id: "@1"},
-		},
-	}
-	fake.useWindowHandles(t, map[string]*stubWindowHandle{"@1": handle})
+func TestKillWindowRunsCommand(t *testing.T) {
+	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := KillWindow("", "@1"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if handle.killCalls != 1 {
-		t.Fatalf("expected kill call, got %d", handle.killCalls)
+	if len(fake.commandCalls) != 1 || strings.Join(fake.commandCalls[0], " ") != "kill-window -t @1" {
+		t.Fatalf("unexpected command calls: %v", fake.commandCalls)
 	}
 }
 
-func TestKillWindowsSkipsBlankAndUsesHandles(t *testing.T) {
-	handleA := &stubWindowHandle{}
-	handleB := &stubWindowHandle{}
-	fake := &fakeClient{
-		windows: []*gotmux.Window{
-			{Id: "@1"},
-			{Id: "@2"},
-		},
-	}
-	fake.useWindowHandles(t, map[string]*stubWindowHandle{
-		"@1": handleA,
-		"@2": handleB,
-	})
+func TestKillWindowsSkipsBlankAndRunsCommands(t *testing.T) {
+	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := KillWindows("", []string{"  ", " @1 ", "@2"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if handleA.killCalls != 1 || handleB.killCalls != 1 {
-		t.Fatalf("expected kill calls, got %d and %d", handleA.killCalls, handleB.killCalls)
+	if len(fake.commandCalls) != 2 {
+		t.Fatalf("expected 2 command calls, got %d: %v", len(fake.commandCalls), fake.commandCalls)
+	}
+	if strings.Join(fake.commandCalls[0], " ") != "kill-window -t @1" {
+		t.Fatalf("unexpected first call: %v", fake.commandCalls[0])
+	}
+	if strings.Join(fake.commandCalls[1], " ") != "kill-window -t @2" {
+		t.Fatalf("unexpected second call: %v", fake.commandCalls[1])
 	}
 }
 
-func TestKillWindowsMissingTarget(t *testing.T) {
-	fake := &fakeClient{
-		windows: []*gotmux.Window{
-			{Id: "@1"},
-		},
-	}
+func TestKillWindowsCommandError(t *testing.T) {
+	fake := &fakeClient{commandErr: fmt.Errorf("tmux error")}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	withStubCommander(t, func(name string, args ...string) commander {
-		return &stubCommander{runErr: fmt.Errorf("no such window")}
-	})
-	if err := KillWindows("", []string{"@2"}); err == nil || !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("expected not found error, got %v", err)
+	if err := KillWindows("", []string{"@1"}); err == nil {
+		t.Fatalf("expected error, got nil")
 	}
 }
 
@@ -978,67 +1060,34 @@ func TestSwitchPaneValidatesTarget(t *testing.T) {
 }
 
 func TestSwitchPaneRunsCommands(t *testing.T) {
-	var runCalls [][]string
-	withStubCommander(t, func(name string, args ...string) commander {
-		runCalls = append(runCalls, append([]string{name}, args...))
-		return &stubCommander{}
-	})
-
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := SwitchPane("sock", "client-9", "dev:0.%0"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	foundSwitchClient := false
-	foundSelectWindow := false
-	foundSelectPane := false
-	for _, call := range runCalls {
-		if call[0] != "tmux" {
-			continue
-		}
-		args := call[1:]
-		if containsArg(args, "switch-client") && containsArg(args, "client-9") && containsArg(args, "dev") {
-			foundSwitchClient = true
-			if !strings.Contains(strings.Join(args, " "), "-S sock") {
-				t.Fatalf("expected socket arg in switch-client call %v", call)
-			}
-		}
-		if containsArg(args, "select-window") && containsArg(args, "dev:0") {
-			foundSelectWindow = true
-		}
-		if containsArg(args, "select-pane") {
-			foundSelectPane = true
-			if !strings.Contains(strings.Join(args, " "), "-S sock") {
-				t.Fatalf("expected socket arg in select-pane call %v", call)
-			}
-		}
+	if fake.lastSwitchOpts == nil ||
+		fake.lastSwitchOpts.TargetSession != "dev" ||
+		fake.lastSwitchOpts.TargetClient != "client-9" {
+		t.Fatalf("unexpected switch opts %#v", fake.lastSwitchOpts)
 	}
-	if !foundSwitchClient {
-		t.Fatalf("expected switch-client command, calls: %#v", runCalls)
+	if len(fake.selectWindowCalls) != 1 || fake.selectWindowCalls[0] != "dev:0" {
+		t.Fatalf("unexpected select window calls %#v", fake.selectWindowCalls)
 	}
-	if !foundSelectWindow {
-		t.Fatalf("expected select-window command, calls: %#v", runCalls)
-	}
-	if !foundSelectPane {
-		t.Fatalf("expected select-pane command, calls: %#v", runCalls)
+	if len(fake.selectPaneCalls) != 1 || fake.selectPaneCalls[0] != "dev:0.%0" {
+		t.Fatalf("unexpected select pane calls %#v", fake.selectPaneCalls)
 	}
 }
 
 func TestSwitchClientTargetsRequestedClient(t *testing.T) {
-	var runCalls [][]string
-	withStubCommander(t, func(name string, args ...string) commander {
-		runCalls = append(runCalls, append([]string{name}, args...))
-		return &stubCommander{}
-	})
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	if err := SwitchClient("", "client-42", "dev"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found := false
-	for _, call := range runCalls {
-		if call[0] == "tmux" && containsArg(call[1:], "switch-client") &&
-			containsArg(call[1:], "client-42") && containsArg(call[1:], "dev") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected switch-client with client-42 and dev; calls: %#v", runCalls)
+	if fake.lastSwitchOpts == nil ||
+		fake.lastSwitchOpts.TargetClient != "client-42" ||
+		fake.lastSwitchOpts.TargetSession != "dev" {
+		t.Fatalf("unexpected switch opts %#v", fake.lastSwitchOpts)
 	}
 }
+

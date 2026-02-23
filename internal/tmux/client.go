@@ -9,16 +9,15 @@ import (
 // SwitchClient commands can target the visible tmux client instead of the
 // control-mode connection.
 func CurrentClientID(socketPath string) string {
-	args := baseArgs(socketPath)
-	args = append(args, "display-message", "-p")
-	if pane := strings.TrimSpace(os.Getenv("TMUX_PANE")); pane != "" {
-		args = append(args, "-t", pane)
-	}
-	args = append(args, "#{client_name}")
-	cmd := runExecCommand("tmux", args...)
-	output, err := cmd.Output()
+	client, err := newTmux(socketPath)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	defer client.Close()
+	target := strings.TrimSpace(os.Getenv("TMUX_PANE"))
+	name, err := client.DisplayMessage(target, "#{client_name}")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(name)
 }
