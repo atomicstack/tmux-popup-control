@@ -3,7 +3,9 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CMD="$CURRENT_DIR/tmux-popup-control"
 
-tmux display-popup -e GOTMUXCC_TRACE=1 -e GOTMUXCC_TRACE_FILE=$CURRENT_DIR/gotmuxcc_trace.log -E $CMD --trace "$@"
+tmux display-popup -w 90% -h 80% \
+  `# -e GOTMUXCC_TRACE=1 -e GOTMUXCC_TRACE_FILE=$CURRENT_DIR/gotmuxcc_trace.log --trace` \
+  -E $CMD "$@"
 status=$?
 if [ "$status" -eq 129 ]; then
   exit 0
