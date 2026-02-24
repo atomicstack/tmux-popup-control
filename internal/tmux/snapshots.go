@@ -14,7 +14,7 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 	if err != nil {
 		return SessionSnapshot{}, err
 	}
-	defer client.Close()
+
 	sessions, err := client.ListSessions()
 	if err != nil {
 		return SessionSnapshot{}, err
@@ -54,7 +54,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	if err != nil {
 		return WindowSnapshot{}, err
 	}
-	defer client.Close()
+
 	allWindows, err := client.ListAllWindows()
 	if err != nil {
 		return WindowSnapshot{}, err
@@ -139,7 +139,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	if err != nil {
 		return PaneSnapshot{}, err
 	}
-	defer client.Close()
+
 	allPanes, err := client.ListAllPanes()
 	if err != nil {
 		return PaneSnapshot{}, err

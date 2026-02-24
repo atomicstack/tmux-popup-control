@@ -13,7 +13,6 @@ func CurrentClientID(socketPath string) string {
 	if err != nil {
 		return ""
 	}
-	defer client.Close()
 	target := strings.TrimSpace(os.Getenv("TMUX_PANE"))
 	name, err := client.DisplayMessage(target, "#{client_name}")
 	if err != nil {

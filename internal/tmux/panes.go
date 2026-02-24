@@ -21,7 +21,7 @@ func RenamePane(socketPath, target, newTitle string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	return client.RenamePane(trimmedTarget, trimmedTitle)
 }
 
@@ -33,7 +33,7 @@ func KillPanes(socketPath string, targets []string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	for _, target := range targets {
 		t := strings.TrimSpace(target)
 		if t == "" {
@@ -54,7 +54,7 @@ func SwapPanes(socketPath, first, second string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	return client.SwapPanes(first, second)
 }
 
@@ -66,7 +66,7 @@ func MovePane(socketPath, source, target string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	return client.MovePane(source, target)
 }
 
@@ -78,7 +78,7 @@ func BreakPane(socketPath, source, destination string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	return client.BreakPane(source, destination)
 }
 
@@ -93,7 +93,7 @@ func SelectLayout(socketPath, layout string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	_, err = client.Command("select-layout", layout)
 	return err
 }
@@ -122,7 +122,7 @@ func ResizePane(socketPath, direction string, amount int) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	_, err = client.Command("resize-pane", flag, strconv.Itoa(amount))
 	return err
 }
@@ -143,7 +143,7 @@ func SwitchPane(socketPath, clientID, target string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	switchOpts := &gotmux.SwitchClientOptions{TargetSession: session}
 	if strings.TrimSpace(clientID) != "" {
 		switchOpts.TargetClient = clientID

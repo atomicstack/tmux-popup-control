@@ -27,6 +27,7 @@ func Run(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("resolve socket path: %w", err)
 	}
+	defer tmux.Shutdown()
 	clientID := tmux.CurrentClientID(socketPath)
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	defer watcher.Stop()

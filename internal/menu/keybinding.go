@@ -2,19 +2,21 @@ package menu
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-func loadKeybindingMenu(Context) ([]Item, error) {
-	cmd := exec.Command("tmux", "list-keys")
-	output, err := cmd.CombinedOutput()
+var listKeysFn = tmux.ListKeys
+
+func loadKeybindingMenu(ctx Context) ([]Item, error) {
+	output, err := listKeysFn(ctx.SocketPath)
 	if err != nil {
-		return nil, fmt.Errorf("tmux list-keys failed: %w (output: %s)", err, strings.TrimSpace(string(output)))
+		return nil, fmt.Errorf("tmux list-keys failed: %w", err)
 	}
-	lines := splitLines(strings.TrimSpace(string(output)))
+	lines := splitLines(strings.TrimSpace(output))
 	items := make([]Item, 0, len(lines))
 	for _, line := range lines {
 		if line == "" {

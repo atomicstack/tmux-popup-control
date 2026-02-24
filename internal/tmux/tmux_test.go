@@ -43,8 +43,16 @@ func withStubCommander(t *testing.T, fn func(name string, args ...string) comman
 func withStubTmux(t *testing.T, fn func(string) (tmuxClient, error)) {
 	t.Helper()
 	prev := newTmux
+	prevClient := cachedClient
+	prevSocket := cachedSocket
+	cachedClient = nil
+	cachedSocket = ""
 	newTmux = fn
-	t.Cleanup(func() { newTmux = prev })
+	t.Cleanup(func() {
+		newTmux = prev
+		cachedClient = prevClient
+		cachedSocket = prevSocket
+	})
 }
 
 type stubWindowHandle struct {
@@ -149,8 +157,9 @@ type fakeClient struct {
 	listPanesFormatErr      error
 
 	// Raw command.
-	commandCalls [][]string
-	commandErr   error
+	commandCalls  [][]string
+	commandOutput string
+	commandErr    error
 }
 
 func (f *fakeClient) ListSessions() ([]*gotmux.Session, error) {
@@ -324,7 +333,7 @@ func (f *fakeClient) Command(parts ...string) (string, error) {
 	cp := make([]string, len(parts))
 	copy(cp, parts)
 	f.commandCalls = append(f.commandCalls, cp)
-	return "", f.commandErr
+	return f.commandOutput, f.commandErr
 }
 
 func (f *fakeClient) useWindowHandles(t *testing.T, handles map[string]*stubWindowHandle) {
@@ -1088,6 +1097,116 @@ func TestSwitchClientTargetsRequestedClient(t *testing.T) {
 		fake.lastSwitchOpts.TargetClient != "client-42" ||
 		fake.lastSwitchOpts.TargetSession != "dev" {
 		t.Fatalf("unexpected switch opts %#v", fake.lastSwitchOpts)
+	}
+}
+
+func TestListCommands(t *testing.T) {
+	expected := "attach-session (attach)\nbind-key (bind)"
+	fake := &fakeClient{commandOutput: expected}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	out, err := ListCommands("/tmp/test.sock")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != expected {
+		t.Fatalf("expected %q, got %q", expected, out)
+	}
+	if len(fake.commandCalls) != 1 || fake.commandCalls[0][0] != "list-commands" {
+		t.Fatalf("unexpected command calls: %v", fake.commandCalls)
+	}
+}
+
+func TestListCommandsError(t *testing.T) {
+	fake := &fakeClient{commandErr: fmt.Errorf("connection failed")}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	if _, err := ListCommands(""); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestListKeys(t *testing.T) {
+	expected := "bind-key -T prefix d detach-client"
+	fake := &fakeClient{commandOutput: expected}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	out, err := ListKeys("/tmp/test.sock")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != expected {
+		t.Fatalf("expected %q, got %q", expected, out)
+	}
+	if len(fake.commandCalls) != 1 || fake.commandCalls[0][0] != "list-keys" {
+		t.Fatalf("unexpected command calls: %v", fake.commandCalls)
+	}
+}
+
+func TestListKeysError(t *testing.T) {
+	fake := &fakeClient{commandErr: fmt.Errorf("connection failed")}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	if _, err := ListKeys(""); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestShutdownClosesClient(t *testing.T) {
+	fake := &fakeClient{}
+
+	prevClient := cachedClient
+	prevSocket := cachedSocket
+	cachedClient = fake
+	cachedSocket = "/tmp/test"
+	t.Cleanup(func() {
+		cachedClient = prevClient
+		cachedSocket = prevSocket
+	})
+
+	Shutdown()
+	if cachedClient != nil {
+		t.Fatalf("expected cachedClient to be nil after Shutdown")
+	}
+	if cachedSocket != "" {
+		t.Fatalf("expected cachedSocket to be empty after Shutdown")
+	}
+}
+
+func TestNewTmuxCachesConnection(t *testing.T) {
+	callCount := 0
+	fake := &fakeClient{}
+	prev := newTmux
+	prevClient := cachedClient
+	prevSocket := cachedSocket
+	cachedClient = nil
+	cachedSocket = ""
+	newTmux = func(socketPath string) (tmuxClient, error) {
+		clientMu.Lock()
+		defer clientMu.Unlock()
+		if cachedClient != nil && cachedSocket == socketPath {
+			return cachedClient, nil
+		}
+		callCount++
+		cachedClient = fake
+		cachedSocket = socketPath
+		return fake, nil
+	}
+	t.Cleanup(func() {
+		newTmux = prev
+		cachedClient = prevClient
+		cachedSocket = prevSocket
+	})
+
+	c1, err := newTmux("/tmp/test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	c2, err := newTmux("/tmp/test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c1 != c2 {
+		t.Fatalf("expected same client instance from cache")
+	}
+	if callCount != 1 {
+		t.Fatalf("expected newTmux factory called once, got %d", callCount)
 	}
 }
 

@@ -12,7 +12,7 @@ func SwitchClient(socketPath, clientID, target string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	opts := &gotmux.SwitchClientOptions{TargetSession: target}
 	if strings.TrimSpace(clientID) != "" {
 		opts.TargetClient = clientID
@@ -25,7 +25,7 @@ func SelectWindow(socketPath, target string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	return client.SelectWindow(target)
 }
 
@@ -34,7 +34,7 @@ func KillWindow(socketPath, target string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	_, err = client.Command("kill-window", "-t", strings.TrimSpace(target))
 	return err
 }
@@ -47,7 +47,7 @@ func UnlinkWindows(socketPath string, targets []string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	for _, target := range targets {
 		t := strings.TrimSpace(target)
 		if t == "" {
@@ -65,7 +65,7 @@ func RenameWindow(socketPath, target, newName string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	window, err := findWindow(client, target)
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func LinkWindow(socketPath, source, targetSession string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	if err := client.LinkWindow(source, targetSession); err != nil {
 		return fmt.Errorf("failed to link window %s to %s: %w", source, targetSession, err)
 	}
@@ -95,7 +95,7 @@ func MoveWindow(socketPath, source, targetSession string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	if err := client.MoveWindowToSession(source, targetSession); err != nil {
 		return fmt.Errorf("failed to move window %s to %s: %w", source, targetSession, err)
 	}
@@ -107,7 +107,7 @@ func SwapWindows(socketPath, first, second string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	if err := client.SwapWindows(first, second); err != nil {
 		return fmt.Errorf("failed to swap windows %s and %s: %w", first, second, err)
 	}
@@ -122,7 +122,7 @@ func KillWindows(socketPath string, targets []string) error {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+
 	for _, target := range targets {
 		target = strings.TrimSpace(target)
 		if target == "" {

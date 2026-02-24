@@ -2,10 +2,11 @@ package menu
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 // CommandPromptMsg requests that the UI open the tmux command prompt with an initial value.
@@ -14,13 +15,14 @@ type CommandPromptMsg struct {
 	Label   string
 }
 
-func loadCommandMenu(Context) ([]Item, error) {
-	cmd := exec.Command("tmux", "list-commands")
-	output, err := cmd.CombinedOutput()
+var listCommandsFn = tmux.ListCommands
+
+func loadCommandMenu(ctx Context) ([]Item, error) {
+	output, err := listCommandsFn(ctx.SocketPath)
 	if err != nil {
-		return nil, fmt.Errorf("tmux list-commands failed: %w (output: %s)", err, strings.TrimSpace(string(output)))
+		return nil, fmt.Errorf("tmux list-commands failed: %w", err)
 	}
-	lines := splitLines(strings.TrimSpace(string(output)))
+	lines := splitLines(strings.TrimSpace(output))
 	items := make([]Item, 0, len(lines))
 	for _, line := range lines {
 		if line == "" {
