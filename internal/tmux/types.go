@@ -144,6 +144,7 @@ type tmuxClient interface {
 	BreakPane(source, destination string) error
 	JoinPane(source, target string) error
 	SelectPane(target string) error
+	CapturePane(target string, op *gotmux.CaptureOptions) (string, error)
 	// Window operations (control-mode).
 	UnlinkWindow(target string) error
 	LinkWindow(source, targetSession string) error

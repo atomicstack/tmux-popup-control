@@ -2,32 +2,31 @@ package tmux
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
+
+	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 const panePreviewDefaultLines = 40
 
-// ansiEscapeRe matches ANSI/VT100 escape sequences so they can be stripped
-// before the captured pane content is shown in the text preview panel.
-var ansiEscapeRe = regexp.MustCompile(`\x1b(?:\[[0-9;?]*[A-Za-z]|[A-Za-z=><\\])`)
-
-// PanePreview captures the contents of a pane for display using a direct
-// tmux subprocess call (rather than the control-mode transport) so that the
-// raw pane content is retrieved reliably regardless of any control-mode
-// quirks with capture-pane.
+// PanePreview captures the contents of a pane for display via control-mode.
 func PanePreview(socketPath, pane string) ([]string, error) {
 	target := strings.TrimSpace(pane)
 	if target == "" {
 		return nil, fmt.Errorf("pane target required")
 	}
-	args := append(baseArgs(socketPath), "capture-pane", "-p", "-t", target, "-S", fmt.Sprintf("-%d", panePreviewDefaultLines))
-	out, err := runExecCommand("tmux", args...).Output()
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return nil, err
+	}
+	output, err := client.CapturePane(target, &gotmux.CaptureOptions{
+		EscNonPrintables: true,
+		StartLine:        fmt.Sprintf("-%d", panePreviewDefaultLines),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("capture-pane %s: %w", target, err)
 	}
-	text := ansiEscapeRe.ReplaceAllString(string(out), "")
-	lines := splitPreviewLines(text, true)
+	lines := splitPreviewLines(output, true)
 	if len(lines) == 0 {
 		return []string{"(pane is empty)"}, nil
 	}

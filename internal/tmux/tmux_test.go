@@ -11,35 +11,6 @@ import (
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
-type stubCommander struct {
-	runErr       error
-	output       []byte
-	outputErr    error
-	runCalled    *bool
-	outputCalled *bool
-}
-
-func (s *stubCommander) Run() error {
-	if s.runCalled != nil {
-		*s.runCalled = true
-	}
-	return s.runErr
-}
-
-func (s *stubCommander) Output() ([]byte, error) {
-	if s.outputCalled != nil {
-		*s.outputCalled = true
-	}
-	return s.output, s.outputErr
-}
-
-func withStubCommander(t *testing.T, fn func(name string, args ...string) commander) {
-	t.Helper()
-	prev := runExecCommand
-	runExecCommand = fn
-	t.Cleanup(func() { runExecCommand = prev })
-}
-
 func withStubTmux(t *testing.T, fn func(string) (tmuxClient, error)) {
 	t.Helper()
 	prev := newTmux
