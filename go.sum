@@ -1,3 +1,5 @@
+github.com/atomicstack/gotmuxcc v0.0.0-20260225233553-d6ee2f77f497 h1:vOZBPSh2u70ZKAELj3nvgLsl9xqKI3a7ZZe2SlaxP/A=
+github.com/atomicstack/gotmuxcc v0.0.0-20260225233553-d6ee2f77f497/go.mod h1:tyLbmf6M3G03fOiPcBwyQ8mRz58J/rscVaNp95ORgBE=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-osc52/v2 v2.0.1 h1:HwpRHbFMcZLEVr42D4p7XBqjyuxQH5SMiErDT4WkJ2k=
