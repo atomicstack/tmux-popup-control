@@ -151,10 +151,6 @@ func (m *Model) viewVertical(header string) string {
 			}
 		}
 	}
-	if m.errMsg != "" {
-		lines = append(lines, styledLine{})
-		lines = append(lines, styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error})
-	}
 	if info := m.currentInfo(); info != "" {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: info, style: styles.Info})
@@ -163,10 +159,22 @@ func (m *Model) viewVertical(header string) string {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: "↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit", style: styles.Footer})
 	}
-	promptText, _ := m.filterPrompt()
-	lines = append(lines, styledLine{text: promptText})
-	lines = limitHeight(lines, m.height, m.width)
+	// Reserve 3 rows for the bottom bar (blank + error/status + prompt).
+	lines = limitHeight(lines, m.height-2, m.width)
 	lines = applyWidth(lines, m.width)
+
+	// Bottom bar: error/status line + filter prompt.
+	var statusLine styledLine
+	if m.errMsg != "" {
+		statusLine = styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error}
+	}
+	promptText, _ := m.filterPrompt()
+	bottomLines := []styledLine{
+		statusLine,
+		{text: promptText},
+	}
+	bottomLines = applyWidth(bottomLines, m.width)
+	lines = append(lines, bottomLines...)
 	return renderLines(lines)
 }
 
@@ -175,7 +183,11 @@ func (m *Model) viewSideBySide(header string) string {
 	menuW := m.menuColumnWidth()
 	prevW := m.previewPanelWidth()
 
-	// --- Left column: menu items, errors, footer, filter prompt ---
+	// Bottom bar: status/error line + filter prompt.
+	// These span the full terminal width beneath both columns.
+	const bottomBarRows = 2
+
+	// --- Left column: menu items, info, footer ---
 	contentLines := make([]styledLine, 0, 16)
 	if header != "" {
 		contentLines = append(contentLines, styledLine{text: header, style: styles.Header})
@@ -211,10 +223,6 @@ func (m *Model) viewSideBySide(header string) string {
 			}
 		}
 	}
-	if m.errMsg != "" {
-		contentLines = append(contentLines, styledLine{})
-		contentLines = append(contentLines, styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error})
-	}
 	if info := m.currentInfo(); info != "" {
 		contentLines = append(contentLines, styledLine{})
 		contentLines = append(contentLines, styledLine{text: info, style: styles.Info})
@@ -224,28 +232,23 @@ func (m *Model) viewSideBySide(header string) string {
 		contentLines = append(contentLines, styledLine{text: "↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit", style: styles.Footer})
 	}
 
-	// Pad content lines so the filter prompt sits at the very bottom.
-	targetContentRows := m.height - 1
-	if targetContentRows < 0 {
-		targetContentRows = 0
+	// Pad content lines so the columns fill the space above the bottom bar.
+	panelH := m.height - bottomBarRows
+	if panelH < 1 {
+		panelH = 1
 	}
-	// Truncate if over budget.
-	if len(contentLines) > targetContentRows {
-		contentLines = contentLines[:targetContentRows]
+	if len(contentLines) > panelH {
+		contentLines = contentLines[:panelH]
 	}
-	// Pad with blanks if under budget.
-	for len(contentLines) < targetContentRows {
+	for len(contentLines) < panelH {
 		contentLines = append(contentLines, styledLine{})
 	}
 
 	// Apply width to content lines only — they have no embedded ANSI codes
 	// (styling lives in the styledLine.style field), so rune-based truncation
-	// is correct. The prompt line contains pre-styled text with embedded ANSI
-	// and must NOT go through rune-based truncateText.
+	// is correct.
 	contentLines = applyWidth(contentLines, menuW)
-	promptText, _ := m.filterPrompt()
-	leftLines := append(contentLines, styledLine{text: promptText})
-	leftStr := renderLines(leftLines)
+	leftStr := renderLines(contentLines)
 
 	// Pad/truncate every rendered row to exactly menuW visible columns so
 	// JoinHorizontal keeps the preview panel flush to the right edge
@@ -263,9 +266,24 @@ func (m *Model) viewSideBySide(header string) string {
 	leftStr = strings.Join(leftRows, "\n")
 
 	// --- Right column: preview panel ---
-	rightStr := m.renderPreviewPanel(m.activePreview(), prevW, m.height)
+	rightStr := m.renderPreviewPanel(m.activePreview(), prevW, panelH)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftStr, rightStr)
+	topSection := lipgloss.JoinHorizontal(lipgloss.Top, leftStr, rightStr)
+
+	// --- Bottom bar: error/status + prompt (full width) ---
+	var statusLine styledLine
+	if m.errMsg != "" {
+		statusLine = styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error}
+	}
+	promptText, _ := m.filterPrompt()
+	bottomLines := []styledLine{
+		statusLine,
+		{text: promptText},
+	}
+	bottomLines = applyWidth(bottomLines, m.width)
+	bottomStr := renderLines(bottomLines)
+
+	return topSection + "\n" + bottomStr
 }
 
 // buildItemLine constructs a single styledLine for a menu item.
@@ -599,12 +617,9 @@ func (m *Model) maxVisibleItems() int {
 	if m.height <= 0 {
 		return -1
 	}
-	used := 1 // filter prompt
+	used := 2 // bottom bar: error/status + filter prompt
 	if header := m.menuHeader(); header != "" {
 		used++
-	}
-	if m.errMsg != "" {
-		used += 2
 	}
 	if info := m.currentInfo(); info != "" {
 		used += 2

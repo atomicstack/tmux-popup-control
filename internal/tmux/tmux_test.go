@@ -1042,12 +1042,12 @@ func TestSwitchPaneValidatesTarget(t *testing.T) {
 func TestSwitchPaneRunsCommands(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	if err := SwitchPane("sock", "client-9", "dev:0.%0"); err != nil {
+	if err := SwitchPane("sock", "/dev/ttys009", "dev:0.%0"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if fake.lastSwitchOpts == nil ||
 		fake.lastSwitchOpts.TargetSession != "dev" ||
-		fake.lastSwitchOpts.TargetClient != "client-9" {
+		fake.lastSwitchOpts.TargetClient != "/dev/ttys009" {
 		t.Fatalf("unexpected switch opts %#v", fake.lastSwitchOpts)
 	}
 	if len(fake.selectWindowCalls) != 1 || fake.selectWindowCalls[0] != "dev:0" {
@@ -1058,16 +1058,86 @@ func TestSwitchPaneRunsCommands(t *testing.T) {
 	}
 }
 
+func TestSwitchPaneSkipsInvalidClientID(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	if err := SwitchPane("sock", "[shells] O:zsh, pane 0", "dev:0.%0"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fake.lastSwitchOpts == nil {
+		t.Fatal("expected switch to be called")
+	}
+	if fake.lastSwitchOpts.TargetClient != "" {
+		t.Fatalf("expected empty TargetClient, got %q", fake.lastSwitchOpts.TargetClient)
+	}
+}
+
 func TestSwitchClientTargetsRequestedClient(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	if err := SwitchClient("", "client-42", "dev"); err != nil {
+	if err := SwitchClient("", "/dev/ttys004", "dev"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if fake.lastSwitchOpts == nil ||
-		fake.lastSwitchOpts.TargetClient != "client-42" ||
+		fake.lastSwitchOpts.TargetClient != "/dev/ttys004" ||
 		fake.lastSwitchOpts.TargetSession != "dev" {
 		t.Fatalf("unexpected switch opts %#v", fake.lastSwitchOpts)
+	}
+}
+
+func TestSwitchClientSkipsInvalidClientID(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	// Garbage client ID (status-line text) should be silently dropped.
+	if err := SwitchClient("", "[shells] O:zsh, current pane 0", "dev"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fake.lastSwitchOpts == nil {
+		t.Fatal("expected switch to be called")
+	}
+	if fake.lastSwitchOpts.TargetClient != "" {
+		t.Fatalf("expected empty TargetClient, got %q", fake.lastSwitchOpts.TargetClient)
+	}
+	if fake.lastSwitchOpts.TargetSession != "dev" {
+		t.Fatalf("expected TargetSession=dev, got %q", fake.lastSwitchOpts.TargetSession)
+	}
+}
+
+func TestSwitchClientSkipsEmptyClientID(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	if err := SwitchClient("", "", "dev"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fake.lastSwitchOpts == nil {
+		t.Fatal("expected switch to be called")
+	}
+	if fake.lastSwitchOpts.TargetClient != "" {
+		t.Fatalf("expected empty TargetClient, got %q", fake.lastSwitchOpts.TargetClient)
+	}
+}
+
+func TestIsValidClientName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"valid device path", "/dev/ttys004", true},
+		{"valid pts path", "/dev/pts/0", true},
+		{"empty", "", false},
+		{"spaces", "/dev/tty with space", false},
+		{"no leading slash", "dev/ttys004", false},
+		{"status line garbage", "[shells] O:zsh, current pane 0", false},
+		{"tab character", "/dev/tty\t1", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isValidClientName(tt.input)
+			if got != tt.want {
+				t.Errorf("isValidClientName(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 

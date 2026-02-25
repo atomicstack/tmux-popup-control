@@ -14,8 +14,8 @@ func SwitchClient(socketPath, clientID, target string) error {
 	}
 
 	opts := &gotmux.SwitchClientOptions{TargetSession: target}
-	if strings.TrimSpace(clientID) != "" {
-		opts.TargetClient = clientID
+	if id := strings.TrimSpace(clientID); isValidClientName(id) {
+		opts.TargetClient = id
 	}
 	return client.SwitchClient(opts)
 }

@@ -145,8 +145,8 @@ func SwitchPane(socketPath, clientID, target string) error {
 	}
 
 	switchOpts := &gotmux.SwitchClientOptions{TargetSession: session}
-	if strings.TrimSpace(clientID) != "" {
-		switchOpts.TargetClient = clientID
+	if id := strings.TrimSpace(clientID); isValidClientName(id) {
+		switchOpts.TargetClient = id
 	}
 	if err := client.SwitchClient(switchOpts); err != nil {
 		return err
