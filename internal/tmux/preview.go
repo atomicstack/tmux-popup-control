@@ -20,8 +20,8 @@ func PanePreview(socketPath, pane string) ([]string, error) {
 		return nil, err
 	}
 	output, err := client.CapturePane(target, &gotmux.CaptureOptions{
-		EscNonPrintables: true,
-		StartLine:        fmt.Sprintf("-%d", panePreviewDefaultLines),
+		EscTxtNBgAttr: true,
+		StartLine:     fmt.Sprintf("-%d", panePreviewDefaultLines),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("capture-pane %s: %w", target, err)

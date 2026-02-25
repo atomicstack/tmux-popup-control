@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/truncate"
 )
 
 const (
@@ -24,7 +25,9 @@ var (
 type styledLine struct {
 	text          string
 	style         *lipgloss.Style
+	prefixStyle   *lipgloss.Style
 	highlightFrom int
+	raw           bool // text contains ANSI escapes; skip style wrapping, use ANSI-aware truncation
 }
 
 // hasSidePreview reports whether the current level should be rendered with the
@@ -116,7 +119,7 @@ func (m *Model) viewVertical(header string) string {
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
-				lines = append(lines, m.buildItemLine(item.ID, item.Label, idx, current))
+				lines = append(lines, m.buildItemLine(item.ID, item.Label, idx, current, m.width))
 			}
 		}
 	}
@@ -140,7 +143,11 @@ func (m *Model) viewVertical(header string) string {
 				bodyStyle = styles.PreviewBody
 			}
 			for _, line := range previewDisplayLines(preview) {
-				lines = append(lines, styledLine{text: line, style: bodyStyle})
+				if preview.rawANSI {
+					lines = append(lines, styledLine{text: line, raw: true})
+				} else {
+					lines = append(lines, styledLine{text: line, style: bodyStyle})
+				}
 			}
 		}
 	}
@@ -200,7 +207,7 @@ func (m *Model) viewSideBySide(header string) string {
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
-				contentLines = append(contentLines, m.buildItemLine(item.ID, item.Label, idx, current))
+				contentLines = append(contentLines, m.buildItemLine(item.ID, item.Label, idx, current, menuW))
 			}
 		}
 	}
@@ -231,10 +238,29 @@ func (m *Model) viewSideBySide(header string) string {
 		contentLines = append(contentLines, styledLine{})
 	}
 
+	// Apply width to content lines only — they have no embedded ANSI codes
+	// (styling lives in the styledLine.style field), so rune-based truncation
+	// is correct. The prompt line contains pre-styled text with embedded ANSI
+	// and must NOT go through rune-based truncateText.
+	contentLines = applyWidth(contentLines, menuW)
 	promptText, _ := m.filterPrompt()
 	leftLines := append(contentLines, styledLine{text: promptText})
-	leftLines = applyWidth(leftLines, menuW)
 	leftStr := renderLines(leftLines)
+
+	// Pad/truncate every rendered row to exactly menuW visible columns so
+	// JoinHorizontal keeps the preview panel flush to the right edge
+	// regardless of content length or cursor-blink state. Uses lipgloss.Width
+	// (ANSI-aware visual measurement) and reflow/truncate (ANSI-safe truncation).
+	leftRows := strings.Split(leftStr, "\n")
+	for i, row := range leftRows {
+		w := lipgloss.Width(row)
+		if w > menuW {
+			leftRows[i] = truncate.StringWithTail(row, uint(menuW-1), "…")
+		} else if w < menuW {
+			leftRows[i] = row + strings.Repeat(" ", menuW-w)
+		}
+	}
+	leftStr = strings.Join(leftRows, "\n")
 
 	// --- Right column: preview panel ---
 	rightStr := m.renderPreviewPanel(m.activePreview(), prevW, m.height)
@@ -243,9 +269,12 @@ func (m *Model) viewSideBySide(header string) string {
 }
 
 // buildItemLine constructs a single styledLine for a menu item.
-func (m *Model) buildItemLine(id, label string, idx int, current *level) styledLine {
-	prefix := "  "
+// width is the target column width; when > 0 the text is padded so that
+// the selected item's background spans the full container.
+func (m *Model) buildItemLine(id, label string, idx int, current *level, width int) styledLine {
+	indicator := "▌"
 	lineStyle := styles.Item
+	indicatorStyle := styles.ItemIndicator
 	selectDisplay := ""
 	if current.MultiSelect {
 		mark := " "
@@ -255,16 +284,21 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level) styledL
 		selectDisplay = fmt.Sprintf("[%s] ", mark)
 	}
 	if idx == current.Cursor {
-		prefix = "▌ "
+		indicatorStyle = styles.SelectedItemIndicator
 		lineStyle = styles.SelectedItem
 	}
-	lineText := selectDisplay + label
-	fullText := fmt.Sprintf("%s%s", prefix, lineText)
-	highlightFrom := 0
-	if lineStyle == styles.SelectedItem {
-		highlightFrom = len([]rune(prefix)) + len([]rune(selectDisplay))
+	fullText := indicator + " " + selectDisplay + label
+	if width > 0 {
+		if pad := width - len([]rune(fullText)); pad > 0 {
+			fullText += strings.Repeat(" ", pad)
+		}
 	}
-	return styledLine{text: fullText, style: lineStyle, highlightFrom: highlightFrom}
+	return styledLine{
+		text:          fullText,
+		style:         lineStyle,
+		prefixStyle:   indicatorStyle,
+		highlightFrom: 1, // just the ▌ character
+	}
 }
 
 // renderPreviewPanel builds the bordered preview box as a string with exactly
@@ -362,11 +396,13 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 	// Build bottom border: ╰────────────────────────────────╯
 	bottomLine := previewBorderStyle.Render(blc + strings.Repeat(hz, innerW) + brc)
 
-	// Determine body style.
+	// Determine body style and whether content has embedded ANSI.
 	bodyStyle := styles.PreviewBody
+	rawANSI := preview != nil && preview.rawANSI
 	if errLine != "" {
 		bodyStyle = styles.PreviewError
 		contentLines = []string{errLine}
+		rawANSI = false
 	}
 
 	// Build content rows — pad/truncate to innerH rows, each innerW wide.
@@ -377,17 +413,20 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 		if i < len(contentLines) {
 			content = contentLines[i]
 		}
-		// Truncate.
-		runes := []rune(content)
-		if len(runes) > innerW {
-			content = string(runes[:innerW-1]) + "…"
+		// Truncate and pad using ANSI-aware measurement when content
+		// may contain escape sequences from capture-pane -e.
+		w := lipgloss.Width(content)
+		if w > innerW {
+			content = truncate.StringWithTail(content, uint(innerW-1), "…")
+			w = lipgloss.Width(content)
 		}
-		// Pad.
-		if len([]rune(content)) < innerW {
-			content = content + strings.Repeat(" ", innerW-len([]rune(content)))
+		if w < innerW {
+			content = content + strings.Repeat(" ", innerW-w)
 		}
 		var styledContent string
-		if bodyStyle != nil {
+		if rawANSI {
+			styledContent = content
+		} else if bodyStyle != nil {
 			styledContent = bodyStyle.Render(content)
 		} else {
 			styledContent = content
@@ -641,14 +680,23 @@ func applyWidth(lines []styledLine, width int) []styledLine {
 	if width <= 0 {
 		return lines
 	}
-	out := make([]string, 0, len(lines))
-	_ = out // built below
 	result := make([]styledLine, len(lines))
 	for i, line := range lines {
+		text := line.text
+		if line.raw {
+			w := lipgloss.Width(text)
+			if w > width {
+				text = truncate.StringWithTail(text, uint(width-1), "…")
+			}
+		} else {
+			text = truncateText(text, width)
+		}
 		result[i] = styledLine{
-			text:          truncateText(line.text, width),
+			text:          text,
 			style:         line.style,
+			prefixStyle:   line.prefixStyle,
 			highlightFrom: line.highlightFrom,
+			raw:           line.raw,
 		}
 	}
 	return result
@@ -658,15 +706,24 @@ func renderLines(lines []styledLine) string {
 	out := make([]string, len(lines))
 	for i, line := range lines {
 		text := line.text
-		if line.style != nil {
-			runes := []rune(text)
-			if line.highlightFrom <= 0 || line.highlightFrom >= len(runes) {
-				text = line.style.Render(text)
-			} else {
-				head := string(runes[:line.highlightFrom])
-				tail := string(runes[line.highlightFrom:])
-				text = head + line.style.Render(tail)
+		if line.raw {
+			// Text already contains ANSI escapes; pass through as-is.
+			out[i] = text
+			continue
+		}
+		runes := []rune(text)
+		if line.highlightFrom > 0 && line.highlightFrom < len(runes) {
+			head := string(runes[:line.highlightFrom])
+			tail := string(runes[line.highlightFrom:])
+			if line.prefixStyle != nil {
+				head = line.prefixStyle.Render(head)
 			}
+			if line.style != nil {
+				tail = line.style.Render(tail)
+			}
+			text = head + tail
+		} else if line.style != nil {
+			text = line.style.Render(text)
 		}
 		out[i] = text
 	}

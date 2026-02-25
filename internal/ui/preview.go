@@ -26,7 +26,8 @@ type previewData struct {
 	err          string
 	loading      bool
 	seq          int
-	scrollOffset int // position within lines; clamped by renderPreviewPanel
+	scrollOffset int  // position within lines; clamped by renderPreviewPanel
+	rawANSI      bool // true when lines contain ANSI escape sequences (pane captures)
 }
 
 type previewLoadedMsg struct {
@@ -36,6 +37,7 @@ type previewLoadedMsg struct {
 	seq     int
 	lines   []string
 	err     error
+	rawANSI bool // true when lines contain ANSI escape sequences
 }
 
 var (
@@ -92,6 +94,7 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 				seq:     seq,
 				lines:   lines,
 				err:     err,
+				rawANSI: true,
 			}
 		}
 	case previewKindSession:
@@ -104,7 +107,7 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 		}
 		return func() tea.Msg {
 			lines, err := panePreviewFn(socket, paneID)
-			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines, err: err}
+			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines, err: err, rawANSI: true}
 		}
 	case previewKindWindow:
 		paneID := m.activePaneIDForWindow(target)
@@ -116,7 +119,7 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 		}
 		return func() tea.Msg {
 			lines, err := panePreviewFn(socket, paneID)
-			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines, err: err}
+			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines, err: err, rawANSI: true}
 		}
 	default:
 		return nil
@@ -195,7 +198,7 @@ func previewKindForLevel(id string) previewKind {
 		return previewKindSession
 	case "window:switch":
 		return previewKindWindow
-	case "pane:switch":
+	case "pane:switch", "pane:join":
 		return previewKindPane
 	default:
 		return previewKindNone
@@ -218,6 +221,7 @@ func (m *Model) handlePreviewLoadedMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	data.loading = false
+	data.rawANSI = update.rawANSI
 	if update.err != nil {
 		data.err = update.err.Error()
 		data.lines = nil
