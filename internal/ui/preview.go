@@ -130,6 +130,16 @@ func (m *Model) ensurePreviewForCurrentLevel() tea.Cmd {
 	return m.ensurePreviewForLevel(m.currentLevel())
 }
 
+// refreshPreviewForLevel invalidates any cached preview for the level so that
+// ensurePreviewForLevel will re-fetch it, even if the cursor target is unchanged.
+func (m *Model) refreshPreviewForLevel(level *level) tea.Cmd {
+	if level == nil {
+		return nil
+	}
+	m.clearPreview(level.ID)
+	return m.ensurePreviewForLevel(level)
+}
+
 // activePaneIDForSession returns the pane item ID to capture for a session preview.
 // It prefers the session's currently active pane; falls back to the first pane found.
 func (m *Model) activePaneIDForSession(session string) string {

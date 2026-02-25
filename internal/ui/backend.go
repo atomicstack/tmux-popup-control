@@ -86,7 +86,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 			m.sessionForm.SetSessions(ctx.Sessions)
 		}
 		if currentLvl != nil && currentLvl.ID == "session:switch" {
-			previewCmd = m.ensurePreviewForLevel(currentLvl)
+			previewCmd = m.refreshPreviewForLevel(currentLvl)
 		}
 	}
 
@@ -125,7 +125,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 			m.syncViewport(lvl)
 		}
 		if currentLvl != nil && currentLvl.ID == "window:switch" {
-			previewCmd = m.ensurePreviewForLevel(currentLvl)
+			previewCmd = m.refreshPreviewForLevel(currentLvl)
 		}
 	}
 
@@ -160,8 +160,12 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		if m.paneForm != nil {
 			m.paneForm.SyncContext(ctx)
 		}
-		if currentLvl != nil && currentLvl.ID == "pane:switch" {
-			previewCmd = m.ensurePreviewForLevel(currentLvl)
+		// Pane content changes affect all pane-capture-based previews.
+		if currentLvl != nil && previewCmd == nil {
+			switch currentLvl.ID {
+			case "pane:switch", "pane:join", "session:switch", "window:switch":
+				previewCmd = m.refreshPreviewForLevel(currentLvl)
+			}
 		}
 	}
 
