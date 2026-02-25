@@ -6,7 +6,7 @@ GO_ENV := GOTMUXCC_TRACE=1 GOTMUXCC_TRACE_FILE=$(CURDIR)/gotmuxcc_trace.log GOCA
 
 .SILENT:
 
-.PHONY: build run tidy fmt test clean-cache ensure-dirs cover
+.PHONY: build run tidy fmt test clean-cache ensure-dirs cover update-gotmuxcc
 
 ensure-dirs:
 	mkdir -p $(GOCACHE) $(GOMODCACHE)
@@ -25,6 +25,13 @@ tidy: ensure-dirs
 
 test: ensure-dirs
 	$(GO_ENV) go test ./...
+
+GO_ENV_ONLINE := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=direct
+
+update-gotmuxcc: ensure-dirs
+	$(GO_ENV_ONLINE) go get github.com/atomicstack/gotmuxcc@main
+	$(GO_ENV_ONLINE) go mod tidy
+	$(GO_ENV_ONLINE) go mod vendor
 
 clean-cache:
 	rm -rf $(GOCACHE) $(GOMODCACHE)
