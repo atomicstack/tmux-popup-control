@@ -148,3 +148,79 @@ func containsWindow(windows []Window, session string, index int) bool {
 	}
 	return false
 }
+
+// TestCurrentClientIDSkipsControlModeClients verifies that CurrentClientID
+// returns empty when only control-mode clients are attached (no TTY clients).
+// In production (inside a popup), a real TTY client would be present and
+// CurrentClientID would return its name.
+func TestCurrentClientIDSkipsControlModeClients(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	// Clear any cached control-mode connection.
+	Shutdown()
+
+	initialSession := "tmux-popup-control-test"
+
+	// Get a pane ID from the initial session.
+	paneOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", initialSession, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get pane id: %v", err)
+	}
+	paneID := strings.TrimSpace(string(paneOut))
+	t.Logf("test pane: %s (session: %s)", paneID, initialSession)
+
+	// Set TMUX_PANE as CurrentClientID expects.
+	t.Setenv("TMUX_PANE", paneID)
+
+	// Call CurrentClientID — should return empty because only
+	// control-mode clients exist (no real TTY clients in the test env).
+	clientID := CurrentClientID(socket)
+	t.Logf("CurrentClientID returned: %q", clientID)
+
+	// List clients to confirm only control-mode clients are present.
+	clientsOut, _ := exec.Command("tmux", "-S", socket, "list-clients", "-F", "#{client_name} control=#{client_control_mode} session=#{client_session}").Output()
+	t.Logf("tmux clients:\n%s", strings.TrimSpace(string(clientsOut)))
+
+	// With no real TTY clients, CurrentClientID should return empty.
+	if clientID != "" {
+		t.Errorf("expected empty clientID when no TTY clients exist, got %q", clientID)
+	}
+
+	Shutdown()
+}
+
+// TestSwitchClientWithoutClientIDIntegration verifies that SwitchClient
+// works via control mode when no explicit clientID is available. In this
+// mode, switch-client targets the control-mode connection itself, which
+// has no visible effect — but the command should not error.
+func TestSwitchClientWithoutClientIDIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	Shutdown()
+
+	// Create a target session.
+	targetSession := "switch-target"
+	if err := exec.Command("tmux", "-S", socket, "new-session", "-d", "-s", targetSession).Run(); err != nil {
+		t.Fatalf("create target session: %v", err)
+	}
+	waitForSession(t, socket, targetSession)
+
+	// SwitchClient with empty clientID — will skip -c flag.
+	err := SwitchClient(socket, "", targetSession)
+	if err != nil {
+		t.Fatalf("SwitchClient returned error: %v", err)
+	}
+	t.Logf("SwitchClient with empty clientID succeeded (no error)")
+
+	Shutdown()
+}

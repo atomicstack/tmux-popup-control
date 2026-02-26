@@ -1117,6 +1117,90 @@ func TestSwitchClientSkipsEmptyClientID(t *testing.T) {
 	}
 }
 
+func TestCurrentClientIDReturnsNonControlModeClient(t *testing.T) {
+	fake := &fakeClient{
+		displayMessageFn: func(target, format string) (string, error) {
+			if format == "#{session_name}" {
+				return "main-session", nil
+			}
+			return "", fmt.Errorf("unexpected format")
+		},
+		clients: []*gotmux.Client{
+			{Name: "client-12345", ControlMode: true, Session: "main-session"},
+			{Name: "/dev/ttys004", ControlMode: false, Session: "main-session"},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_PANE", "%5")
+
+	got := CurrentClientID("/tmp/test.sock")
+	if got != "/dev/ttys004" {
+		t.Fatalf("expected /dev/ttys004, got %q", got)
+	}
+}
+
+func TestCurrentClientIDSkipsControlModeOnly(t *testing.T) {
+	fake := &fakeClient{
+		displayMessageFn: func(target, format string) (string, error) {
+			return "my-session", nil
+		},
+		clients: []*gotmux.Client{
+			{Name: "client-99999", ControlMode: true, Session: "my-session"},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_PANE", "%0")
+
+	got := CurrentClientID("/tmp/test.sock")
+	if got != "" {
+		t.Fatalf("expected empty string when only control-mode clients exist, got %q", got)
+	}
+}
+
+func TestCurrentClientIDFallsBackToTMUXEnv(t *testing.T) {
+	// Inside display-popup, TMUX_PANE is empty but TMUX is set.
+	fake := &fakeClient{
+		displayMessageFn: func(target, format string) (string, error) {
+			// $3 is the session ID extracted from TMUX env var.
+			if target == "$3" && format == "#{session_name}" {
+				return "popup-session", nil
+			}
+			return "", fmt.Errorf("unexpected target=%q format=%q", target, format)
+		},
+		clients: []*gotmux.Client{
+			{Name: "client-11111", ControlMode: true, Session: "popup-session"},
+			{Name: "/dev/ttys007", ControlMode: false, Session: "popup-session"},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_PANE", "")
+	t.Setenv("TMUX", "/tmp/tmux-501/default,12345,3")
+
+	got := CurrentClientID("/tmp/test.sock")
+	if got != "/dev/ttys007" {
+		t.Fatalf("expected /dev/ttys007 via TMUX env fallback, got %q", got)
+	}
+}
+
+func TestCurrentClientIDMatchesSessionOnly(t *testing.T) {
+	fake := &fakeClient{
+		displayMessageFn: func(target, format string) (string, error) {
+			return "session-A", nil
+		},
+		clients: []*gotmux.Client{
+			{Name: "/dev/ttys001", ControlMode: false, Session: "session-B"},
+			{Name: "/dev/ttys002", ControlMode: false, Session: "session-A"},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_PANE", "%0")
+
+	got := CurrentClientID("/tmp/test.sock")
+	if got != "/dev/ttys002" {
+		t.Fatalf("expected /dev/ttys002 (matching session), got %q", got)
+	}
+}
+
 func TestIsValidClientName(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -1125,9 +1209,9 @@ func TestIsValidClientName(t *testing.T) {
 	}{
 		{"valid device path", "/dev/ttys004", true},
 		{"valid pts path", "/dev/pts/0", true},
+		{"internal client name", "client-67503", true},
 		{"empty", "", false},
 		{"spaces", "/dev/tty with space", false},
-		{"no leading slash", "dev/ttys004", false},
 		{"status line garbage", "[shells] O:zsh, current pane 0", false},
 		{"tab character", "/dev/tty\t1", false},
 	}

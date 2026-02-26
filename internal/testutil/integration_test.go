@@ -143,6 +143,58 @@ func TestFilterNarrowsSessionList(t *testing.T) {
 	_ = tmuxCommand(socket, "kill-session", "-t", "filter-session").Run()
 }
 
+// TestSessionSwitchExitsCleanly launches the binary at session:switch with a
+// second session available, selects it via Enter, and verifies the binary
+// exits cleanly (no error displayed). This is a regression test for the
+// switch-client flow.
+func TestSessionSwitchExitsCleanly(t *testing.T) {
+	bin := buildBinary(t)
+	socket, cleanup, logDir := StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	// Create a target session to switch to.
+	if err := tmuxCommand(socket, "new-session", "-d", "-s", "switch-target").Run(); err != nil {
+		t.Fatalf("create target session: %v", err)
+	}
+
+	pane, exitFile := launchBinary(t, bin, socket, "switch-sess", "session:switch")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// Wait for the switch menu to render with the target session visible.
+	WaitForContent(t, ctx, socket, pane, "switch-target")
+
+	// Capture before pressing Enter so we can see the rendered state.
+	beforeOutput, _ := CapturePane(t, socket, pane)
+	t.Logf("session:switch menu before Enter:\n%s", beforeOutput)
+
+	// Press Enter to select the highlighted item (should be switch-target
+	// since the current session is excluded by default).
+	SendKeys(t, socket, pane, "Enter")
+
+	// The binary should exit after a successful (or failed) switch action.
+	// If successful: ActionResult with no error → tea.Quit → exit 0.
+	// If error: error is displayed and binary stays alive.
+	// Give it a moment, then check.
+	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer exitCancel()
+
+	code := waitForExit(t, exitCtx, exitFile)
+	t.Logf("binary exit code: %s", code)
+
+	if code != "0" {
+		// Capture the pane to see any error that was displayed.
+		errOutput, _ := CapturePane(t, socket, pane)
+		t.Fatalf("binary exited with code %s; pane output:\n%s", code, errOutput)
+	}
+
+	// Clean up.
+	_ = tmuxCommand(socket, "kill-session", "-t", "switch-sess").Run()
+	_ = tmuxCommand(socket, "kill-session", "-t", "switch-target").Run()
+}
+
 // TestEscapeExitsFromRootMenu verifies that pressing Escape at the root menu
 // causes the binary to exit promptly with code 0.
 func TestEscapeExitsFromRootMenu(t *testing.T) {
