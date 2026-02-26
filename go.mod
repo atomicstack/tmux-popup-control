@@ -3,7 +3,7 @@ module github.com/atomicstack/tmux-popup-control
 go 1.22.3
 
 require (
-	github.com/atomicstack/gotmuxcc v0.0.0-20260225233553-d6ee2f77f497
+	github.com/atomicstack/gotmuxcc v0.0.0-20260225235214-70528171d070
 	github.com/charmbracelet/bubbles v0.16.0
 	github.com/charmbracelet/bubbletea v0.25.0
 	github.com/charmbracelet/lipgloss v0.10.0
