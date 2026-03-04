@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -225,4 +227,121 @@ func TestEscapeExitsFromRootMenu(t *testing.T) {
 	t.Logf("binary exited in %v with code %s", elapsed, code)
 
 	_ = tmuxCommand(socket, "kill-session", "-t", "escape-session").Run()
+}
+
+// TestCommandMenuMoveWindowRenumber verifies the command submenu by typing
+// the full "move-window -r -t <target>" command in the filter bar and pressing
+// Enter to execute directly.
+func TestCommandMenuMoveWindowRenumber(t *testing.T) {
+	bin := buildBinary(t)
+	socket, cleanup, logDir := StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	target := "renumber-target"
+
+	// Create a target session with three windows, then kill the middle one to
+	// produce a gap: indices 0, 2 (window 1 removed).
+	if err := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", target).Run(); err != nil {
+		t.Fatalf("create target session: %v", err)
+	}
+	if err := tmuxCommand(socket, "new-window", "-t", target).Run(); err != nil {
+		t.Fatalf("new-window 1: %v", err)
+	}
+	if err := tmuxCommand(socket, "new-window", "-t", target).Run(); err != nil {
+		t.Fatalf("new-window 2: %v", err)
+	}
+	// Kill window index 1 to create a gap (leaves indices 0, 2).
+	if err := tmuxCommand(socket, "kill-window", "-t", target+":1").Run(); err != nil {
+		t.Fatalf("kill-window 1: %v", err)
+	}
+
+	// Verify gap exists.
+	beforeIndices := windowIndices(t, socket, target)
+	t.Logf("window indices before: %v", beforeIndices)
+	if len(beforeIndices) != 2 {
+		t.Fatalf("expected 2 windows, got %d", len(beforeIndices))
+	}
+	hasGap := false
+	for i := 1; i < len(beforeIndices); i++ {
+		if beforeIndices[i]-beforeIndices[i-1] > 1 {
+			hasGap = true
+			break
+		}
+	}
+	if !hasGap {
+		t.Fatalf("expected gap in window indices %v", beforeIndices)
+	}
+
+	// Launch the binary in a separate session at the "command" root menu.
+	pane, exitFile := launchBinary(t, bin, socket, "cmd-runner", "command")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	// Wait for the command list to render (any command visible means it loaded).
+	WaitForContent(t, ctx, socket, pane, "command")
+
+	// Type the full command in the filter bar and execute with Enter.
+	// Use Tab to accept the autocomplete for "move-window", then type args.
+	SendText(t, socket, pane, "move-win")
+	WaitForContent(t, ctx, socket, pane, "move-window")
+	SendKeys(t, socket, pane, "Tab")
+
+	// Append " -r -t <target>" to the filter.
+	// Use -- to prevent tmux send-keys from interpreting "-r" as a flag.
+	if err := tmuxCommand(socket, "send-keys", "-l", "-t", pane, "--", " -r -t "+target).Run(); err != nil {
+		t.Fatalf("send-text to pane %s: %v", pane, err)
+	}
+
+	// Press Enter to execute the command directly from the filter.
+	SendKeys(t, socket, pane, "Enter")
+
+	// The binary should exit after execution.
+	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer exitCancel()
+	code := waitForExit(t, exitCtx, exitFile)
+	t.Logf("binary exit code: %s", code)
+	if code != "0" {
+		errOutput, _ := CapturePane(t, socket, pane)
+		t.Fatalf("binary exited with code %s; pane output:\n%s", code, errOutput)
+	}
+
+	// Verify windows are renumbered: should be 0, 1 (no gap).
+	afterIndices := windowIndices(t, socket, target)
+	t.Logf("window indices after: %v", afterIndices)
+	if len(afterIndices) != 2 {
+		t.Fatalf("expected 2 windows after renumber, got %d", len(afterIndices))
+	}
+	for i, idx := range afterIndices {
+		if idx != i {
+			t.Fatalf("expected contiguous indices starting at 0, got %v", afterIndices)
+		}
+	}
+
+	_ = tmuxCommand(socket, "kill-session", "-t", "cmd-runner").Run()
+	_ = tmuxCommand(socket, "kill-session", "-t", target).Run()
+}
+
+// windowIndices returns the sorted window indices for the given session.
+func windowIndices(t *testing.T, socket, session string) []int {
+	t.Helper()
+	out, err := tmuxCommand(socket, "list-windows", "-t", session, "-F", "#{window_index}").Output()
+	if err != nil {
+		t.Fatalf("list-windows: %v", err)
+	}
+	var indices []int
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		idx, err := strconv.Atoi(line)
+		if err != nil {
+			t.Fatalf("parse window index %q: %v", line, err)
+		}
+		indices = append(indices, idx)
+	}
+	sort.Ints(indices)
+	return indices
 }

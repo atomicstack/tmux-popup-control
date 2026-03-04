@@ -1,9 +1,6 @@
 package ui
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -33,20 +30,31 @@ func (m *Model) handleActionResultMsg(msg tea.Msg) tea.Cmd {
 	return tea.Quit
 }
 
-func (m *Model) handleCommandPromptMsg(msg tea.Msg) tea.Cmd {
-	prompt, ok := msg.(menu.CommandPromptMsg)
+// commandPreloadMsg delivers the pre-fetched command list items.
+type commandPreloadMsg struct {
+	items []menu.Item
+	err   error
+}
+
+// preloadCommandList fires an async command to fetch the command list.
+func preloadCommandList(socketPath string, loader menu.Loader) tea.Cmd {
+	return func() tea.Msg {
+		items, err := loader(menu.Context{SocketPath: socketPath})
+		return commandPreloadMsg{items: items, err: err}
+	}
+}
+
+func (m *Model) handleCommandPreloadMsg(msg tea.Msg) tea.Cmd {
+	preload, ok := msg.(commandPreloadMsg)
 	if !ok {
 		return nil
 	}
-	return m.withPrompt(func() promptResult {
-		if err := menu.CommandPrompt(m.socketPath, prompt.Command); err != nil {
-			events.Action.Error(err)
-			return promptResult{Err: err}
-		}
-		info := fmt.Sprintf("Prompted command %s", strings.TrimSpace(prompt.Command))
-		events.Action.Success(info)
-		return promptResult{Cmd: tea.Quit, Info: info}
-	})
+	if preload.err != nil {
+		logging.Error(preload.err)
+		return nil
+	}
+	m.commandItemsCache = preload.items
+	return nil
 }
 
 func (m *Model) loadMenuCmd(id, title string, loader menu.Loader) tea.Cmd {

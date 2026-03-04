@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"unicode"
 
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
@@ -224,9 +225,24 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		pos = len(runes)
 	}
 	before := render(styles.Filter, string(runes[:pos]))
+	ghost := m.autoCompleteGhost()
 	var caretRune string
 	if pos < len(runes) {
 		caretRune = string(runes[pos])
+	} else if ghost != "" {
+		// Use first ghost character as the cursor caret so there is no
+		// visible gap between typed text and the autocomplete hint.
+		ghostRunes := []rune(ghost)
+		if styles.FilterPlaceholder != nil {
+			m.filterCursor.TextStyle = styles.FilterPlaceholder.Copy()
+		}
+		caretRune = string(ghostRunes[0])
+		caret := m.renderFilterCursor(caretRune)
+		ghostTail := ""
+		if len(ghostRunes) > 1 {
+			ghostTail = render(styles.FilterPlaceholder, string(ghostRunes[1:]))
+		}
+		return prompt + before + caret + ghostTail, nil
 	} else {
 		caretRune = " "
 	}
@@ -238,6 +254,36 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		after = ""
 	}
 	return prompt + before + caret + after, nil
+}
+
+// autoCompleteGhost returns the ghost text suffix for autocomplete, or "" if
+// none applies. Ghost text is shown when the cursor is at the end of the
+// filter text and the filter is a case-insensitive prefix of the highlighted
+// item's ID on a FilterCommand level.
+func (m *Model) autoCompleteGhost() string {
+	current := m.currentLevel()
+	if current == nil {
+		return ""
+	}
+	if current.Node == nil || !current.Node.FilterCommand {
+		return ""
+	}
+	if current.Filter == "" {
+		return ""
+	}
+	if current.FilterCursorPos() != len([]rune(current.Filter)) {
+		return ""
+	}
+	if current.Cursor < 0 || current.Cursor >= len(current.Items) {
+		return ""
+	}
+	item := current.Items[current.Cursor]
+	lower := strings.ToLower(current.Filter)
+	idLower := strings.ToLower(item.ID)
+	if !strings.HasPrefix(idLower, lower) {
+		return ""
+	}
+	return item.ID[len(current.Filter):]
 }
 
 func (m *Model) renderFilterCursor(char string) string {

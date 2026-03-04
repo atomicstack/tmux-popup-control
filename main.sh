@@ -3,7 +3,13 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CMD="$CURRENT_DIR/tmux-popup-control"
 
+POPUP_HINTS="$(tmux display-message -p '#{client_tty},#{session_name}')"
+POPUP_CLIENT="${POPUP_HINTS%%,*}"
+POPUP_SESSION="${POPUP_HINTS#*,}"
+
 tmux display-popup -w 90% -h 80% \
+  -e "TMUX_POPUP_CONTROL_CLIENT=$POPUP_CLIENT" \
+  -e "TMUX_POPUP_CONTROL_SESSION=$POPUP_SESSION" \
   `# -e GOTMUXCC_TRACE=1 -e GOTMUXCC_TRACE_FILE=$CURRENT_DIR/gotmuxcc_trace.log --trace` \
   -E $CMD "$@"
 status=$?

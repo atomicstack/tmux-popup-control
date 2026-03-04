@@ -51,6 +51,25 @@ func (m *Model) handleEnterKey() tea.Cmd {
 		return nil
 	}
 	current := m.currentLevel()
+	if current != nil && current.Node != nil && current.Node.FilterCommand {
+		filterText := strings.TrimSpace(current.Filter)
+		if filterText == "" {
+			return nil
+		}
+		beforeCursor := current.FilterCursorPos()
+		current.SetFilter("", 0)
+		m.noteFilterCursorChange(current, beforeCursor)
+		m.loading = true
+		m.pendingID = "command"
+		m.pendingLabel = filterText
+		m.errMsg = ""
+		m.forceClearInfo()
+		target := m.sessionName
+		if target == "" {
+			target = m.sessions.Current()
+		}
+		return menu.RunCommand(m.socketPath, filterText, target)
+	}
 	if current == nil || len(current.Items) == 0 {
 		return nil
 	}
@@ -101,6 +120,16 @@ func (m *Model) handleEnterKey() tea.Cmd {
 	if node != nil {
 		if child, ok := node.Children[item.ID]; ok {
 			if child.Loader != nil {
+				if child.FilterCommand && m.commandItemsCache != nil {
+					current.LastCursor = current.Cursor
+					m.errMsg = ""
+					m.forceClearInfo()
+					lvl := newLevel(child.ID, item.Label, m.commandItemsCache, child)
+					m.applyNodeSettings(lvl)
+					m.syncViewport(lvl)
+					m.stack = append(m.stack, lvl)
+					return nil
+				}
 				current.LastCursor = current.Cursor
 				m.loading = true
 				m.pendingID = child.ID
@@ -246,8 +275,18 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	if keyMsg.Type == tea.KeyTab {
-		if current := m.currentLevel(); current != nil && current.MultiSelect {
-			current.ToggleCurrentSelection()
+		if current := m.currentLevel(); current != nil {
+			if current.MultiSelect {
+				current.ToggleCurrentSelection()
+				return nil
+			}
+			if ghost := m.autoCompleteGhost(); ghost != "" {
+				before := current.FilterCursorPos()
+				current.SetFilter(current.Filter+ghost, len([]rune(current.Filter+ghost)))
+				m.noteFilterCursorChange(current, before)
+				m.syncViewport(current)
+				return nil
+			}
 		}
 		return nil
 	}
@@ -375,6 +414,9 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		} else {
 			items = loaded
 			m.errMsg = ""
+			if node.FilterCommand {
+				m.commandItemsCache = items
+			}
 		}
 	} else {
 		m.errMsg = ""

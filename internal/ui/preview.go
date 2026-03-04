@@ -68,17 +68,27 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	if m.preview == nil {
 		m.preview = make(map[string]*previewData)
 	}
-	if existing, ok := m.preview[level.ID]; ok && existing.target == item.ID && !existing.loading {
-		return nil
+	existing, ok := m.preview[level.ID]
+	if ok && existing.target == item.ID && existing.loading {
+		return nil // already fetching this target
 	}
 	m.previewSeq++
 	seq := m.previewSeq
-	m.preview[level.ID] = &previewData{
-		kind:    kind,
-		target:  item.ID,
-		label:   item.Label,
-		loading: true,
-		seq:     seq,
+	if ok {
+		// Reuse entry — old lines stay visible until the new data arrives.
+		existing.kind = kind
+		existing.target = item.ID
+		existing.label = item.Label
+		existing.loading = true
+		existing.seq = seq
+	} else {
+		m.preview[level.ID] = &previewData{
+			kind:    kind,
+			target:  item.ID,
+			label:   item.Label,
+			loading: true,
+			seq:     seq,
+		}
 	}
 	socket := m.socketPath
 	levelID := level.ID
@@ -130,13 +140,18 @@ func (m *Model) ensurePreviewForCurrentLevel() tea.Cmd {
 	return m.ensurePreviewForLevel(m.currentLevel())
 }
 
-// refreshPreviewForLevel invalidates any cached preview for the level so that
-// ensurePreviewForLevel will re-fetch it, even if the cursor target is unchanged.
+// refreshPreviewForLevel triggers a re-fetch for the level's preview while
+// keeping existing content visible until the new data arrives.
 func (m *Model) refreshPreviewForLevel(level *level) tea.Cmd {
 	if level == nil {
 		return nil
 	}
-	m.clearPreview(level.ID)
+	// Mark existing preview as stale (not loading) so ensurePreviewForLevel
+	// will issue a new fetch, but do NOT delete the entry — its lines remain
+	// visible until the fresh data arrives.
+	if existing, ok := m.preview[level.ID]; ok {
+		existing.loading = false
+	}
 	return m.ensurePreviewForLevel(level)
 }
 

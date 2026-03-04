@@ -4,11 +4,12 @@ import "strings"
 
 // Node represents a menu entry definition within the registry tree.
 type Node struct {
-	ID          string
-	Loader      Loader
-	Action      Action
-	Children    map[string]*Node
-	MultiSelect bool
+	ID            string
+	Loader        Loader
+	Action        Action
+	Children      map[string]*Node
+	MultiSelect   bool
+	FilterCommand bool
 }
 
 // Registry exposes lookup utilities for menu definitions.
@@ -57,6 +58,10 @@ func BuildRegistry() *Registry {
 		if node, ok := nodes[id]; ok {
 			node.MultiSelect = true
 		}
+	}
+
+	if node, ok := nodes["command"]; ok {
+		node.FilterCommand = true
 	}
 
 	for id, node := range nodes {

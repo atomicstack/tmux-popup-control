@@ -5,17 +5,16 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-// CommandPromptMsg requests that the UI open the tmux command prompt with an initial value.
-type CommandPromptMsg struct {
-	Command string
-	Label   string
+// listCommandsFn fetches the tmux command list. Swappable for tests.
+var listCommandsFn = func(socket string) (string, error) {
+	out, err := tmuxCmd(socket, "list-commands").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
-
-var listCommandsFn = tmux.ListCommands
 
 func loadCommandMenu(ctx Context) ([]Item, error) {
 	output, err := listCommandsFn(ctx.SocketPath)
@@ -37,36 +36,38 @@ func loadCommandMenu(ctx Context) ([]Item, error) {
 	return items, nil
 }
 
-func CommandAction(ctx Context, item Item) tea.Cmd {
-	command := strings.TrimSpace(item.ID)
-	if command == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid command selection")} }
-	}
-	if command == "command-prompt" {
-		return func() tea.Msg {
-			if err := runTmuxCommand(ctx.SocketPath, "command-prompt"); err != nil {
-				return ActionResult{Err: fmt.Errorf("tmux command-prompt failed: %w", err)}
-			}
-			return ActionResult{Info: "Opened command prompt"}
-		}
-	}
-	initial := command
-	if !strings.HasSuffix(initial, " ") {
-		initial += " "
-	}
+// RunCommand executes an arbitrary tmux command given as a single string.
+// defaultTarget is injected as "-t defaultTarget" when the command does not
+// already contain a "-t" flag.
+func RunCommand(socketPath, command, defaultTarget string) tea.Cmd {
 	return func() tea.Msg {
-		return CommandPromptMsg{Command: initial, Label: item.Label}
+		args := strings.Fields(command)
+		if len(args) == 0 {
+			return ActionResult{Err: fmt.Errorf("empty command")}
+		}
+		if defaultTarget != "" && !hasFlag(args, "-t") {
+			args = append(args[:1], append([]string{"-t", defaultTarget}, args[1:]...)...)
+		}
+		cmd := tmuxCmd(socketPath, args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			detail := strings.TrimSpace(string(out))
+			ran := "tmux " + strings.Join(args, " ")
+			if detail != "" {
+				return ActionResult{Err: fmt.Errorf("%s: %s", ran, detail)}
+			}
+			return ActionResult{Err: fmt.Errorf("%s: %w", ran, err)}
+		}
+		return ActionResult{Info: fmt.Sprintf("Ran: %s", command)}
 	}
 }
 
-// CommandPrompt opens the tmux command prompt with the provided initial text.
-// The command executes out-of-band to allow the popup to close cleanly first.
-func CommandPrompt(socketPath, initial string) error {
-	script := strings.Builder{}
-	script.WriteString("sleep 0.03; tmux command-prompt")
-	if strings.TrimSpace(initial) != "" {
-		script.WriteString(" -I ")
-		script.WriteString(fmt.Sprintf("%q", initial))
+// hasFlag reports whether args contain the given flag.
+func hasFlag(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
 	}
-	return runTmuxCommand(socketPath, "run-shell", "-b", script.String())
+	return false
 }

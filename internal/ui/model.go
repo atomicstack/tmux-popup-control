@@ -63,9 +63,10 @@ type Model struct {
 	sessionForm       *menu.SessionForm
 	windowForm        *menu.WindowRenameForm
 	paneForm          *menu.PaneRenameForm
-	pendingWindowSwap *menu.Item
-	pendingPaneSwap   *menu.Item
-	filterCursor      cursor.Model
+	pendingWindowSwap  *menu.Item
+	pendingPaneSwap    *menu.Item
+	commandItemsCache  []menu.Item
+	filterCursor       cursor.Model
 	filterCursorDirty bool
 
 	handlers map[reflect.Type]msgHandler
@@ -75,8 +76,9 @@ type Model struct {
 	mode       Mode
 	rootMenuID string
 	rootTitle  string
-	socketPath string
-	clientID   string
+	socketPath  string
+	clientID    string
+	sessionName string
 	sessions   state.SessionStore
 	windows    state.WindowStore
 	panes      state.PaneStore
@@ -86,7 +88,7 @@ type Model struct {
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string, clientID string) *Model {
+func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string, clientID string, sessionName string) *Model {
 	registry := menu.BuildRegistry()
 	sessions := state.NewSessionStore()
 	sessions.SetIncludeCurrent(true)
@@ -108,6 +110,7 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 		rootTitle:    defaultRootTitle,
 		socketPath:   socketPath,
 		clientID:     clientID,
+		sessionName:  sessionName,
 		sessions:     sessions,
 		windows:      windows,
 		panes:        panes,
@@ -146,6 +149,11 @@ func (m *Model) Init() tea.Cmd {
 	}
 	if cmd := m.filterCursor.Focus(); cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+	if m.commandItemsCache == nil {
+		if node, ok := m.registry.Find("command"); ok && node.Loader != nil {
+			cmds = append(cmds, preloadCommandList(m.socketPath, node.Loader))
+		}
 	}
 	if len(cmds) == 0 {
 		return nil
@@ -203,7 +211,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(menu.SessionPrompt{}):    m.handleSessionPromptMsg,
 		reflect.TypeOf(backendEventMsg{}):       m.handleBackendEventMsg,
 		reflect.TypeOf(backendDoneMsg{}):        m.handleBackendDoneMsg,
-		reflect.TypeOf(menu.CommandPromptMsg{}): m.handleCommandPromptMsg,
+		reflect.TypeOf(commandPreloadMsg{}):     m.handleCommandPreloadMsg,
 		reflect.TypeOf(previewLoadedMsg{}):      m.handlePreviewLoadedMsg,
 		reflect.TypeOf(tea.MouseMsg{}):          m.handleMouseMsg,
 	}

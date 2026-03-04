@@ -62,22 +62,43 @@ func TestLoadCommandMenuEmptyOutput(t *testing.T) {
 	}
 }
 
-func TestCommandActionReturnsPromptMsgWithTrailingSpace(t *testing.T) {
-	item := Item{ID: "display-message", Label: "display-message"}
-	cmd := CommandAction(Context{}, item)
+func TestRunCommandReturnsActionResult(t *testing.T) {
+	cmd := RunCommand("/tmp/nonexistent.sock", "display-message hello", "")
 	if cmd == nil {
-		t.Fatalf("expected command")
+		t.Fatal("expected command")
 	}
 	msg := cmd()
-	prompt, ok := msg.(CommandPromptMsg)
+	result, ok := msg.(ActionResult)
 	if !ok {
-		t.Fatalf("expected CommandPromptMsg, got %T", msg)
+		t.Fatalf("expected ActionResult, got %T", msg)
 	}
-	expected := "display-message "
-	if prompt.Command != expected {
-		t.Fatalf("expected command %q, got %q", expected, prompt.Command)
+	// We expect an error because the socket doesn't exist, but the key thing
+	// is that RunCommand returns an ActionResult.
+	if result.Err == nil && result.Info == "" {
+		t.Fatal("expected either error or info in ActionResult")
 	}
-	if prompt.Label != item.Label {
-		t.Fatalf("expected label %q, got %q", item.Label, prompt.Label)
+}
+
+func TestHasFlag(t *testing.T) {
+	if hasFlag([]string{"next-window"}, "-t") {
+		t.Fatal("expected false for no -t flag")
+	}
+	if !hasFlag([]string{"next-window", "-t", "mysess"}, "-t") {
+		t.Fatal("expected true when -t present")
+	}
+}
+
+func TestRunCommandEmptyReturnsError(t *testing.T) {
+	cmd := RunCommand("/tmp/test.sock", "", "")
+	if cmd == nil {
+		t.Fatal("expected command")
+	}
+	msg := cmd()
+	result, ok := msg.(ActionResult)
+	if !ok {
+		t.Fatalf("expected ActionResult, got %T", msg)
+	}
+	if result.Err == nil {
+		t.Fatal("expected error for empty command")
 	}
 }

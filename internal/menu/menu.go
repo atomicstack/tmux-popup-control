@@ -132,7 +132,6 @@ func ActionHandlers() map[string]Action {
 		"window:rename":     WindowRenameAction,
 		"window:kill":       WindowKillAction,
 		"keybinding":        KeybindingAction,
-		"command":           CommandAction,
 		"pane:switch":       PaneSwitchAction,
 		"pane:break":        PaneBreakAction,
 		"pane:join":         PaneJoinAction,

@@ -8,7 +8,7 @@ import (
 )
 
 func TestViewDisplaysPreviewBlock(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "", "")
+	m := NewModel("", 0, 0, false, false, nil, "", "", "")
 	lvl := newLevel("session:switch", "Sessions", []menu.Item{{ID: "dev", Label: "Dev"}}, nil)
 	m.stack = []*level{lvl}
 	m.preview["session:switch"] = &previewData{

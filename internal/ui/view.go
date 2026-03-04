@@ -376,11 +376,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 			contentLines = preview.lines[preview.scrollOffset:end]
 			lastVisible := preview.scrollOffset + len(contentLines)
 			scrollInfo = fmt.Sprintf(" %d/%d ", lastVisible, len(preview.lines))
-		} else if preview.loading {
-			contentLines = []string{"Loading…"}
 		}
-	} else {
-		contentLines = []string{"Loading…"}
 	}
 
 	// Build top border: ╭─ title ──────────── scrollInfo ─╮
@@ -564,7 +560,7 @@ func shouldRenderPreview(data *previewData) bool {
 	if len(data.lines) > 0 {
 		return true
 	}
-	return data.loading
+	return false
 }
 
 func previewTitleText(data *previewData) string {
@@ -585,9 +581,6 @@ func previewTitleText(data *previewData) string {
 func previewDisplayLines(data *previewData) []string {
 	lines := data.lines
 	if len(lines) == 0 {
-		if data.loading {
-			return []string{"Loading preview…"}
-		}
 		return []string{}
 	}
 	if previewMaxDisplayLines > 0 && len(lines) > previewMaxDisplayLines {

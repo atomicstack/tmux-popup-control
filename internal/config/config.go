@@ -37,6 +37,8 @@ const (
 	envTrace      = "TMUX_POPUP_CONTROL_TRACE"
 	envLogFile    = "TMUX_POPUP_CONTROL_LOG_FILE"
 	envRootMenu   = "TMUX_POPUP_CONTROL_ROOT_MENU"
+	envClient     = "TMUX_POPUP_CONTROL_CLIENT"
+	envSession    = "TMUX_POPUP_CONTROL_SESSION"
 )
 
 // Load parses configuration from CLI arguments and environment variables.
@@ -79,6 +81,8 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			ShowFooter: *footer,
 			Verbose:    *verbose,
 			RootMenu:   strings.TrimSpace(*rootMenu),
+			ClientID:    envOrDefault(env, envClient, ""),
+			SessionName: envOrDefault(env, envSession, ""),
 		},
 		Logging: Logging{
 			FilePath: *logFile,
