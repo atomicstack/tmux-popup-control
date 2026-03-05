@@ -179,6 +179,8 @@ func (m *Model) treeExpand(current *level, ts *menu.TreeState) tea.Cmd {
 }
 
 // rebuildTreeItems regenerates the flat item list from tree state.
+// For tree levels, we bypass the generic filter (which would strip ancestor
+// nodes) and use FilterTreeItems which preserves the ancestor chain.
 func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
 	cursorID := ""
 	if current.Cursor >= 0 && current.Cursor < len(current.Items) {
@@ -190,7 +192,10 @@ func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
 	} else {
 		items = ts.BuildTreeItems(m.treeSessions, m.treeWindows, m.treePanes)
 	}
-	current.UpdateItems(items)
+	// Set both Full and Items directly to bypass the generic FilterItems
+	// which would strip ancestor nodes that don't match the filter query.
+	current.Full = items
+	current.Items = items
 	// Restore cursor to the same item if possible.
 	if cursorID != "" {
 		for i, it := range current.Items {
@@ -200,7 +205,27 @@ func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
 			}
 		}
 	}
+	if current.Cursor >= len(current.Items) {
+		if len(current.Items) > 0 {
+			current.Cursor = len(current.Items) - 1
+		} else {
+			current.Cursor = 0
+		}
+	}
 	m.syncViewport(current)
+}
+
+// syncTreeFilter rebuilds tree items after filter text changes.
+// Must be called after any filter modification on a tree level.
+func (m *Model) syncTreeFilter(current *level) {
+	if current == nil || !isTreeLevel(current.ID) {
+		return
+	}
+	ts, ok := current.Data.(*menu.TreeState)
+	if !ok || ts == nil {
+		return
+	}
+	m.rebuildTreeItems(current, ts)
 }
 
 // renderTreeView renders the tree as styled lines for display.
