@@ -169,6 +169,18 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		}
 	}
 
+	// Refresh tree level if any data source changed.
+	if res.SessionsUpdated || res.WindowsUpdated || res.PanesUpdated {
+		if lvl := m.findLevelByID("session:tree"); lvl != nil {
+			m.treeSessions = ctx.Sessions
+			m.treeWindows = ctx.Windows
+			m.treePanes = ctx.Panes
+			if ts, ok := lvl.Data.(*menu.TreeState); ok && ts != nil {
+				m.rebuildTreeItems(lvl, ts)
+			}
+		}
+	}
+
 	if warn, _ := m.hasBackendIssue(); !warn {
 		m.backendLastErr = ""
 	}

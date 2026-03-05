@@ -84,8 +84,11 @@ type Model struct {
 	windows    state.WindowStore
 	panes      state.PaneStore
 	dispatcher *dispatcher.Dispatcher
-	preview    map[string]*previewData
-	previewSeq int
+	preview      map[string]*previewData
+	previewSeq   int
+	treeSessions []menu.SessionEntry
+	treeWindows  []menu.WindowEntry
+	treePanes    []menu.PaneEntry
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
