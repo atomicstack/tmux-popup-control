@@ -81,14 +81,19 @@ func TreePaneID(sessionName, windowID, paneID string) string {
 }
 
 // BuildTreeItems produces the flat item list based on current expand state.
+// paneKey creates a composite key for pane lookup by session and window.
+func paneKey(session, windowID string) string {
+	return session + "\x00" + windowID
+}
+
 func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntry, panes []PaneEntry) []Item {
 	winBySession := make(map[string][]WindowEntry)
 	for _, w := range windows {
 		winBySession[w.Session] = append(winBySession[w.Session], w)
 	}
-	paneByWindow := make(map[string][]PaneEntry)
+	paneByWin := make(map[string][]PaneEntry)
 	for _, p := range panes {
-		paneByWindow[p.Window] = append(paneByWindow[p.Window], p)
+		paneByWin[paneKey(p.Session, p.Window)] = append(paneByWin[paneKey(p.Session, p.Window)], p)
 	}
 
 	var items []Item
@@ -106,7 +111,7 @@ func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntr
 			if !s.IsExpanded(wid) {
 				continue
 			}
-			for _, pane := range paneByWindow[win.ID] {
+			for _, pane := range paneByWin[paneKey(sess.Name, win.ID)] {
 				pid := TreePaneID(sess.Name, win.ID, pane.ID)
 				items = append(items, Item{ID: pid, Label: pane.Label})
 			}
@@ -130,9 +135,9 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 	for _, w := range windows {
 		winBySession[w.Session] = append(winBySession[w.Session], w)
 	}
-	paneByWindow := make(map[string][]PaneEntry)
+	paneByWin := make(map[string][]PaneEntry)
 	for _, p := range panes {
-		paneByWindow[p.Window] = append(paneByWindow[p.Window], p)
+		paneByWin[paneKey(p.Session, p.Window)] = append(paneByWin[paneKey(p.Session, p.Window)], p)
 	}
 
 	var items []Item
@@ -146,7 +151,7 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 			windowMatches := treeContainsFold(win.Label, lower) || treeContainsFold(win.ID, lower)
 
 			var windowChildren []Item
-			for _, pane := range paneByWindow[win.ID] {
+			for _, pane := range paneByWin[paneKey(sess.Name, win.ID)] {
 				pid := TreePaneID(sess.Name, win.ID, pane.ID)
 				paneMatches := treeContainsFold(pane.Label, lower) || treeContainsFold(pane.ID, lower)
 				if paneMatches || windowMatches || sessionMatches {

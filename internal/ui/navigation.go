@@ -300,6 +300,17 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	if handled, cmd := m.handleTextInput(keyMsg); handled {
 		return cmd
 	}
+	// Tree-level left/right for expand/collapse.
+	if current := m.currentLevel(); current != nil && isTreeLevel(current.ID) {
+		if ts, ok := current.Data.(*menu.TreeState); ok && ts != nil {
+			switch keyMsg.String() {
+			case "left":
+				return m.treeCollapse(current, ts)
+			case "right":
+				return m.treeExpand(current, ts)
+			}
+		}
+	}
 	var previewCmd tea.Cmd
 	switch keyMsg.String() {
 	case "enter":
@@ -350,6 +361,14 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	m.errMsg = ""
 	node, _ := m.registry.Find(update.id)
 	level := newLevel(update.id, update.title, update.items, node)
+	if isTreeLevel(update.id) {
+		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
+		level.Data = menu.NewTreeState(allExpanded)
+		level.Cursor = 0
+		m.treeSessions = m.sessions.Entries()
+		m.treeWindows = m.windows.Entries()
+		m.treePanes = m.panes.Entries()
+	}
 	m.applyNodeSettings(level)
 	m.syncViewport(level)
 	m.stack = append(m.stack, level)
@@ -425,6 +444,14 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	title := headerSegmentCleaner.Replace(node.ID)
 	title = strings.TrimSpace(title)
 	root := newLevel(node.ID, title, items, node)
+	if isTreeLevel(node.ID) {
+		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
+		root.Data = menu.NewTreeState(allExpanded)
+		root.Cursor = 0
+		m.treeSessions = m.sessions.Entries()
+		m.treeWindows = m.windows.Entries()
+		m.treePanes = m.panes.Entries()
+	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)
 	m.stack = []*level{root}

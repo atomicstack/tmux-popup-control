@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/truncate"
@@ -116,6 +117,9 @@ func (m *Model) viewVertical(header string) string {
 				msg = fmt.Sprintf("No matches for %q", current.Filter)
 			}
 			lines = append(lines, styledLine{text: msg, style: styles.Info})
+		} else if isTreeLevel(current.ID) {
+			ts, _ := current.Data.(*menu.TreeState)
+			lines = append(lines, m.renderTreeView(displayItems, ts, current.Cursor, m.width)...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
@@ -216,6 +220,9 @@ func (m *Model) viewSideBySide(header string) string {
 				msg = fmt.Sprintf("No matches for %q", current.Filter)
 			}
 			contentLines = append(contentLines, styledLine{text: msg, style: styles.Info})
+		} else if isTreeLevel(current.ID) {
+			ts, _ := current.Data.(*menu.TreeState)
+			contentLines = append(contentLines, m.renderTreeView(displayItems, ts, current.Cursor, menuW)...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
