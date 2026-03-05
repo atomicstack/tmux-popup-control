@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+func TestSessionMenuIncludesTree(t *testing.T) {
+	items, err := loadSessionMenu(Context{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range items {
+		if item.ID == "tree" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected session menu to include 'tree' item")
+	}
+}
+
 func TestSessionRenameItemsFormatsTable(t *testing.T) {
 	entries := []SessionEntry{
 		{Name: "alpha", Windows: 3, Attached: true, Clients: []string{"c1"}},
