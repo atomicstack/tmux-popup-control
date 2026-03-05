@@ -20,6 +20,7 @@ type Config struct {
 	ShowFooter  bool
 	Verbose     bool
 	RootMenu    string
+	MenuArgs    string
 	ClientID    string
 	SessionName string
 }
@@ -37,7 +38,7 @@ func Run(cfg Config) error {
 	}
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	defer watcher.Stop()
-	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu, clientID, strings.TrimSpace(cfg.SessionName))
+	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu, cfg.MenuArgs, clientID, strings.TrimSpace(cfg.SessionName))
 	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err = program.Run()
 	if errors.Is(err, tea.ErrProgramKilled) {

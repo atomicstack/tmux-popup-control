@@ -37,6 +37,7 @@ const (
 	envTrace      = "TMUX_POPUP_CONTROL_TRACE"
 	envLogFile    = "TMUX_POPUP_CONTROL_LOG_FILE"
 	envRootMenu   = "TMUX_POPUP_CONTROL_ROOT_MENU"
+	envMenuArgs   = "TMUX_POPUP_CONTROL_MENU_ARGS"
 	envClient     = "TMUX_POPUP_CONTROL_CLIENT"
 	envSession    = "TMUX_POPUP_CONTROL_SESSION"
 )
@@ -61,6 +62,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	verbose := fs.Bool("verbose", envOrBool(env, envVerbose, false), "print success messages for actions")
 	logFile := fs.String("log-file", envOrDefault(env, envLogFile, ""), "path to the log file")
 	rootMenu := fs.String("root-menu", envOrDefault(env, envRootMenu, ""), "open directly into the specified menu path")
+	menuArgs := fs.String("menu-args", envOrDefault(env, envMenuArgs, ""), "arguments for the target menu (e.g. 'expanded' for session:tree)")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -80,7 +82,8 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			Height:     *height,
 			ShowFooter: *footer,
 			Verbose:    *verbose,
-			RootMenu:   strings.TrimSpace(*rootMenu),
+			RootMenu:    strings.TrimSpace(*rootMenu),
+			MenuArgs:    strings.TrimSpace(*menuArgs),
 			ClientID:    envOrDefault(env, envClient, ""),
 			SessionName: envOrDefault(env, envSession, ""),
 		},
@@ -99,7 +102,8 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			"trace":    strconv.FormatBool(*trace),
 			"verbose":  strconv.FormatBool(*verbose),
 			"logFile":  *logFile,
-			"rootMenu": strings.TrimSpace(*rootMenu),
+			"rootMenu":  strings.TrimSpace(*rootMenu),
+			"menuArgs":  strings.TrimSpace(*menuArgs),
 		},
 		Args: append([]string(nil), args...),
 	}
