@@ -43,6 +43,7 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.forceClearInfo()
 		m.errMsg = ""
 		events.Filter.Cleared(current.ID)
+		m.syncTreeFilter(current)
 		m.syncViewport(current)
 		return true, m.ensurePreviewForLevel(current)
 	case "ctrl+w":
@@ -54,6 +55,7 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.forceClearInfo()
 		m.errMsg = ""
 		events.Filter.WordBackspace(current.ID, current.Filter)
+		m.syncTreeFilter(current)
 		m.syncViewport(current)
 		return true, m.ensurePreviewForLevel(current)
 	case "ctrl+a":
@@ -156,6 +158,7 @@ func (m *Model) appendToFilter(text string) bool {
 	m.forceClearInfo()
 	m.errMsg = ""
 	events.Filter.Append(current.ID, current.Filter)
+	m.syncTreeFilter(current)
 	m.syncViewport(current)
 	return true
 }
@@ -173,6 +176,7 @@ func (m *Model) removeFilterRune() bool {
 	m.forceClearInfo()
 	m.errMsg = ""
 	events.Filter.Backspace(current.ID, current.Filter)
+	m.syncTreeFilter(current)
 	m.syncViewport(current)
 	return true
 }

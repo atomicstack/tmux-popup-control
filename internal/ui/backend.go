@@ -163,7 +163,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		// Pane content changes affect all pane-capture-based previews.
 		if currentLvl != nil && previewCmd == nil {
 			switch currentLvl.ID {
-			case "pane:switch", "pane:join", "session:switch", "window:switch":
+			case "pane:switch", "pane:join", "session:switch", "window:switch", "session:tree":
 				previewCmd = m.refreshPreviewForLevel(currentLvl)
 			}
 		}

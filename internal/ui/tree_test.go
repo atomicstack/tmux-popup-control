@@ -148,6 +148,50 @@ func TestTreeEnterAction(t *testing.T) {
 	}
 }
 
+func TestTreeFilter(t *testing.T) {
+	sessions := []menu.SessionEntry{
+		{Name: "alpha", Windows: 1},
+		{Name: "beta", Windows: 1},
+	}
+	windows := []menu.WindowEntry{
+		{ID: "0", Label: "0:bash", Session: "alpha"},
+		{ID: "0", Label: "0:vim", Session: "beta"},
+	}
+
+	m := testTreeModel(sessions, windows, nil, true)
+	h := NewHarness(m)
+
+	// Type "vim" to filter.
+	h.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("vim")})
+
+	current := h.Model().currentLevel()
+	// Should find "beta" session (ancestor) + "0:vim" window.
+	found := false
+	for _, item := range current.Items {
+		if strings.Contains(item.Label, "vim") {
+			found = true
+		}
+	}
+	if !found {
+		labels := make([]string, len(current.Items))
+		for i, it := range current.Items {
+			labels[i] = it.Label
+		}
+		t.Fatalf("expected filter to find 'vim', got items: %v", labels)
+	}
+
+	// Ancestor "beta" should be preserved.
+	hasBeta := false
+	for _, item := range current.Items {
+		if item.ID == "tree:s:beta" {
+			hasBeta = true
+		}
+	}
+	if !hasBeta {
+		t.Fatal("expected ancestor 'beta' session to be preserved in filter results")
+	}
+}
+
 func TestBuildTreeDFSOrder(t *testing.T) {
 	sessions := []menu.SessionEntry{
 		{Name: "a", Windows: 1},
