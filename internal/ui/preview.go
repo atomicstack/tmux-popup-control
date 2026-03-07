@@ -94,6 +94,8 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	levelID := level.ID
 	target := item.ID
 	switch kind {
+	case previewKindTree:
+		return m.treePreviewCmd(levelID, target, seq, socket)
 	case previewKindPane:
 		return func() tea.Msg {
 			lines, err := panePreviewFn(socket, target)
@@ -199,6 +201,58 @@ func (m *Model) activePaneIDForWindow(window string) string {
 	return fallback
 }
 
+// treePreviewCmd returns a preview command appropriate for the tree item type.
+func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) tea.Cmd {
+	kind := menu.TreeItemKind(target)
+	switch kind {
+	case "pane":
+		// tree:p:session:windowIndex:paneDisplayID
+		parts := strings.SplitN(strings.TrimPrefix(target, menu.TreePrefixPane), ":", 3)
+		if len(parts) < 3 {
+			return nil
+		}
+		paneTarget := parts[2] // display ID like "test00:0.0"
+		return func() tea.Msg {
+			lines, err := panePreviewFn(socket, paneTarget)
+			return previewLoadedMsg{levelID: levelID, kind: previewKindPane, target: target, seq: seq, lines: lines, err: err, rawANSI: true}
+		}
+	case "window":
+		// tree:w:session:windowIndex
+		parts := strings.SplitN(strings.TrimPrefix(target, menu.TreePrefixWindow), ":", 2)
+		if len(parts) < 2 {
+			return nil
+		}
+		session, windowIdx := parts[0], parts[1]
+		windowTarget := session + ":" + windowIdx
+		paneID := m.activePaneIDForWindow(windowTarget)
+		if paneID == "" {
+			lines := m.windowPreviewLines(windowTarget)
+			return func() tea.Msg {
+				return previewLoadedMsg{levelID: levelID, kind: previewKindWindow, target: target, seq: seq, lines: lines}
+			}
+		}
+		return func() tea.Msg {
+			lines, err := panePreviewFn(socket, paneID)
+			return previewLoadedMsg{levelID: levelID, kind: previewKindWindow, target: target, seq: seq, lines: lines, err: err, rawANSI: true}
+		}
+	case "session":
+		session := strings.TrimPrefix(target, menu.TreePrefixSession)
+		paneID := m.activePaneIDForSession(session)
+		if paneID == "" {
+			lines := m.sessionPreviewLines(session)
+			return func() tea.Msg {
+				return previewLoadedMsg{levelID: levelID, kind: previewKindSession, target: target, seq: seq, lines: lines}
+			}
+		}
+		return func() tea.Msg {
+			lines, err := panePreviewFn(socket, paneID)
+			return previewLoadedMsg{levelID: levelID, kind: previewKindSession, target: target, seq: seq, lines: lines, err: err, rawANSI: true}
+		}
+	default:
+		return nil
+	}
+}
+
 func (m *Model) clearPreview(levelID string) {
 	if levelID == "" || m.preview == nil {
 		return
@@ -217,6 +271,9 @@ func (m *Model) activePreview() *previewData {
 	return m.preview[current.ID]
 }
 
+// previewKindTree uses item-type-specific previews for tree items.
+const previewKindTree previewKind = 10
+
 func previewKindForLevel(id string) previewKind {
 	switch id {
 	case "session:switch":
@@ -225,6 +282,8 @@ func previewKindForLevel(id string) previewKind {
 		return previewKindWindow
 	case "pane:switch", "pane:join":
 		return previewKindPane
+	case "session:tree":
+		return previewKindTree
 	default:
 		return previewKindNone
 	}

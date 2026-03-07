@@ -75,6 +75,7 @@ type Model struct {
 	bus        *command.Bus
 	mode       Mode
 	rootMenuID string
+	menuArgs   string
 	rootTitle  string
 	socketPath  string
 	clientID    string
@@ -83,12 +84,15 @@ type Model struct {
 	windows    state.WindowStore
 	panes      state.PaneStore
 	dispatcher *dispatcher.Dispatcher
-	preview    map[string]*previewData
-	previewSeq int
+	preview      map[string]*previewData
+	previewSeq   int
+	treeSessions []menu.SessionEntry
+	treeWindows  []menu.WindowEntry
+	treePanes    []menu.PaneEntry
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string, clientID string, sessionName string) *Model {
+func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string, menuArgs string, clientID string, sessionName string) *Model {
 	registry := menu.BuildRegistry()
 	sessions := state.NewSessionStore()
 	sessions.SetIncludeCurrent(true)
@@ -108,6 +112,7 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 		verbose:      verbose,
 		mode:         ModeMenu,
 		rootTitle:    defaultRootTitle,
+		menuArgs:     menuArgs,
 		socketPath:   socketPath,
 		clientID:     clientID,
 		sessionName:  sessionName,

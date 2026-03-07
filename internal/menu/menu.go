@@ -24,6 +24,7 @@ type Level struct {
 type Context struct {
 	SocketPath           string
 	ClientID             string
+	MenuArgs             string
 	Sessions             []SessionEntry
 	Current              string
 	IncludeCurrent       bool
@@ -125,6 +126,7 @@ func ActionHandlers() map[string]Action {
 		"session:rename":    SessionRenameAction,
 		"session:detach":    SessionDetachAction,
 		"session:kill":      SessionKillAction,
+		"session:tree":      SessionTreeAction,
 		"window:switch":     WindowSwitchAction,
 		"window:link":       WindowLinkAction,
 		"window:move":       WindowMoveAction,
@@ -153,6 +155,7 @@ func ActionLoaders() map[string]Loader {
 		"session:rename":    loadSessionRenameMenu,
 		"session:detach":    loadSessionDetachMenu,
 		"session:kill":      loadSessionKillMenu,
+		"session:tree":      loadSessionTreeMenu,
 		"window:switch":     loadWindowSwitchMenu,
 		"window:link":       loadWindowLinkMenu,
 		"window:move":       loadWindowMoveMenu,

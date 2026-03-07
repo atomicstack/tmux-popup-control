@@ -20,6 +20,7 @@ func loadSessionMenu(Context) ([]Item, error) {
 		"rename",
 		"new",
 		"switch",
+		"tree",
 		// ^^^ do NOT reorder these! ^^^
 	}
 	return menuItemsFromIDs(items), nil
@@ -316,6 +317,67 @@ func (f *SessionForm) validateName(name string) string {
 			return "Session already exists"
 		}
 		return ""
+	}
+}
+
+func loadSessionTreeMenu(ctx Context) ([]Item, error) {
+	allExpanded := strings.TrimSpace(ctx.MenuArgs) == "expanded"
+	treeState := NewTreeState(allExpanded)
+	items := treeState.BuildTreeItems(ctx.Sessions, ctx.Windows, ctx.Panes)
+	return items, nil
+}
+
+// SessionTreeAction handles Enter on a tree item. It parses the item ID
+// prefix to determine whether to switch session, window, or pane.
+func SessionTreeAction(ctx Context, item Item) tea.Cmd {
+	id := item.ID
+	switch {
+	case strings.HasPrefix(id, TreePrefixPane):
+		// tree:p:session:windowIndex:paneDisplayID
+		parts := strings.SplitN(strings.TrimPrefix(id, TreePrefixPane), ":", 3)
+		if len(parts) < 3 {
+			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid pane target: %s", id)} }
+		}
+		session, paneTarget := parts[0], parts[2]
+		return func() tea.Msg {
+			events.Session.Switch(session)
+			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
+				return ActionResult{Err: err}
+			}
+			if err := tmux.SwitchPane(ctx.SocketPath, ctx.ClientID, paneTarget); err != nil {
+				return ActionResult{Err: err}
+			}
+			return ActionResult{Info: fmt.Sprintf("Switched to pane %s", paneTarget)}
+		}
+	case strings.HasPrefix(id, TreePrefixWindow):
+		// tree:w:session:windowIndex
+		parts := strings.SplitN(strings.TrimPrefix(id, TreePrefixWindow), ":", 2)
+		if len(parts) < 2 {
+			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target: %s", id)} }
+		}
+		session, windowIdx := parts[0], parts[1]
+		windowTarget := session + ":" + windowIdx
+		return func() tea.Msg {
+			events.Session.Switch(session)
+			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
+				return ActionResult{Err: err}
+			}
+			if err := tmux.SelectWindow(ctx.SocketPath, windowTarget); err != nil {
+				return ActionResult{Err: err}
+			}
+			return ActionResult{Info: fmt.Sprintf("Switched to window %s", windowTarget)}
+		}
+	case strings.HasPrefix(id, TreePrefixSession):
+		session := strings.TrimPrefix(id, TreePrefixSession)
+		return func() tea.Msg {
+			events.Session.Switch(session)
+			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
+				return ActionResult{Err: err}
+			}
+			return ActionResult{Info: fmt.Sprintf("Switched to %s", session)}
+		}
+	default:
+		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("unknown tree item: %s", id)} }
 	}
 }
 

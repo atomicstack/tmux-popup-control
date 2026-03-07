@@ -79,6 +79,7 @@ func (m *Model) menuContext() menu.Context {
 	ctx := menu.Context{
 		SocketPath:           m.socketPath,
 		ClientID:             m.clientID,
+		MenuArgs:             m.menuArgs,
 		Sessions:             m.sessions.Entries(),
 		Current:              m.sessions.Current(),
 		IncludeCurrent:       m.sessions.IncludeCurrent(),

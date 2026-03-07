@@ -163,8 +163,20 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		// Pane content changes affect all pane-capture-based previews.
 		if currentLvl != nil && previewCmd == nil {
 			switch currentLvl.ID {
-			case "pane:switch", "pane:join", "session:switch", "window:switch":
+			case "pane:switch", "pane:join", "session:switch", "window:switch", "session:tree":
 				previewCmd = m.refreshPreviewForLevel(currentLvl)
+			}
+		}
+	}
+
+	// Refresh tree level if any data source changed.
+	if res.SessionsUpdated || res.WindowsUpdated || res.PanesUpdated {
+		if lvl := m.findLevelByID("session:tree"); lvl != nil {
+			m.treeSessions = ctx.Sessions
+			m.treeWindows = ctx.Windows
+			m.treePanes = ctx.Panes
+			if ts, ok := lvl.Data.(*menu.TreeState); ok && ts != nil {
+				m.rebuildTreeItems(lvl, ts)
 			}
 		}
 	}
