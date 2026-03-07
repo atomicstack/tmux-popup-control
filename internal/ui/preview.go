@@ -206,26 +206,27 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 	kind := menu.TreeItemKind(target)
 	switch kind {
 	case "pane":
-		// Extract pane ID from tree:p:session:window:pane
+		// tree:p:session:windowIndex:paneDisplayID
 		parts := strings.SplitN(strings.TrimPrefix(target, menu.TreePrefixPane), ":", 3)
 		if len(parts) < 3 {
 			return nil
 		}
-		paneID := parts[2]
+		paneTarget := parts[2] // display ID like "test00:0.0"
 		return func() tea.Msg {
-			lines, err := panePreviewFn(socket, paneID)
+			lines, err := panePreviewFn(socket, paneTarget)
 			return previewLoadedMsg{levelID: levelID, kind: previewKindPane, target: target, seq: seq, lines: lines, err: err, rawANSI: true}
 		}
 	case "window":
-		// Extract session:window from tree:w:session:window
+		// tree:w:session:windowIndex
 		parts := strings.SplitN(strings.TrimPrefix(target, menu.TreePrefixWindow), ":", 2)
 		if len(parts) < 2 {
 			return nil
 		}
-		windowID := parts[1]
-		paneID := m.activePaneIDForWindow(windowID)
+		session, windowIdx := parts[0], parts[1]
+		windowTarget := session + ":" + windowIdx
+		paneID := m.activePaneIDForWindow(windowTarget)
 		if paneID == "" {
-			lines := m.windowPreviewLines(windowID)
+			lines := m.windowPreviewLines(windowTarget)
 			return func() tea.Msg {
 				return previewLoadedMsg{levelID: levelID, kind: previewKindWindow, target: target, seq: seq, lines: lines}
 			}

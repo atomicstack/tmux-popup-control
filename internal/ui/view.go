@@ -119,7 +119,10 @@ func (m *Model) viewVertical(header string) string {
 			lines = append(lines, styledLine{text: msg, style: styles.Info})
 		} else if isTreeLevel(current.ID) {
 			ts, _ := current.Data.(*menu.TreeState)
-			lines = append(lines, m.renderTreeView(displayItems, ts, current.Cursor, m.width)...)
+			// Pass full Items (not viewport-windowed displayItems) — the tree
+			// renderer needs the complete filtered item list to maintain
+			// parent-child structure. limitHeight handles overflow.
+			lines = append(lines, m.renderTreeView(current.Items, ts, current.Cursor, m.width)...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
@@ -222,7 +225,7 @@ func (m *Model) viewSideBySide(header string) string {
 			contentLines = append(contentLines, styledLine{text: msg, style: styles.Info})
 		} else if isTreeLevel(current.ID) {
 			ts, _ := current.Data.(*menu.TreeState)
-			contentLines = append(contentLines, m.renderTreeView(displayItems, ts, current.Cursor, menuW)...)
+			contentLines = append(contentLines, m.renderTreeView(current.Items, ts, current.Cursor, menuW)...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i

@@ -8,14 +8,14 @@ func TestBuildItemsCollapsed(t *testing.T) {
 		{Name: "work", Windows: 1},
 	}
 	windows := []WindowEntry{
-		{ID: "@1", Label: "bash", Session: "main"},
-		{ID: "@2", Label: "vim", Session: "main"},
-		{ID: "@3", Label: "htop", Session: "work"},
+		{ID: "@1", Label: "bash", Session: "main", Index: 0},
+		{ID: "@2", Label: "vim", Session: "main", Index: 1},
+		{ID: "@3", Label: "htop", Session: "work", Index: 0},
 	}
 	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", Window: "@1", Session: "main"},
-		{ID: "%2", Label: "pane-2", Window: "@2", Session: "main"},
-		{ID: "%3", Label: "pane-3", Window: "@3", Session: "work"},
+		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"},
+		{ID: "%2", Label: "pane-2", WindowIdx: 1, Session: "main"},
+		{ID: "%3", Label: "pane-3", WindowIdx: 0, Session: "work"},
 	}
 
 	state := NewTreeState(false)
@@ -35,10 +35,10 @@ func TestBuildItemsCollapsed(t *testing.T) {
 func TestBuildItemsExpanded(t *testing.T) {
 	sessions := []SessionEntry{{Name: "main", Windows: 2}}
 	windows := []WindowEntry{
-		{ID: "@1", Label: "bash", Session: "main"},
-		{ID: "@2", Label: "vim", Session: "main"},
+		{ID: "@1", Label: "bash", Session: "main", Index: 0},
+		{ID: "@2", Label: "vim", Session: "main", Index: 1},
 	}
-	panes := []PaneEntry{{ID: "%1", Label: "pane-1", Window: "@1", Session: "main"}}
+	panes := []PaneEntry{{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"}}
 
 	state := NewTreeState(false)
 	state.SetExpanded("tree:s:main", true)
@@ -47,20 +47,20 @@ func TestBuildItemsExpanded(t *testing.T) {
 	if len(items) != 3 {
 		t.Fatalf("expected 3 items, got %d", len(items))
 	}
-	if items[1].ID != "tree:w:main:@1" {
-		t.Errorf("expected tree:w:main:@1, got %s", items[1].ID)
+	if items[1].ID != "tree:w:main:0" {
+		t.Errorf("expected tree:w:main:0, got %s", items[1].ID)
 	}
-	if items[2].ID != "tree:w:main:@2" {
-		t.Errorf("expected tree:w:main:@2, got %s", items[2].ID)
+	if items[2].ID != "tree:w:main:1" {
+		t.Errorf("expected tree:w:main:1, got %s", items[2].ID)
 	}
 }
 
 func TestBuildItemsFullyExpanded(t *testing.T) {
 	sessions := []SessionEntry{{Name: "main", Windows: 1}}
-	windows := []WindowEntry{{ID: "@1", Label: "bash", Session: "main"}}
+	windows := []WindowEntry{{ID: "@1", Label: "bash", Session: "main", Index: 0}}
 	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", Window: "@1", Session: "main"},
-		{ID: "%2", Label: "pane-2", Window: "@1", Session: "main"},
+		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"},
+		{ID: "%2", Label: "pane-2", WindowIdx: 0, Session: "main"},
 	}
 
 	state := NewTreeState(true)
@@ -69,11 +69,11 @@ func TestBuildItemsFullyExpanded(t *testing.T) {
 	if len(items) != 4 {
 		t.Fatalf("expected 4 items, got %d", len(items))
 	}
-	if items[2].ID != "tree:p:main:@1:%1" {
-		t.Errorf("[2] expected tree:p:main:@1:%%1, got %s", items[2].ID)
+	if items[2].ID != "tree:p:main:0:%1" {
+		t.Errorf("[2] expected tree:p:main:0:%%1, got %s", items[2].ID)
 	}
-	if items[3].ID != "tree:p:main:@1:%2" {
-		t.Errorf("[3] expected tree:p:main:@1:%%2, got %s", items[3].ID)
+	if items[3].ID != "tree:p:main:0:%2" {
+		t.Errorf("[3] expected tree:p:main:0:%%2, got %s", items[3].ID)
 	}
 }
 
@@ -83,14 +83,14 @@ func TestFilterItemsPreservesAncestors(t *testing.T) {
 		{Name: "work", Windows: 1},
 	}
 	windows := []WindowEntry{
-		{ID: "@1", Label: "bash", Session: "main"},
-		{ID: "@2", Label: "vim", Session: "main"},
-		{ID: "@3", Label: "htop", Session: "work"},
+		{ID: "@1", Label: "bash", Session: "main", Index: 0},
+		{ID: "@2", Label: "vim", Session: "main", Index: 1},
+		{ID: "@3", Label: "htop", Session: "work", Index: 0},
 	}
 	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", Window: "@1", Session: "main"},
-		{ID: "%2", Label: "vim-pane", Window: "@2", Session: "main"},
-		{ID: "%3", Label: "htop-pane", Window: "@3", Session: "work"},
+		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"},
+		{ID: "%2", Label: "vim-pane", WindowIdx: 1, Session: "main"},
+		{ID: "%3", Label: "htop-pane", WindowIdx: 0, Session: "work"},
 	}
 
 	state := NewTreeState(false)
@@ -121,8 +121,8 @@ func TestFilterItemsPreservesAncestors(t *testing.T) {
 
 func TestFilterItemsNoMatchReturnsEmpty(t *testing.T) {
 	sessions := []SessionEntry{{Name: "main", Windows: 1}}
-	windows := []WindowEntry{{ID: "@1", Label: "bash", Session: "main"}}
-	panes := []PaneEntry{{ID: "%1", Label: "pane-1", Window: "@1", Session: "main"}}
+	windows := []WindowEntry{{ID: "@1", Label: "bash", Session: "main", Index: 0}}
+	panes := []PaneEntry{{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"}}
 
 	state := NewTreeState(false)
 	items := state.FilterTreeItems(sessions, windows, panes, "zzzznotfound")
@@ -133,7 +133,7 @@ func TestFilterItemsNoMatchReturnsEmpty(t *testing.T) {
 
 func TestFilterItemsEmptyQueryReturnsNormal(t *testing.T) {
 	sessions := []SessionEntry{{Name: "main", Windows: 1}}
-	windows := []WindowEntry{{ID: "@1", Label: "bash", Session: "main"}}
+	windows := []WindowEntry{{ID: "@1", Label: "bash", Session: "main", Index: 0}}
 	panes := []PaneEntry{}
 
 	state := NewTreeState(false)
@@ -165,8 +165,8 @@ func TestTreeItemKind(t *testing.T) {
 		want string
 	}{
 		{"tree:s:main", "session"},
-		{"tree:w:main:@1", "window"},
-		{"tree:p:main:@1:%1", "pane"},
+		{"tree:w:main:0", "window"},
+		{"tree:p:main:0:%1", "pane"},
 		{"other", ""},
 	}
 	for _, tt := range tests {
@@ -180,10 +180,10 @@ func TestTreeIsExpandable(t *testing.T) {
 	if !TreeIsExpandable("tree:s:main") {
 		t.Error("session should be expandable")
 	}
-	if !TreeIsExpandable("tree:w:main:@1") {
+	if !TreeIsExpandable("tree:w:main:0") {
 		t.Error("window should be expandable")
 	}
-	if TreeIsExpandable("tree:p:main:@1:%1") {
+	if TreeIsExpandable("tree:p:main:0:%1") {
 		t.Error("pane should not be expandable")
 	}
 }

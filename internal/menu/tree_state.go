@@ -70,20 +70,23 @@ func TreeSessionID(name string) string {
 	return TreePrefixSession + name
 }
 
-// TreeWindowID formats a window tree item ID.
-func TreeWindowID(sessionName, windowID string) string {
-	return fmt.Sprintf("%s%s:%s", TreePrefixWindow, sessionName, windowID)
+// TreeWindowID formats a window tree item ID using the integer window index
+// to avoid colon conflicts with display-format IDs like "session:index".
+func TreeWindowID(sessionName string, windowIndex int) string {
+	return fmt.Sprintf("%s%s:%d", TreePrefixWindow, sessionName, windowIndex)
 }
 
-// TreePaneID formats a pane tree item ID.
-func TreePaneID(sessionName, windowID, paneID string) string {
-	return fmt.Sprintf("%s%s:%s:%s", TreePrefixPane, sessionName, windowID, paneID)
+// TreePaneID formats a pane tree item ID. windowIndex is numeric; paneID is
+// the pane's display ID (may contain colons) and is always the last component
+// so SplitN(…, 3) captures it correctly.
+func TreePaneID(sessionName string, windowIndex int, paneID string) string {
+	return fmt.Sprintf("%s%s:%d:%s", TreePrefixPane, sessionName, windowIndex, paneID)
 }
 
 // BuildTreeItems produces the flat item list based on current expand state.
-// paneKey creates a composite key for pane lookup by session and window.
-func paneKey(session, windowID string) string {
-	return session + "\x00" + windowID
+// paneKey creates a composite key for pane lookup by session and window index.
+func paneKey(session string, windowIdx int) string {
+	return fmt.Sprintf("%s\x00%d", session, windowIdx)
 }
 
 func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntry, panes []PaneEntry) []Item {
@@ -93,7 +96,8 @@ func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntr
 	}
 	paneByWin := make(map[string][]PaneEntry)
 	for _, p := range panes {
-		paneByWin[paneKey(p.Session, p.Window)] = append(paneByWin[paneKey(p.Session, p.Window)], p)
+		pk := paneKey(p.Session, p.WindowIdx)
+		paneByWin[pk] = append(paneByWin[pk], p)
 	}
 
 	var items []Item
@@ -105,14 +109,14 @@ func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntr
 			continue
 		}
 		for _, win := range winBySession[sess.Name] {
-			wid := TreeWindowID(sess.Name, win.ID)
+			wid := TreeWindowID(sess.Name, win.Index)
 			items = append(items, Item{ID: wid, Label: win.Label})
 
 			if !s.IsExpanded(wid) {
 				continue
 			}
-			for _, pane := range paneByWin[paneKey(sess.Name, win.ID)] {
-				pid := TreePaneID(sess.Name, win.ID, pane.ID)
+			for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
+				pid := TreePaneID(sess.Name, win.Index, pane.ID)
 				items = append(items, Item{ID: pid, Label: pane.Label})
 			}
 		}
@@ -137,7 +141,8 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 	}
 	paneByWin := make(map[string][]PaneEntry)
 	for _, p := range panes {
-		paneByWin[paneKey(p.Session, p.Window)] = append(paneByWin[paneKey(p.Session, p.Window)], p)
+		pk := paneKey(p.Session, p.WindowIdx)
+		paneByWin[pk] = append(paneByWin[pk], p)
 	}
 
 	var items []Item
@@ -147,12 +152,12 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 
 		var sessionChildren []Item
 		for _, win := range winBySession[sess.Name] {
-			wid := TreeWindowID(sess.Name, win.ID)
+			wid := TreeWindowID(sess.Name, win.Index)
 			windowMatches := treeContainsFold(win.Label, lower) || treeContainsFold(win.ID, lower)
 
 			var windowChildren []Item
-			for _, pane := range paneByWin[paneKey(sess.Name, win.ID)] {
-				pid := TreePaneID(sess.Name, win.ID, pane.ID)
+			for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
+				pid := TreePaneID(sess.Name, win.Index, pane.ID)
 				paneMatches := treeContainsFold(pane.Label, lower) || treeContainsFold(pane.ID, lower)
 				if paneMatches || windowMatches || sessionMatches {
 					windowChildren = append(windowChildren, Item{ID: pid, Label: pane.Label})

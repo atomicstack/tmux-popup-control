@@ -6,7 +6,6 @@ import (
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 )
 
@@ -32,8 +31,6 @@ func buildTree(
 	windows []menu.WindowEntry,
 	panes []menu.PaneEntry,
 	state *menu.TreeState,
-	cursorIdx int,
-	width int,
 ) *tree.Tree {
 	winBySession := make(map[string][]menu.WindowEntry)
 	for _, w := range windows {
@@ -41,15 +38,9 @@ func buildTree(
 	}
 	paneByWindow := make(map[string][]menu.PaneEntry)
 	for _, p := range panes {
-		paneByWindow[p.Window] = append(paneByWindow[p.Window], p)
+		key := fmt.Sprintf("%s\x00%d", p.Session, p.WindowIdx)
+		paneByWindow[key] = append(paneByWindow[key], p)
 	}
-
-	// DFS counter — incremented each time ItemStyleFunc is called.
-	// Since we never set a custom renderer on child trees, the root
-	// renderer (and its ItemStyleFunc) is used for all levels. The
-	// lipgloss tree renderer calls ItemStyleFunc exactly once per
-	// visible node, in DFS order — matching our flat item list.
-	counter := 0
 
 	root := tree.New()
 	for _, sess := range sessions {
@@ -62,16 +53,15 @@ func buildTree(
 
 		if state != nil && state.IsExpanded(sid) {
 			for _, win := range winBySession[sess.Name] {
-				wid := menu.TreeWindowID(sess.Name, win.ID)
+				wid := menu.TreeWindowID(sess.Name, win.Index)
 				wIndicator := treeExpandIndicator(state, wid)
 				wLabel := fmt.Sprintf("%s%s", wIndicator, win.Label)
 
 				windowNode := tree.Root(wLabel)
 
 				if state.IsExpanded(wid) {
-					for _, pane := range paneByWindow[win.ID] {
+					for _, pane := range paneByWindow[fmt.Sprintf("%s\x00%d", sess.Name, win.Index)] {
 						windowNode.Child(pane.Label)
-						_ = menu.TreePaneID(sess.Name, win.ID, pane.ID) // ensure ID is used for consistency
 					}
 				}
 				sessionNode.Child(windowNode)
@@ -80,42 +70,12 @@ func buildTree(
 		root.Child(sessionNode)
 	}
 
-	selectedStyle := lipgloss.NewStyle()
-	normalStyle := lipgloss.NewStyle()
-	if styles.SelectedItem != nil {
-		selectedStyle = *styles.SelectedItem
-	}
-	if styles.Item != nil {
-		normalStyle = *styles.Item
-	}
-
-	root.ItemStyleFunc(func(_ tree.Children, _ int) lipgloss.Style {
-		idx := counter
-		counter++
-		if idx == cursorIdx {
-			return selectedStyle
-		}
-		return normalStyle
-	})
-
-	enumStyle := lipgloss.NewStyle()
-	if styles.ItemIndicator != nil {
-		enumStyle = *styles.ItemIndicator
-	}
-	root.EnumeratorStyle(enumStyle)
-
-	if width > 0 {
-		// Reserve 1 col for potential scrollbar/edge — the tree renderer
-		// pads item lines to this width.
-		root.Enumerator(tree.RoundedEnumerator)
-	} else {
-		root.Enumerator(tree.RoundedEnumerator)
-	}
+	root.Enumerator(tree.RoundedEnumerator)
 
 	return root
 }
 
-// treeCollapse collapses the current node (or moves to parent if already collapsed/leaf).
+// treeCollapse collapses the current node (or moves to parent and collapses it).
 func (m *Model) treeCollapse(current *level, ts *menu.TreeState) tea.Cmd {
 	if current.Cursor < 0 || current.Cursor >= len(current.Items) {
 		return nil
@@ -126,24 +86,26 @@ func (m *Model) treeCollapse(current *level, ts *menu.TreeState) tea.Cmd {
 		m.rebuildTreeItems(current, ts)
 		return nil
 	}
-	// Move cursor to parent node.
+	// Move cursor to parent node and collapse it.
 	kind := menu.TreeItemKind(item.ID)
 	switch kind {
 	case "pane":
-		// Parent is the window — find it above.
+		// Parent is the window — find it above and collapse.
 		for i := current.Cursor - 1; i >= 0; i-- {
 			if menu.TreeItemKind(current.Items[i].ID) == "window" {
+				ts.SetExpanded(current.Items[i].ID, false)
 				current.Cursor = i
-				m.syncViewport(current)
+				m.rebuildTreeItems(current, ts)
 				return nil
 			}
 		}
 	case "window":
-		// Parent is the session — find it above.
+		// Parent is the session — find it above and collapse.
 		for i := current.Cursor - 1; i >= 0; i-- {
 			if menu.TreeItemKind(current.Items[i].ID) == "session" {
+				ts.SetExpanded(current.Items[i].ID, false)
 				current.Cursor = i
-				m.syncViewport(current)
+				m.rebuildTreeItems(current, ts)
 				return nil
 			}
 		}
@@ -151,7 +113,8 @@ func (m *Model) treeCollapse(current *level, ts *menu.TreeState) tea.Cmd {
 	return nil
 }
 
-// treeExpand expands the current node (or moves to first child if already expanded).
+// treeExpand expands the current node (cursor stays on it) or moves to
+// first child if already expanded.
 func (m *Model) treeExpand(current *level, ts *menu.TreeState) tea.Cmd {
 	if current.Cursor < 0 || current.Cursor >= len(current.Items) {
 		return nil
@@ -163,11 +126,7 @@ func (m *Model) treeExpand(current *level, ts *menu.TreeState) tea.Cmd {
 	if !ts.IsExpanded(item.ID) {
 		ts.SetExpanded(item.ID, true)
 		m.rebuildTreeItems(current, ts)
-		// Move cursor to first child.
-		if current.Cursor+1 < len(current.Items) {
-			current.Cursor++
-			m.syncViewport(current)
-		}
+		// Cursor stays on the expanded item.
 		return nil
 	}
 	// Already expanded — move to first child.
@@ -231,18 +190,36 @@ func (m *Model) syncTreeFilter(current *level) {
 // renderTreeView renders the tree as styled lines for display.
 // Each output line is a styledLine with raw=true since the tree
 // renderer embeds ANSI escape codes via lipgloss styles.
+// The items parameter determines which nodes are visible — only
+// sessions/windows/panes whose IDs appear in items are rendered.
 func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorIdx int, width int) []styledLine {
 	if len(items) == 0 {
 		return nil
 	}
 
+	// Build a set of item IDs to determine which nodes are visible.
+	idSet := make(map[string]bool, len(items))
+	for _, it := range items {
+		idSet[it.ID] = true
+	}
+
+	// Filter source data to only include entries present in items.
+	sessions := filterTreeSessions(m.treeSessions, idSet)
+	windows := filterTreeWindows(m.treeWindows, idSet)
+	panes := filterTreePanes(m.treePanes, idSet)
+
+	// When a filter is active, override expand state so all matching
+	// nodes are visible (FilterTreeItems already computed the correct set).
+	renderState := state
+	if current := m.currentLevel(); current != nil && current.Filter != "" {
+		renderState = menu.NewTreeState(true)
+	}
+
 	t := buildTree(
-		m.treeSessions,
-		m.treeWindows,
-		m.treePanes,
-		state,
-		cursorIdx,
-		width,
+		sessions,
+		windows,
+		panes,
+		renderState,
 	)
 
 	rendered := t.String()
@@ -252,17 +229,53 @@ func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorI
 
 	rawLines := strings.Split(rendered, "\n")
 	result := make([]styledLine, 0, len(rawLines))
-	for _, line := range rawLines {
+	for i, line := range rawLines {
 		if width > 0 {
-			w := lipgloss.Width(line)
-			if w < width {
-				line = line + strings.Repeat(" ", width-w)
+			if pad := width - len([]rune(line)); pad > 0 {
+				line = line + strings.Repeat(" ", pad)
 			}
 		}
+		lineStyle := styles.Item
+		if i == cursorIdx {
+			lineStyle = styles.SelectedItem
+		}
 		result = append(result, styledLine{
-			text: line,
-			raw:  true,
+			text:  line,
+			style: lineStyle,
 		})
+	}
+	return result
+}
+
+// filterTreeSessions returns only sessions whose tree IDs are in idSet.
+func filterTreeSessions(sessions []menu.SessionEntry, idSet map[string]bool) []menu.SessionEntry {
+	result := make([]menu.SessionEntry, 0, len(sessions))
+	for _, s := range sessions {
+		if idSet[menu.TreeSessionID(s.Name)] {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// filterTreeWindows returns only windows whose tree IDs are in idSet.
+func filterTreeWindows(windows []menu.WindowEntry, idSet map[string]bool) []menu.WindowEntry {
+	result := make([]menu.WindowEntry, 0, len(windows))
+	for _, w := range windows {
+		if idSet[menu.TreeWindowID(w.Session, w.Index)] {
+			result = append(result, w)
+		}
+	}
+	return result
+}
+
+// filterTreePanes returns only panes whose tree IDs are in idSet.
+func filterTreePanes(panes []menu.PaneEntry, idSet map[string]bool) []menu.PaneEntry {
+	result := make([]menu.PaneEntry, 0, len(panes))
+	for _, p := range panes {
+		if idSet[menu.TreePaneID(p.Session, p.WindowIdx, p.ID)] {
+			result = append(result, p)
+		}
 	}
 	return result
 }
