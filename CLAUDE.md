@@ -44,7 +44,7 @@ Integration tests (in `internal/testutil/`, `internal/tmux/integration_test.go`,
 
 ## Architecture
 
-This is a [Bubble Tea](https://github.com/charmbracelet/bubbletea) TUI that wraps tmux as a popup control menu. The app runs inside a `tmux display-popup` and communicates with tmux via the `gotmuxcc` library (vendored, replaced with `../gotmuxcc`).
+This is a [Bubble Tea](https://github.com/charmbracelet/bubbletea) TUI that wraps tmux as a popup control menu. The app runs inside a `tmux display-popup` and communicates with tmux via the `gotmuxcc` library (vendored).
 
 ### Layer overview
 
@@ -132,7 +132,7 @@ Previews render below the menu list for `session:switch`, `window:switch`, and `
 
 ### gotmuxcc dependency
 
-`go.mod` uses `replace github.com/atomicstack/gotmuxcc => ../gotmuxcc` pointing at a sibling checkout. The library is also vendored under `vendor/`. Changes to gotmuxcc require updating the sibling repo, not the vendor copy.
+The library is vendored under `vendor/`. Changes to gotmuxcc require updating the sibling repo in `~/git_tree/gotmuxcc`, not the vendor copy.
 
 ## Pending work
 
