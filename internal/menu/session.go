@@ -333,36 +333,39 @@ func SessionTreeAction(ctx Context, item Item) tea.Cmd {
 	id := item.ID
 	switch {
 	case strings.HasPrefix(id, TreePrefixPane):
+		// tree:p:session:windowIndex:paneDisplayID
 		parts := strings.SplitN(strings.TrimPrefix(id, TreePrefixPane), ":", 3)
 		if len(parts) < 3 {
 			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid pane target: %s", id)} }
 		}
-		session, paneID := parts[0], parts[2]
+		session, paneTarget := parts[0], parts[2]
 		return func() tea.Msg {
 			events.Session.Switch(session)
 			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
 				return ActionResult{Err: err}
 			}
-			if err := tmux.SwitchPane(ctx.SocketPath, ctx.ClientID, paneID); err != nil {
+			if err := tmux.SwitchPane(ctx.SocketPath, ctx.ClientID, paneTarget); err != nil {
 				return ActionResult{Err: err}
 			}
-			return ActionResult{Info: fmt.Sprintf("Switched to pane %s", paneID)}
+			return ActionResult{Info: fmt.Sprintf("Switched to pane %s", paneTarget)}
 		}
 	case strings.HasPrefix(id, TreePrefixWindow):
+		// tree:w:session:windowIndex
 		parts := strings.SplitN(strings.TrimPrefix(id, TreePrefixWindow), ":", 2)
 		if len(parts) < 2 {
 			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target: %s", id)} }
 		}
-		session, windowID := parts[0], parts[1]
+		session, windowIdx := parts[0], parts[1]
+		windowTarget := session + ":" + windowIdx
 		return func() tea.Msg {
 			events.Session.Switch(session)
 			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
 				return ActionResult{Err: err}
 			}
-			if err := tmux.SelectWindow(ctx.SocketPath, windowID); err != nil {
+			if err := tmux.SelectWindow(ctx.SocketPath, windowTarget); err != nil {
 				return ActionResult{Err: err}
 			}
-			return ActionResult{Info: fmt.Sprintf("Switched to window %s", windowID)}
+			return ActionResult{Info: fmt.Sprintf("Switched to window %s", windowTarget)}
 		}
 	case strings.HasPrefix(id, TreePrefixSession):
 		session := strings.TrimPrefix(id, TreePrefixSession)
