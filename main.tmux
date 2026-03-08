@@ -20,5 +20,8 @@ fi
 [[ -z "$TMUX_POPUP_CONTROL_LAUNCH_KEY" ]] && TMUX_POPUP_CONTROL_LAUNCH_KEY="F"
 tmux bind-key -T prefix -N "Launches $(basename $BINARY_PATH) via $LAUNCH_SCRIPT" "$TMUX_POPUP_CONTROL_LAUNCH_KEY" run-shell -b "$LAUNCH_SCRIPT"
 
-[[ -z "$TMUX_POPUP_CONTROL_KEY_MENU_COMMAND" ]] && TMUX_POPUP_CONTROL_KEY_MENU_COMMAND=":"
-tmux bind-key -T prefix -N "Launches $(basename $BINARY_PATH)'s command menu" "$TMUX_POPUP_CONTROL_KEY_MENU_COMMAND" run-shell -b "$LAUNCH_SCRIPT --root-menu=command"
+[[ -z "$TMUX_POPUP_CONTROL_KEY_COMMAND_MENU" ]] && TMUX_POPUP_CONTROL_KEY_COMMAND_MENU=":"
+tmux bind-key -T prefix -N "Launches $(basename $BINARY_PATH)'s command menu" "$TMUX_POPUP_CONTROL_KEY_COMMAND_MENU" run-shell -b "$LAUNCH_SCRIPT --root-menu=command"
+
+[[ -z "$TMUX_POPUP_CONTROL_KEY_SESSION_TREE" ]] && TMUX_POPUP_CONTROL_KEY_SESSION_TREE='s'
+tmux bind-key -T prefix -N "Launches $(basename $BINARY_PATH)'s session tree" "$TMUX_POPUP_CONTROL_KEY_SESSION_TREE" run-shell -b "$LAUNCH_SCRIPT --root-menu session:tree"
