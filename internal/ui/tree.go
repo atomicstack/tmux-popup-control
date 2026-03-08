@@ -9,6 +9,14 @@ import (
 	"charm.land/lipgloss/v2/tree"
 )
 
+// minimalEnumerator uses single-dash connectors with sharp corners.
+func minimalEnumerator(children tree.Children, index int) string {
+	if children.Length()-1 == index {
+		return "└─"
+	}
+	return "├─"
+}
+
 // isTreeLevel returns true if the given level ID is the session tree.
 func isTreeLevel(id string) bool {
 	return id == "session:tree"
@@ -70,7 +78,7 @@ func buildTree(
 		root.Child(sessionNode)
 	}
 
-	root.Enumerator(tree.RoundedEnumerator)
+	root.Enumerator(minimalEnumerator)
 
 	return root
 }
@@ -227,21 +235,27 @@ func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorI
 		return nil
 	}
 
+	const indicator = "▌"
 	rawLines := strings.Split(rendered, "\n")
 	result := make([]styledLine, 0, len(rawLines))
 	for i, line := range rawLines {
+		fullText := indicator + " " + line
 		if width > 0 {
-			if pad := width - len([]rune(line)); pad > 0 {
-				line = line + strings.Repeat(" ", pad)
+			if pad := width - len([]rune(fullText)); pad > 0 {
+				fullText += strings.Repeat(" ", pad)
 			}
 		}
 		lineStyle := styles.Item
+		indicatorStyle := styles.ItemIndicator
 		if i == cursorIdx {
 			lineStyle = styles.SelectedItem
+			indicatorStyle = styles.SelectedItemIndicator
 		}
 		result = append(result, styledLine{
-			text:  line,
-			style: lineStyle,
+			text:          fullText,
+			style:         lineStyle,
+			prefixStyle:   indicatorStyle,
+			highlightFrom: 1,
 		})
 	}
 	return result

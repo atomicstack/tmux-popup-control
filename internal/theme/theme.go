@@ -10,6 +10,7 @@ type Styles struct {
 	SelectedItemIndicator  *lipgloss.Style
 	SelectedItem           *lipgloss.Style
 	Error             *lipgloss.Style
+	Warning           *lipgloss.Style
 	Info              *lipgloss.Style
 	Header            *lipgloss.Style
 	Footer            *lipgloss.Style
@@ -40,6 +41,9 @@ var defaultStyles = Styles{
 	),
 	Error: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
+	),
+	Warning: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
 	),
 	Info: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),

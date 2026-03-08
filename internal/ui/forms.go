@@ -132,12 +132,21 @@ func (m *Model) viewWindowFormWithHeader(header string) string {
 
 func (m *Model) viewSessionFormWithHeader(header string) string {
 	lines := []string{}
-	if header != "" {
+	title := m.sessionForm.Title()
+	if header != "" && title != "" {
+		lines = append(lines, header+menuHeaderSeparator+strings.ToLower(title))
+	} else if header != "" {
 		lines = append(lines, header)
+	} else {
+		lines = append(lines, title)
 	}
-	lines = append(lines, m.sessionForm.Title(), "", m.sessionForm.InputView())
+	lines = append(lines, "", m.sessionForm.InputView())
 	if err := m.sessionForm.Error(); err != "" {
-		lines = append(lines, "", styles.Error.Render(err))
+		style := styles.Error
+		if m.sessionForm.ErrorIsWarning() && styles.Warning != nil {
+			style = styles.Warning
+		}
+		lines = append(lines, "", style.Render(err))
 	}
 	lines = append(lines, "", m.sessionForm.Help())
 	return strings.Join(lines, "\n")

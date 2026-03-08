@@ -410,6 +410,7 @@ func NewPaneRenameForm(prompt PanePrompt) *PaneRenameForm {
 	ti := textinput.New()
 	ti.Placeholder = "pane-title"
 	ti.CharLimit = 128
+	ti.SetWidth(40)
 	if prompt.Initial != "" {
 		ti.SetValue(prompt.Initial)
 		ti.CursorEnd()

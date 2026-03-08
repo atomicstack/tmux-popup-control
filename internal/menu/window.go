@@ -448,6 +448,7 @@ func NewWindowRenameForm(prompt WindowPrompt) *WindowRenameForm {
 	ti := textinput.New()
 	ti.Placeholder = "window-name"
 	ti.CharLimit = 64
+	ti.SetWidth(40)
 	if prompt.Initial != "" {
 		ti.SetValue(prompt.Initial)
 		ti.CursorEnd()

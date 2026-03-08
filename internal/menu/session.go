@@ -141,15 +141,17 @@ func SessionCommandForAction(actionID string, ctx Context, target, name string) 
 }
 
 type SessionForm struct {
-	input    textinput.Model
-	existing map[string]struct{}
-	ctx      Context
-	err      string
-	mode     sessionFormMode
-	target   string
-	action   string
-	title    string
-	help     string
+	input      textinput.Model
+	existing   map[string]struct{}
+	ctx        Context
+	err        string
+	errWarning bool // true when err is a hint (e.g. empty field), not a hard error
+	dirty      bool // true after the user's first interaction
+	mode       sessionFormMode
+	target     string
+	action     string
+	title      string
+	help       string
 }
 
 type sessionFormMode int
@@ -163,21 +165,22 @@ func NewSessionForm(prompt SessionPrompt) *SessionForm {
 	ti := textinput.New()
 	ti.Placeholder = "session-name"
 	ti.CharLimit = 64
+	ti.SetWidth(40)
 	ti.Focus()
 	if prompt.Initial != "" {
 		ti.SetValue(prompt.Initial)
 	}
 	mode := sessionFormModeCreate
-	title := "Create Session"
+	title := "new"
 	help := "Press Enter to create. Esc to cancel."
 	target := strings.TrimSpace(prompt.Target)
 	switch prompt.Action {
 	case "session:rename":
 		mode = sessionFormModeRename
 		if target != "" {
-			title = fmt.Sprintf("Rename %s", target)
+			title = fmt.Sprintf("rename %s", target)
 		} else {
-			title = "Rename Session"
+			title = "rename"
 		}
 		help = "Press Enter to rename. Esc to cancel."
 	}
@@ -190,21 +193,22 @@ func NewSessionForm(prompt SessionPrompt) *SessionForm {
 		action:   prompt.Action,
 		title:    title,
 		help:     help,
+		dirty:    prompt.Initial != "",
 	}
 	form.SetSessions(prompt.Context.Sessions)
-	form.validate()
 	return form
 }
 
-func (f *SessionForm) Context() Context  { return f.ctx }
-func (f *SessionForm) Value() string     { return strings.TrimSpace(f.input.Value()) }
-func (f *SessionForm) InputView() string { return f.input.View() }
-func (f *SessionForm) Error() string     { return f.err }
-func (f *SessionForm) Action() string    { return f.action }
-func (f *SessionForm) Target() string    { return f.target }
-func (f *SessionForm) Title() string     { return f.title }
-func (f *SessionForm) Help() string      { return f.help }
-func (f *SessionForm) IsRename() bool    { return f.mode == sessionFormModeRename }
+func (f *SessionForm) Context() Context    { return f.ctx }
+func (f *SessionForm) Value() string       { return strings.TrimSpace(f.input.Value()) }
+func (f *SessionForm) InputView() string   { return f.input.View() }
+func (f *SessionForm) Error() string       { return f.err }
+func (f *SessionForm) ErrorIsWarning() bool { return f.errWarning }
+func (f *SessionForm) Action() string      { return f.action }
+func (f *SessionForm) Target() string      { return f.target }
+func (f *SessionForm) Title() string       { return f.title }
+func (f *SessionForm) Help() string        { return f.help }
+func (f *SessionForm) IsRename() bool      { return f.mode == sessionFormModeRename }
 
 func (f *SessionForm) ActionID() string {
 	if f.action != "" {
@@ -230,6 +234,7 @@ func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 		switch m.String() {
 		case "ctrl+u":
 			if f.input.Value() != "" {
+				f.dirty = true
 				f.input.SetValue("")
 				f.input.CursorStart()
 				f.err = f.validate()
@@ -243,11 +248,12 @@ func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 			}
 			return nil, false, true
 		case "enter":
+			f.dirty = true
 			value := f.Value()
 			switch f.mode {
 			case sessionFormModeCreate:
-				if err := f.validateName(value); err != "" {
-					f.err = err
+				if err, _ := f.validateName(value); err != "" {
+					f.err = f.validate()
 					return nil, false, false
 				}
 				f.err = ""
@@ -258,8 +264,8 @@ func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 					events.Session.CancelRename(f.target, events.SessionReasonEmpty)
 					return nil, false, true
 				}
-				if err := f.validateName(value); err != "" {
-					f.err = err
+				if err, _ := f.validateName(value); err != "" {
+					f.err = f.validate()
 					return nil, false, false
 				}
 				f.err = ""
@@ -270,6 +276,9 @@ func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 	}
 
 	updated, cmd := f.input.Update(msg)
+	if f.input.Value() != updated.Value() {
+		f.dirty = true
+	}
 	f.input = updated
 	f.err = f.validate()
 	return cmd, false, false
@@ -288,33 +297,40 @@ func (f *SessionForm) SetSessions(entries []SessionEntry) {
 		}
 		f.existing[trim] = struct{}{}
 	}
-	f.err = f.validate()
+	if f.dirty {
+		f.err = f.validate()
+	}
 }
 
 func (f *SessionForm) validate() string {
-	return f.validateName(f.Value())
+	msg, warning := f.validateName(f.Value())
+	f.errWarning = warning
+	return msg
 }
 
-func (f *SessionForm) validateName(name string) string {
+func (f *SessionForm) validateName(name string) (string, bool) {
 	trimmed := strings.TrimSpace(name)
 	lower := strings.ToLower(trimmed)
 	switch f.mode {
 	case sessionFormModeRename:
 		if trimmed == "" {
-			return ""
+			return "", false
 		}
 		if _, exists := f.existing[lower]; exists {
-			return "Session already exists"
+			return "Session already exists", false
 		}
-		return ""
+		return "", false
 	default:
 		if trimmed == "" {
-			return "Session name required"
+			if !f.dirty {
+				return "", false
+			}
+			return "Session name required", true
 		}
 		if _, exists := f.existing[lower]; exists {
-			return "Session already exists"
+			return "Session already exists", false
 		}
-		return ""
+		return "", false
 	}
 }
 
