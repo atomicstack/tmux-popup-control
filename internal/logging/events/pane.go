@@ -37,10 +37,6 @@ func (PaneTracer) Swap(first, second string) {
 	logging.Trace("pane.swap", map[string]interface{}{"first": first, "second": second})
 }
 
-func (PaneTracer) Layout(layout string) {
-	logging.Trace("pane.layout", map[string]interface{}{"layout": layout})
-}
-
 func (PaneTracer) Resize(direction string, amount int) {
 	logging.Trace("pane.resize", map[string]interface{}{"direction": direction, "amount": amount})
 }

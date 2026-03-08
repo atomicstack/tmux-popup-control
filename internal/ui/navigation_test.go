@@ -51,3 +51,68 @@ func TestHandleEscapeKeyPopsLevelAndClearsSwapState(t *testing.T) {
 		t.Fatalf("expected error message cleared, got %q", m.errMsg)
 	}
 }
+
+func TestLayoutPreviewRevertsOnEscape(t *testing.T) {
+	var applied []string
+	old := layoutPreviewFn
+	layoutPreviewFn = func(_, layout string) error {
+		applied = append(applied, layout)
+		return nil
+	}
+	defer func() { layoutPreviewFn = old }()
+
+	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	// Need a parent level so escape doesn't quit
+	root := m.stack[0]
+	_ = root
+
+	items := []menu.Item{
+		{ID: "even-horizontal", Label: "Even Horizontal"},
+		{ID: "tiled", Label: "Tiled"},
+		{ID: "original-layout-string", Label: "current layout"},
+	}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	lvl.Data = "original-layout-string"
+	m.stack = append(m.stack, lvl)
+
+	h := NewHarness(m)
+	applied = nil // reset
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if len(applied) == 0 {
+		t.Fatal("expected revert on escape")
+	}
+	if applied[0] != "original-layout-string" {
+		t.Fatalf("expected revert to original-layout-string, got %q", applied[0])
+	}
+	// Should have popped back to root
+	if len(m.stack) != 1 {
+		t.Fatalf("expected stack length 1 after escape, got %d", len(m.stack))
+	}
+}
+
+func TestLayoutPreviewNoRevertWhenDataEmpty(t *testing.T) {
+	var applied []string
+	old := layoutPreviewFn
+	layoutPreviewFn = func(_, layout string) error {
+		applied = append(applied, layout)
+		return nil
+	}
+	defer func() { layoutPreviewFn = old }()
+
+	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	items := []menu.Item{
+		{ID: "even-horizontal", Label: "Even Horizontal"},
+	}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	lvl.Data = "" // empty string = no original layout known
+	m.stack = append(m.stack, lvl)
+
+	h := NewHarness(m)
+	applied = nil
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if len(applied) != 0 {
+		t.Fatalf("expected no revert when Data is empty, got %v", applied)
+	}
+}

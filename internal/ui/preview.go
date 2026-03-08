@@ -41,8 +41,15 @@ type previewLoadedMsg struct {
 }
 
 var (
-	panePreviewFn = tmux.PanePreview
+	panePreviewFn   = tmux.PanePreview
+	layoutPreviewFn = tmux.SelectLayout
 )
+
+type layoutAppliedMsg struct {
+	levelID string
+	seq     int
+	err     error
+}
 
 func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	if level == nil {
@@ -132,6 +139,23 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 		return func() tea.Msg {
 			lines, err := panePreviewFn(socket, paneID)
 			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines, err: err, rawANSI: true}
+		}
+	case previewKindLayout:
+		// Save original layout on first visit.
+		if level.Data == nil {
+			for _, it := range level.Items {
+				if it.Label == "current layout" {
+					level.Data = it.ID
+					break
+				}
+			}
+			if level.Data == nil {
+				level.Data = ""
+			}
+		}
+		return func() tea.Msg {
+			err := layoutPreviewFn(socket, target)
+			return layoutAppliedMsg{levelID: levelID, seq: seq, err: err}
 		}
 	default:
 		return nil
@@ -274,6 +298,8 @@ func (m *Model) activePreview() *previewData {
 // previewKindTree uses item-type-specific previews for tree items.
 const previewKindTree previewKind = 10
 
+const previewKindLayout previewKind = 11
+
 func previewKindForLevel(id string) previewKind {
 	switch id {
 	case "session:switch":
@@ -284,9 +310,33 @@ func previewKindForLevel(id string) previewKind {
 		return previewKindPane
 	case "session:tree":
 		return previewKindTree
+	case "window:layout":
+		return previewKindLayout
 	default:
 		return previewKindNone
 	}
+}
+
+func (m *Model) handleLayoutAppliedMsg(msg tea.Msg) tea.Cmd {
+	update, ok := msg.(layoutAppliedMsg)
+	if !ok {
+		return nil
+	}
+	if m.preview == nil {
+		return nil
+	}
+	data, ok := m.preview[update.levelID]
+	if !ok {
+		return nil
+	}
+	if data.seq != update.seq {
+		return nil
+	}
+	data.loading = false
+	if update.err != nil {
+		data.err = update.err.Error()
+	}
+	return nil
 }
 
 func (m *Model) handlePreviewLoadedMsg(msg tea.Msg) tea.Cmd {

@@ -115,6 +115,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 			Label:      line.label,
 			Current:    session == currentSession && w.Active,
 			InternalID: line.windowID,
+			Layout:     w.Layout,
 		}
 		if entry.Current {
 			snapshot.CurrentID = entry.ID

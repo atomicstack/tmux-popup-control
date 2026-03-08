@@ -218,6 +218,37 @@ func TestWindowRenameCommandUsesStub(t *testing.T) {
 	}
 }
 
+func TestLoadWindowLayoutMenuIncludesCurrentLayout(t *testing.T) {
+	ctx := Context{
+		CurrentWindowLayout: "bb62,159x48,0,0{79x48,0,0,79x48,80,0}",
+	}
+	items, err := loadWindowLayoutMenu(ctx)
+	if err != nil {
+		t.Fatalf("loadWindowLayoutMenu returned error: %v", err)
+	}
+	if len(items) != 8 {
+		t.Fatalf("expected 8 items (7 named + current-layout), got %d", len(items))
+	}
+	last := items[len(items)-1]
+	if last.ID != "bb62,159x48,0,0{79x48,0,0,79x48,80,0}" {
+		t.Fatalf("expected current layout ID, got %q", last.ID)
+	}
+	if last.Label != "current layout" {
+		t.Fatalf("expected label 'current layout', got %q", last.Label)
+	}
+}
+
+func TestLoadWindowLayoutMenuOmitsCurrentWhenEmpty(t *testing.T) {
+	ctx := Context{}
+	items, err := loadWindowLayoutMenu(ctx)
+	if err != nil {
+		t.Fatalf("loadWindowLayoutMenu returned error: %v", err)
+	}
+	if len(items) != 7 {
+		t.Fatalf("expected 7 items, got %d", len(items))
+	}
+}
+
 func TestWindowKillActionPropagatesError(t *testing.T) {
 	called := false
 	restore := withStub(&unlinkWindowsFn, func(_ string, ids []string) error {

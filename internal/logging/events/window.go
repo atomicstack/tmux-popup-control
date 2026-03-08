@@ -52,3 +52,7 @@ func (WindowTracer) CancelRename(target string, reason windowReason) {
 func (WindowTracer) SubmitRename(target, name string) {
 	logging.Trace("window.rename.submit", map[string]interface{}{"target": target, "name": name})
 }
+
+func (WindowTracer) Layout(layout string) {
+	logging.Trace("window.layout", map[string]interface{}{"layout": layout})
+}

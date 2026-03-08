@@ -17,6 +17,7 @@ import (
 var (
 	switchClientFn  = tmux.SwitchClient
 	selectWindowFn  = tmux.SelectWindow
+	selectLayoutFn  = tmux.SelectLayout
 	renameWindowFn  = tmux.RenameWindow
 	linkWindowFn    = tmux.LinkWindow
 	moveWindowFn    = tmux.MoveWindow
@@ -29,6 +30,7 @@ func loadWindowMenu(Context) ([]Item, error) {
 		// vvv do NOT reorder these! vvv
 		"kill",
 		"rename",
+		"layout",
 		"swap",
 		"move",
 		"link",
@@ -254,6 +256,37 @@ func loadWindowKillMenu(ctx Context) ([]Item, error) {
 	return items, nil
 }
 
+func loadWindowLayoutMenu(ctx Context) ([]Item, error) {
+	layouts := []string{
+		"even-horizontal",
+		"even-vertical",
+		"main-horizontal",
+		"main-vertical",
+		"tiled",
+		"main-horizontal-mirrored",
+		"main-vertical-mirrored",
+	}
+	items := menuItemsFromIDs(layouts)
+	if layout := strings.TrimSpace(ctx.CurrentWindowLayout); layout != "" {
+		items = append(items, Item{ID: layout, Label: "current layout"})
+	}
+	return items, nil
+}
+
+func WindowLayoutAction(ctx Context, item Item) tea.Cmd {
+	layout := strings.TrimSpace(item.ID)
+	if layout == "" {
+		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid layout")} }
+	}
+	return func() tea.Msg {
+		events.Window.Layout(layout)
+		if err := selectLayoutFn(ctx.SocketPath, layout); err != nil {
+			return ActionResult{Err: err}
+		}
+		return ActionResult{Info: fmt.Sprintf("Applied layout %s", layout)}
+	}
+}
+
 func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
 	windowID := item.ID
 	parts := strings.SplitN(windowID, ":", 2)
@@ -340,6 +373,7 @@ func WindowEntriesFromTmux(windows []tmux.Window) []WindowEntry {
 			Index:      w.Index,
 			InternalID: w.InternalID,
 			Current:    w.Current,
+			Layout:     w.Layout,
 		})
 	}
 	return entries

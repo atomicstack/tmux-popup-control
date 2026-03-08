@@ -93,5 +93,11 @@ func (m *Model) menuContext() menu.Context {
 		CurrentPaneLabel:     m.panes.CurrentLabel(),
 		PaneIncludeCurrent:   m.panes.IncludeCurrent(),
 	}
+	for _, w := range ctx.Windows {
+		if w.Current {
+			ctx.CurrentWindowLayout = w.Layout
+			break
+		}
+	}
 	return ctx
 }

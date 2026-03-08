@@ -16,6 +16,7 @@ type Window struct {
 	Label      string
 	Current    bool
 	InternalID string
+	Layout     string
 }
 
 type Pane struct {

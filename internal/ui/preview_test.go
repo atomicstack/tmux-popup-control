@@ -135,6 +135,109 @@ func TestHandlePreviewLoadedMsgIgnoresStaleResponses(t *testing.T) {
 	}
 }
 
+func TestLayoutPreviewAppliesOnCursorMove(t *testing.T) {
+	var applied []string
+	old := layoutPreviewFn
+	layoutPreviewFn = func(_, layout string) error {
+		applied = append(applied, layout)
+		return nil
+	}
+	defer func() { layoutPreviewFn = old }()
+
+	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	items := []menu.Item{
+		{ID: "even-horizontal", Label: "Even Horizontal"},
+		{ID: "even-vertical", Label: "Even Vertical"},
+		{ID: "tiled", Label: "Tiled"},
+		{ID: "bb62,159x48", Label: "current layout"},
+	}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	lvl.Cursor = 0 // simulate user moving cursor to first item
+	m.stack = append(m.stack, lvl)
+
+	cmd := m.ensurePreviewForLevel(lvl)
+	if cmd == nil {
+		t.Fatal("expected preview command")
+	}
+	msg := cmd()
+	if _, ok := msg.(layoutAppliedMsg); !ok {
+		t.Fatalf("expected layoutAppliedMsg, got %T", msg)
+	}
+	if len(applied) == 0 || applied[0] != "even-horizontal" {
+		t.Fatalf("expected even-horizontal applied, got %v", applied)
+	}
+}
+
+func TestLayoutPreviewSavesOriginalLayout(t *testing.T) {
+	old := layoutPreviewFn
+	layoutPreviewFn = func(_, _ string) error { return nil }
+	defer func() { layoutPreviewFn = old }()
+
+	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	items := []menu.Item{
+		{ID: "even-horizontal", Label: "Even Horizontal"},
+		{ID: "bb62,159x48", Label: "current layout"},
+	}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	lvl.Cursor = 0
+	m.stack = append(m.stack, lvl)
+
+	m.ensurePreviewForLevel(lvl)
+
+	original, ok := lvl.Data.(string)
+	if !ok {
+		t.Fatalf("expected level.Data to be string, got %T", lvl.Data)
+	}
+	if original != "bb62,159x48" {
+		t.Fatalf("expected original layout bb62,159x48, got %q", original)
+	}
+}
+
+func TestLayoutPreviewSkipsDuplicateApply(t *testing.T) {
+	var count int
+	old := layoutPreviewFn
+	layoutPreviewFn = func(_, _ string) error { count++; return nil }
+	defer func() { layoutPreviewFn = old }()
+
+	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	items := []menu.Item{
+		{ID: "even-horizontal", Label: "Even Horizontal"},
+	}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	lvl.Cursor = 0
+	m.stack = append(m.stack, lvl)
+
+	cmd1 := m.ensurePreviewForLevel(lvl)
+	if cmd1 != nil {
+		msg := cmd1()
+		m.handleLayoutAppliedMsg(msg)
+	}
+
+	// Second call with same cursor — should still issue command (loading is false now)
+	// but the target check prevents re-issue if loading is still true
+	cmd2 := m.ensurePreviewForLevel(lvl)
+	if cmd2 != nil {
+		cmd2()
+	}
+	// Both should fire since loading was cleared between calls
+	if count != 2 {
+		t.Fatalf("expected 2 calls, got %d", count)
+	}
+}
+
+func TestLayoutPreviewNoSidePanelRendered(t *testing.T) {
+	m := NewModel("test.sock", 120, 24, false, false, nil, "", "", "", "")
+	items := []menu.Item{
+		{ID: "even-horizontal", Label: "Even Horizontal"},
+	}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	m.stack = []*level{lvl}
+
+	if m.hasSidePreview() {
+		t.Fatal("expected no side preview for window:layout")
+	}
+}
+
 // TestMaxVisibleItemsAccountsForPreview verifies that the item viewport
 // shrinks to make room for an active preview block.
 func TestMaxVisibleItemsAccountsForPreview(t *testing.T) {

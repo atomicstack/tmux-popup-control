@@ -25,9 +25,20 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	if current.ID == "pane:swap-target" {
 		m.pendingPaneSwap = nil
 	}
-	if current != nil {
-		m.clearPreview(current.ID)
+
+	// Revert layout preview on escape.
+	var revertCmd tea.Cmd
+	if current.ID == "window:layout" {
+		if original, ok := current.Data.(string); ok && original != "" {
+			socket := m.socketPath
+			revertCmd = func() tea.Msg {
+				err := layoutPreviewFn(socket, original)
+				return layoutAppliedMsg{levelID: "window:layout", err: err}
+			}
+		}
 	}
+
+	m.clearPreview(current.ID)
 	parent := m.stack[len(m.stack)-2]
 	m.stack = m.stack[:len(m.stack)-1]
 	if parent != nil {
@@ -43,7 +54,14 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	}
 	m.errMsg = ""
 	m.forceClearInfo()
-	return m.ensurePreviewForLevel(parent)
+	parentPreviewCmd := m.ensurePreviewForLevel(parent)
+	if revertCmd != nil && parentPreviewCmd != nil {
+		return tea.Batch(revertCmd, parentPreviewCmd)
+	}
+	if revertCmd != nil {
+		return revertCmd
+	}
+	return parentPreviewCmd
 }
 
 func (m *Model) handleEnterKey() tea.Cmd {

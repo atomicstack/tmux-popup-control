@@ -38,7 +38,8 @@ func (m *Model) hasSidePreview() bool {
 	if current == nil {
 		return false
 	}
-	if previewKindForLevel(current.ID) == previewKindNone {
+	kind := previewKindForLevel(current.ID)
+	if kind == previewKindNone || kind == previewKindLayout {
 		return false
 	}
 	return m.previewPanelWidth() > 0
@@ -653,9 +654,12 @@ func (m *Model) maxVisibleItems() int {
 			} else {
 				used += len(previewDisplayLines(preview))
 			}
-		} else if current := m.currentLevel(); current != nil && previewKindForLevel(current.ID) != previewKindNone {
-			// Reserve space for the preview that is about to load.
-			used += 3 // blank + title + "Loading preview…"
+		} else if current := m.currentLevel(); current != nil {
+			kind := previewKindForLevel(current.ID)
+			if kind != previewKindNone && kind != previewKindLayout {
+				// Reserve space for the preview that is about to load.
+				used += 3 // blank + title + "Loading preview…"
+			}
 		}
 	}
 	remain := m.height - used

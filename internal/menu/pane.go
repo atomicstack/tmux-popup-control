@@ -19,8 +19,7 @@ var (
 	movePaneFn     = tmux.MovePane
 	breakPaneFn    = tmux.BreakPane
 	swapPanesFn    = tmux.SwapPanes
-	selectLayoutFn = tmux.SelectLayout
-	resizePaneFn   = tmux.ResizePane
+	resizePaneFn = tmux.ResizePane
 	renamePaneFn   = tmux.RenamePane
 )
 
@@ -30,7 +29,6 @@ func loadPaneMenu(Context) ([]Item, error) {
 		"rename",
 		"resize",
 		"kill",
-		"layout",
 		"swap",
 		"join",
 		"break",
@@ -108,17 +106,6 @@ func loadPaneRenameMenu(ctx Context) ([]Item, error) {
 		items = append([]Item{current}, items...)
 	}
 	return items, nil
-}
-
-func loadPaneLayoutMenu(Context) ([]Item, error) {
-	layouts := []string{
-		"even-horizontal",
-		"even-vertical",
-		"main-horizontal",
-		"main-vertical",
-		"tiled",
-	}
-	return menuItemsFromIDs(layouts), nil
 }
 
 func loadPaneResizeMenu(Context) ([]Item, error) {
@@ -239,20 +226,6 @@ func PaneSwapCommand(ctx Context, first, second Item) tea.Cmd {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Swapped %s ↔ %s", first.Label, second.Label)}
-	}
-}
-
-func PaneLayoutAction(ctx Context, item Item) tea.Cmd {
-	layout := strings.TrimSpace(item.ID)
-	if layout == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid layout")} }
-	}
-	return func() tea.Msg {
-		events.Pane.Layout(layout)
-		if err := selectLayoutFn(ctx.SocketPath, layout); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Applied layout %s", layout)}
 	}
 }
 

@@ -32,6 +32,7 @@ type Context struct {
 	CurrentWindowID      string
 	CurrentWindowLabel   string
 	CurrentWindowSession string
+	CurrentWindowLayout  string
 	WindowIncludeCurrent bool
 	Panes                []PaneEntry
 	CurrentPaneID        string
@@ -48,6 +49,7 @@ type WindowEntry struct {
 	Index      int
 	InternalID string
 	Current    bool
+	Layout     string
 }
 
 // PaneEntry represents a tmux pane reference for menu loaders.
@@ -133,6 +135,7 @@ func ActionHandlers() map[string]Action {
 		"window:swap":       WindowSwapAction,
 		"window:rename":     WindowRenameAction,
 		"window:kill":       WindowKillAction,
+		"window:layout":     WindowLayoutAction,
 		"keybinding":        KeybindingAction,
 		"pane:switch":       PaneSwitchAction,
 		"pane:break":        PaneBreakAction,
@@ -140,7 +143,6 @@ func ActionHandlers() map[string]Action {
 		"pane:swap":         PaneSwapAction,
 		"pane:kill":         PaneKillAction,
 		"pane:rename":       PaneRenameAction,
-		"pane:layout":       PaneLayoutAction,
 		"pane:resize:left":  PaneResizeLeftAction,
 		"pane:resize:right": PaneResizeRightAction,
 		"pane:resize:up":    PaneResizeUpAction,
@@ -162,13 +164,13 @@ func ActionLoaders() map[string]Loader {
 		"window:swap":       loadWindowSwapMenu,
 		"window:rename":     loadWindowRenameMenu,
 		"window:kill":       loadWindowKillMenu,
+		"window:layout":     loadWindowLayoutMenu,
 		"pane:switch":       loadPaneSwitchMenu,
 		"pane:break":        loadPaneBreakMenu,
 		"pane:join":         loadPaneJoinMenu,
 		"pane:swap":         loadPaneSwapMenu,
 		"pane:kill":         loadPaneKillMenu,
 		"pane:rename":       loadPaneRenameMenu,
-		"pane:layout":       loadPaneLayoutMenu,
 		"pane:resize":       loadPaneResizeMenu,
 		"pane:resize:left":  loadPaneResizeLeftMenu,
 		"pane:resize:right": loadPaneResizeRightMenu,
