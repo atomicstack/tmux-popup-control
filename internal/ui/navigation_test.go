@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestHandleEscapeKeyFromRootQuits(t *testing.T) {

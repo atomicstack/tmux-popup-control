@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss/tree"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2/tree"
 )
 
 // isTreeLevel returns true if the given level ID is the session tree.

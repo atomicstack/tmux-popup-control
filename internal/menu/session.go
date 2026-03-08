@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/atomicstack/tmux-popup-control/internal/format/table"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
@@ -226,7 +226,7 @@ func (f *SessionForm) PendingLabel() string {
 
 func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 	switch m := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch m.String() {
 		case "ctrl+u":
 			if f.input.Value() != "" {
@@ -235,16 +235,14 @@ func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				f.err = f.validate()
 			}
 			return nil, false, false
-		}
-		switch m.Type {
-		case tea.KeyEsc:
+		case "esc":
 			if f.mode == sessionFormModeRename {
 				events.Session.CancelRename(f.target, events.SessionReasonEscape)
 			} else {
 				events.Session.CancelNew(events.SessionReasonEscape)
 			}
 			return nil, false, true
-		case tea.KeyEnter:
+		case "enter":
 			value := f.Value()
 			switch f.mode {
 			case sessionFormModeCreate:

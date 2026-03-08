@@ -2,7 +2,7 @@ package ui
 
 import (
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 type promptResult struct {

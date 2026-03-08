@@ -8,7 +8,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {
@@ -41,7 +41,7 @@ func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {
 	// Navigate into the window menu from the root menu.
 	root := harness.Model().stack[0]
 	root.Cursor = root.IndexOf("window")
-	harness.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	harness.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	ctx := harness.Model().menuContext()
 	items := make([]menu.Item, 0, len(ctx.Windows))
@@ -64,7 +64,7 @@ func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {
 	}
 
 	for i := 0; i < 7; i++ {
-		harness.Send(tea.KeyMsg{Type: tea.KeyDown})
+		harness.Send(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	view = harness.View()
 	if !strings.Contains(view, "win-08") {

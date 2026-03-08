@@ -8,7 +8,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m *Model) handleEscapeKey() tea.Cmd {
@@ -267,14 +267,14 @@ func (m *Model) syncViewport(l *level) {
 }
 
 func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
-	keyMsg, ok := msg.(tea.KeyMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return nil
 	}
 	if m.mode != ModeMenu {
 		return nil
 	}
-	if keyMsg.Type == tea.KeyTab {
+	if keyMsg.String() == "tab" {
 		if current := m.currentLevel(); current != nil {
 			if current.MultiSelect {
 				current.ToggleCurrentSelection()

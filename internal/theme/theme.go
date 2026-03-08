@@ -1,6 +1,6 @@
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 // Styles describes reusable Lip Gloss styles shared across the UI.
 type Styles struct {

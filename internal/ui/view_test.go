@@ -17,7 +17,7 @@ func TestViewDisplaysPreviewBlock(t *testing.T) {
 		lines:  []string{"pane-1", "pane-2"},
 		seq:    1,
 	}
-	view := m.View()
+	view := m.View().Content
 	if !strings.Contains(view, "Preview: Dev Session") {
 		t.Fatalf("expected preview title in view, got:\n%s", view)
 	}

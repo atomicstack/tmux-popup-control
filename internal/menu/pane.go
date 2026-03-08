@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
@@ -447,7 +447,7 @@ func (f *PaneRenameForm) PendingLabel() string {
 
 func (f *PaneRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 	switch m := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch m.String() {
 		case "ctrl+u":
 			if f.input.Value() != "" {
@@ -455,12 +455,10 @@ func (f *PaneRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				f.input.CursorStart()
 			}
 			return nil, false, false
-		}
-		switch m.Type {
-		case tea.KeyEsc:
+		case "esc":
 			events.Pane.CancelRename(f.target, events.PaneReasonEscape)
 			return nil, false, true
-		case tea.KeyEnter:
+		case "enter":
 			title := f.Value()
 			if title == "" {
 				events.Pane.CancelRename(f.target, events.PaneReasonEmpty)

@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/reflow/truncate"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -62,27 +62,40 @@ func (m *Model) menuColumnWidth() int {
 	return m.width - m.previewPanelWidth()
 }
 
+func (m *Model) wrapView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
 // View implements tea.Model.
-func (m *Model) View() string {
+func (m *Model) View() tea.View {
 	header := m.menuHeader()
+	var content string
 	switch m.mode {
 	case ModePaneForm:
 		if m.paneForm != nil {
-			return m.viewPaneFormWithHeader(header)
+			content = m.viewPaneFormWithHeader(header)
+			return m.wrapView(content)
 		}
 	case ModeWindowForm:
 		if m.windowForm != nil {
-			return m.viewWindowFormWithHeader(header)
+			content = m.viewWindowFormWithHeader(header)
+			return m.wrapView(content)
 		}
 	case ModeSessionForm:
 		if m.sessionForm != nil {
-			return m.viewSessionFormWithHeader(header)
+			content = m.viewSessionFormWithHeader(header)
+			return m.wrapView(content)
 		}
 	}
 	if m.hasSidePreview() {
-		return m.viewSideBySide(header)
+		content = m.viewSideBySide(header)
+		return m.wrapView(content)
 	}
-	return m.viewVertical(header)
+	content = m.viewVertical(header)
+	return m.wrapView(content)
 }
 
 // viewVertical is the standard single-column layout with an optional inline
@@ -268,7 +281,7 @@ func (m *Model) viewSideBySide(header string) string {
 	for i, row := range leftRows {
 		w := lipgloss.Width(row)
 		if w > menuW {
-			leftRows[i] = truncate.StringWithTail(row, uint(menuW-1), "…")
+			leftRows[i] = ansi.Truncate(row, menuW-1, "…")
 		} else if w < menuW {
 			leftRows[i] = row + strings.Repeat(" ", menuW-w)
 		}
@@ -441,7 +454,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 		// may contain escape sequences from capture-pane -e.
 		w := lipgloss.Width(content)
 		if w > innerW {
-			content = truncate.StringWithTail(content, uint(innerW-1), "…")
+			content = ansi.Truncate(content, innerW-1, "…")
 			w = lipgloss.Width(content)
 		}
 		if w < innerW {
@@ -463,7 +476,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 
 // handleMouseMsg handles mouse wheel events to scroll the preview panel.
 func (m *Model) handleMouseMsg(msg tea.Msg) tea.Cmd {
-	ev, ok := msg.(tea.MouseMsg)
+	ev, ok := msg.(tea.MouseWheelMsg)
 	if !ok {
 		return nil
 	}
@@ -479,12 +492,12 @@ func (m *Model) handleMouseMsg(msg tea.Msg) tea.Cmd {
 		innerH = 1
 	}
 	switch ev.Button {
-	case tea.MouseButtonWheelUp:
+	case tea.MouseWheelUp:
 		preview.scrollOffset -= 3
 		if preview.scrollOffset < 0 {
 			preview.scrollOffset = 0
 		}
-	case tea.MouseButtonWheelDown:
+	case tea.MouseWheelDown:
 		maxOffset := len(preview.lines) - innerH
 		if maxOffset < 0 {
 			maxOffset = 0
@@ -704,7 +717,7 @@ func applyWidth(lines []styledLine, width int) []styledLine {
 		if line.raw {
 			w := lipgloss.Width(text)
 			if w > width {
-				text = truncate.StringWithTail(text, uint(width-1), "…")
+				text = ansi.Truncate(text, width-1, "…")
 			}
 		} else {
 			text = truncateText(text, width)

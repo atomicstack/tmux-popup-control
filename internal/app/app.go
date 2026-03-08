@@ -9,7 +9,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	"github.com/atomicstack/tmux-popup-control/internal/ui"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Config describes user-provided application options.
@@ -39,7 +39,7 @@ func Run(cfg Config) error {
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	defer watcher.Stop()
 	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu, cfg.MenuArgs, clientID, strings.TrimSpace(cfg.SessionName))
-	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	program := tea.NewProgram(model)
 	_, err = program.Run()
 	if errors.Is(err, tea.ErrProgramKilled) {
 		return nil

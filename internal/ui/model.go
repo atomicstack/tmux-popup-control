@@ -12,8 +12,8 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/theme"
 	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
 	uistate "github.com/atomicstack/tmux-popup-control/internal/ui/state"
-	"github.com/charmbracelet/bubbles/cursor"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/cursor"
+	tea "charm.land/bubbletea/v2"
 )
 
 type level = uistate.Level
@@ -134,10 +134,10 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 	}
 	c := cursor.New()
 	if styles.Cursor != nil {
-		c.Style = styles.Cursor.Copy()
+		c.Style = *styles.Cursor
 	}
 	if styles.Filter != nil {
-		c.TextStyle = styles.Filter.Copy()
+		c.TextStyle = *styles.Filter
 	}
 	c.SetChar(" ")
 	m.filterCursor = c
@@ -205,7 +205,7 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 
 func (m *Model) registerHandlers() {
 	m.handlers = map[reflect.Type]msgHandler{
-		reflect.TypeOf(tea.KeyMsg{}):            m.handleKeyMsg,
+		reflect.TypeOf(tea.KeyPressMsg{}):        m.handleKeyMsg,
 		reflect.TypeOf(tea.WindowSizeMsg{}):     m.handleWindowSizeMsg,
 		reflect.TypeOf(categoryLoadedMsg{}):     m.handleCategoryLoadedMsg,
 		reflect.TypeOf(menu.ActionResult{}):     m.handleActionResultMsg,
@@ -218,7 +218,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(backendDoneMsg{}):        m.handleBackendDoneMsg,
 		reflect.TypeOf(commandPreloadMsg{}):     m.handleCommandPreloadMsg,
 		reflect.TypeOf(previewLoadedMsg{}):      m.handlePreviewLoadedMsg,
-		reflect.TypeOf(tea.MouseMsg{}):          m.handleMouseMsg,
+		reflect.TypeOf(tea.MouseWheelMsg{}):     m.handleMouseMsg,
 	}
 }
 
@@ -241,8 +241,7 @@ func (m *Model) handlerFor(msg tea.Msg) msgHandler {
 func (m *Model) finishUpdate(cmds []tea.Cmd) tea.Cmd {
 	if m.filterCursorDirty {
 		m.filterCursorDirty = false
-		m.filterCursor.Blink = false
-		if cmd := m.filterCursor.BlinkCmd(); cmd != nil {
+		if cmd := m.filterCursor.Blink(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}

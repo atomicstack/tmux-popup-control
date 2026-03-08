@@ -5,8 +5,8 @@ import (
 	"unicode"
 
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func (m *Model) updateFilterCursorModel(msg tea.Msg) tea.Cmd {
@@ -24,7 +24,7 @@ func (m *Model) noteFilterCursorChange(l *level, before int) {
 	}
 }
 
-func (m *Model) handleTextInput(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if m.loading {
 		return false, nil
 	}
@@ -90,39 +90,17 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.noteFilterCursorChange(current, before)
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
 		return true, nil
-	}
-	switch msg.Type {
-	case tea.KeyBackspace, tea.KeyCtrlH:
+	case "backspace":
 		if m.removeFilterRune() {
 			return true, m.ensurePreviewForLevel(current)
 		}
 		return false, nil
-	case tea.KeyRunes:
-		if msg.Alt {
-			return false, nil
-		}
-		if len(msg.Runes) == 0 {
-			return false, nil
-		}
-		for _, r := range msg.Runes {
-			if unicode.IsControl(r) {
-				return false, nil
-			}
-			if unicode.IsSpace(r) {
-				// allow the dedicated space handler to manage spaces
-				return false, nil
-			}
-		}
-		if m.appendToFilter(string(msg.Runes)) {
-			return true, m.ensurePreviewForLevel(current)
-		}
-		return false, nil
-	case tea.KeySpace:
+	case "space":
 		if m.appendToFilter(" ") {
 			return true, m.ensurePreviewForLevel(current)
 		}
 		return false, nil
-	case tea.KeyLeft:
+	case "left":
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorRuneBackward() {
 			return false, nil
@@ -130,7 +108,7 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
-	case tea.KeyRight:
+	case "right":
 		before := current.FilterCursorPos()
 		if !current.MoveFilterCursorRuneForward() {
 			return false, nil
@@ -138,8 +116,26 @@ func (m *Model) handleTextInput(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.noteFilterCursorChange(current, before)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
+	default:
+		if msg.Mod.Contains(tea.ModAlt) {
+			return false, nil
+		}
+		if msg.Text == "" {
+			return false, nil
+		}
+		for _, r := range []rune(msg.Text) {
+			if unicode.IsControl(r) {
+				return false, nil
+			}
+			if unicode.IsSpace(r) {
+				return false, nil
+			}
+		}
+		if m.appendToFilter(msg.Text) {
+			return true, m.ensurePreviewForLevel(current)
+		}
+		return false, nil
 	}
-	return false, nil
 }
 
 func (m *Model) appendToFilter(text string) bool {
@@ -193,10 +189,10 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		return style.Render(value)
 	}
 	if styles.Cursor != nil {
-		m.filterCursor.Style = styles.Cursor.Copy()
+		m.filterCursor.Style = *styles.Cursor
 	}
 	if styles.Filter != nil {
-		m.filterCursor.TextStyle = styles.Filter.Copy()
+		m.filterCursor.TextStyle = *styles.Filter
 	} else {
 		m.filterCursor.TextStyle = lipgloss.Style{}
 	}
@@ -215,7 +211,7 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 			rest = string(runes[1:])
 		}
 		if styles.FilterPlaceholder != nil {
-			m.filterCursor.TextStyle = styles.FilterPlaceholder.Copy()
+			m.filterCursor.TextStyle = *styles.FilterPlaceholder
 		}
 		caret := m.renderFilterCursor(caretRune)
 		return prompt + caret + render(styles.FilterPlaceholder, rest), nil
@@ -238,7 +234,7 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		// visible gap between typed text and the autocomplete hint.
 		ghostRunes := []rune(ghost)
 		if styles.FilterPlaceholder != nil {
-			m.filterCursor.TextStyle = styles.FilterPlaceholder.Copy()
+			m.filterCursor.TextStyle = *styles.FilterPlaceholder
 		}
 		caretRune = string(ghostRunes[0])
 		caret := m.renderFilterCursor(caretRune)
@@ -296,15 +292,15 @@ func (m *Model) renderFilterCursor(char string) string {
 	}
 	m.filterCursor.SetChar(char)
 
-	base := m.filterCursor.TextStyle.Copy()
+	base := m.filterCursor.TextStyle
 	base = base.Inline(true)
 
-	if m.filterCursor.Blink {
+	if m.filterCursor.IsBlinked {
 		return base.Render(char)
 	}
 
 	if styles.Cursor != nil {
-		cursorStyle := styles.Cursor.Copy().Inline(true)
+		cursorStyle := lipgloss.NewStyle().Inherit(*styles.Cursor).Inline(true)
 		base = base.Inherit(cursorStyle).Blink(false)
 		return base.Render(char)
 	}

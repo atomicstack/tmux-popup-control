@@ -6,7 +6,7 @@ import (
 
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func waitForBackendEvent(w *backend.Watcher) tea.Cmd {

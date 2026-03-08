@@ -1,6 +1,6 @@
 package ui
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // Harness drives the UI model programmatically for integration tests.
 type Harness struct {
@@ -43,7 +43,7 @@ func (h *Harness) View() string {
 	if h.model == nil {
 		return ""
 	}
-	return h.model.View()
+	return h.model.View().Content
 }
 
 // Model exposes the underlying model.
