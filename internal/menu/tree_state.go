@@ -3,6 +3,8 @@ package menu
 import (
 	"fmt"
 	"strings"
+
+	"github.com/lithammer/fuzzysearch/fuzzy"
 )
 
 // Tree item ID prefixes.
@@ -133,7 +135,7 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 		return s.BuildTreeItems(sessions, windows, panes)
 	}
 
-	lower := strings.ToLower(trimmed)
+	words := strings.Fields(trimmed)
 
 	winBySession := make(map[string][]WindowEntry)
 	for _, w := range windows {
@@ -148,36 +150,65 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 	var items []Item
 	for _, sess := range sessions {
 		sid := TreeSessionID(sess.Name)
-		sessionMatches := treeContainsFold(sess.Name, lower)
 
 		var sessionChildren []Item
 		for _, win := range winBySession[sess.Name] {
 			wid := TreeWindowID(sess.Name, win.Index)
-			windowMatches := treeContainsFold(win.Label, lower) || treeContainsFold(win.ID, lower)
+			winContext := sess.Name + " " + win.Label + " " + win.ID
+			windowMatches := treeAllWordsMatch(winContext, words)
 
 			var windowChildren []Item
 			for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
 				pid := TreePaneID(sess.Name, win.Index, pane.ID)
-				paneMatches := treeContainsFold(pane.Label, lower) || treeContainsFold(pane.ID, lower)
-				if paneMatches || windowMatches || sessionMatches {
+				paneContext := winContext + " " + pane.Label + " " + pane.ID
+				if treeAllWordsMatch(paneContext, words) {
 					windowChildren = append(windowChildren, Item{ID: pid, Label: pane.Label})
 				}
 			}
 
-			if sessionMatches || windowMatches || len(windowChildren) > 0 {
+			if windowMatches || len(windowChildren) > 0 {
 				sessionChildren = append(sessionChildren, Item{ID: wid, Label: win.Label})
 				sessionChildren = append(sessionChildren, windowChildren...)
 			}
 		}
 
+		// Session matches on its own if all words match the session name.
+		sessionMatches := treeAllWordsMatch(sess.Name, words)
 		if sessionMatches || len(sessionChildren) > 0 {
 			items = append(items, Item{ID: sid, Label: sess.Name})
+			if sessionMatches {
+				// All words matched the session — include all children.
+				for _, win := range winBySession[sess.Name] {
+					wid := TreeWindowID(sess.Name, win.Index)
+					alreadyAdded := false
+					for _, c := range sessionChildren {
+						if c.ID == wid {
+							alreadyAdded = true
+							break
+						}
+					}
+					if alreadyAdded {
+						continue
+					}
+					sessionChildren = append(sessionChildren, Item{ID: wid, Label: win.Label})
+					for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
+						pid := TreePaneID(sess.Name, win.Index, pane.ID)
+						sessionChildren = append(sessionChildren, Item{ID: pid, Label: pane.Label})
+					}
+				}
+			}
 			items = append(items, sessionChildren...)
 		}
 	}
 	return items
 }
 
-func treeContainsFold(s, lowerSubstr string) bool {
-	return strings.Contains(strings.ToLower(s), lowerSubstr)
+// treeAllWordsMatch returns true if every word fuzzy-matches somewhere in context.
+func treeAllWordsMatch(context string, words []string) bool {
+	for _, w := range words {
+		if !fuzzy.MatchNormalizedFold(w, context) {
+			return false
+		}
+	}
+	return true
 }

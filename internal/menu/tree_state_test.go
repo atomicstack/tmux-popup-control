@@ -176,6 +176,150 @@ func TestTreeItemKind(t *testing.T) {
 	}
 }
 
+func TestFilterItemsMultiWordCrossHierarchy(t *testing.T) {
+	sessions := []SessionEntry{
+		{Name: "staging", Windows: 1},
+		{Name: "production", Windows: 1},
+	}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "cron", Session: "staging", Index: 0},
+		{ID: "@2", Label: "nginx", Session: "production", Index: 0},
+	}
+	panes := []PaneEntry{
+		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "staging"},
+		{ID: "%2", Label: "pane-2", WindowIdx: 0, Session: "production"},
+	}
+
+	state := NewTreeState(false)
+
+	// "cron staging" — words match across session+window hierarchy.
+	items := state.FilterTreeItems(sessions, windows, panes, "cron staging")
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected results for 'cron staging', got none")
+	}
+	foundSession := false
+	foundWindow := false
+	for _, it := range items {
+		if it.ID == "tree:s:staging" {
+			foundSession = true
+		}
+		if it.ID == "tree:w:staging:0" {
+			foundWindow = true
+		}
+	}
+	if !foundSession {
+		t.Errorf("expected session 'staging' in results, got %v", ids)
+	}
+	if !foundWindow {
+		t.Errorf("expected window 'cron' in results, got %v", ids)
+	}
+
+	// production session should NOT appear — "cron" doesn't match it.
+	for _, it := range items {
+		if it.ID == "tree:s:production" {
+			t.Errorf("production should not match 'cron staging', got %v", ids)
+		}
+	}
+}
+
+func TestFilterItemsMultiWordReversedOrder(t *testing.T) {
+	sessions := []SessionEntry{{Name: "staging", Windows: 1}}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "cron", Session: "staging", Index: 0},
+	}
+	panes := []PaneEntry{
+		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "staging"},
+	}
+
+	state := NewTreeState(false)
+
+	// "staging cron" — reversed word order should also match.
+	items := state.FilterTreeItems(sessions, windows, panes, "staging cron")
+	if len(items) == 0 {
+		t.Fatal("expected results for 'staging cron', got none")
+	}
+	foundWindow := false
+	for _, it := range items {
+		if it.ID == "tree:w:staging:0" {
+			foundWindow = true
+		}
+	}
+	if !foundWindow {
+		var ids []string
+		for _, it := range items {
+			ids = append(ids, it.ID)
+		}
+		t.Errorf("expected window 'cron' in results, got %v", ids)
+	}
+}
+
+func TestFilterItemsMultiWordNoMatch(t *testing.T) {
+	sessions := []SessionEntry{{Name: "staging", Windows: 1}}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "cron", Session: "staging", Index: 0},
+	}
+	panes := []PaneEntry{}
+
+	state := NewTreeState(false)
+
+	// "cron zzznope" — one word doesn't match anything in the path.
+	items := state.FilterTreeItems(sessions, windows, panes, "cron zzznope")
+	if len(items) != 0 {
+		var ids []string
+		for _, it := range items {
+			ids = append(ids, it.ID)
+		}
+		t.Fatalf("expected 0 items for 'cron zzznope', got %d: %v", len(items), ids)
+	}
+}
+
+func TestFilterItemsMultiWordPaneContext(t *testing.T) {
+	sessions := []SessionEntry{{Name: "dev", Windows: 1}}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "editor", Session: "dev", Index: 0},
+	}
+	panes := []PaneEntry{
+		{ID: "%1", Label: "vim-main", WindowIdx: 0, Session: "dev"},
+		{ID: "%2", Label: "shell", WindowIdx: 0, Session: "dev"},
+	}
+
+	state := NewTreeState(false)
+
+	// "vim dev" — "vim" matches pane label, "dev" matches session name.
+	items := state.FilterTreeItems(sessions, windows, panes, "vim dev")
+	if len(items) == 0 {
+		t.Fatal("expected results for 'vim dev', got none")
+	}
+	foundPane := false
+	for _, it := range items {
+		if it.ID == "tree:p:dev:0:%1" {
+			foundPane = true
+		}
+	}
+	if !foundPane {
+		var ids []string
+		for _, it := range items {
+			ids = append(ids, it.ID)
+		}
+		t.Errorf("expected pane 'vim-main' in results, got %v", ids)
+	}
+
+	// The "shell" pane should NOT appear — "vim" doesn't match it.
+	for _, it := range items {
+		if it.ID == "tree:p:dev:0:%2" {
+			var ids []string
+			for _, it := range items {
+				ids = append(ids, it.ID)
+			}
+			t.Errorf("pane 'shell' should not match 'vim dev', got %v", ids)
+		}
+	}
+}
+
 func TestTreeIsExpandable(t *testing.T) {
 	if !TreeIsExpandable("tree:s:main") {
 		t.Error("session should be expandable")
