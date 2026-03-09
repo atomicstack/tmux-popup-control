@@ -39,6 +39,8 @@ func buildTree(
 	windows []menu.WindowEntry,
 	panes []menu.PaneEntry,
 	state *menu.TreeState,
+	windowCounts map[string]int,
+	paneCounts map[string]int,
 ) *tree.Tree {
 	winBySession := make(map[string][]menu.WindowEntry)
 	for _, w := range windows {
@@ -54,7 +56,7 @@ func buildTree(
 	for _, sess := range sessions {
 		sid := menu.TreeSessionID(sess.Name)
 		indicator := treeExpandIndicator(state, sid)
-		wc := len(winBySession[sess.Name])
+		wc := windowCounts[sess.Name]
 		label := fmt.Sprintf("%s%s (%d windows)", indicator, sess.Name, wc)
 
 		sessionNode := tree.Root(label)
@@ -63,7 +65,9 @@ func buildTree(
 			for _, win := range winBySession[sess.Name] {
 				wid := menu.TreeWindowID(sess.Name, win.Index)
 				wIndicator := treeExpandIndicator(state, wid)
-				wLabel := fmt.Sprintf("%s%s", wIndicator, win.Label)
+				pk := fmt.Sprintf("%s\x00%d", sess.Name, win.Index)
+			pc := paneCounts[pk]
+			wLabel := fmt.Sprintf("%s%s (%d panes)", wIndicator, win.Label, pc)
 
 				windowNode := tree.Root(wLabel)
 
@@ -223,11 +227,24 @@ func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorI
 		renderState = menu.NewTreeState(true)
 	}
 
+	// Build window/pane counts from the full (unfiltered) lists so
+	// counts are always correct regardless of expand/collapse state.
+	windowCounts := make(map[string]int, len(m.treeSessions))
+	for _, w := range m.treeWindows {
+		windowCounts[w.Session]++
+	}
+	paneCounts := make(map[string]int)
+	for _, p := range m.treePanes {
+		paneCounts[fmt.Sprintf("%s\x00%d", p.Session, p.WindowIdx)]++
+	}
+
 	t := buildTree(
 		sessions,
 		windows,
 		panes,
 		renderState,
+		windowCounts,
+		paneCounts,
 	)
 
 	rendered := t.String()
