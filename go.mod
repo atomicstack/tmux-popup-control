@@ -6,7 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.1
 	charm.land/lipgloss/v2 v2.0.0
-	github.com/atomicstack/gotmuxcc v0.0.0-20260225235214-70528171d070
+	github.com/atomicstack/gotmuxcc v0.0.1
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/lithammer/fuzzysearch v1.1.5
 	golang.org/x/term v0.6.0

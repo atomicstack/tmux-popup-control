@@ -29,3 +29,6 @@
 
 # Worktrees
 .worktrees/
+
+# Release artifacts
+dist/

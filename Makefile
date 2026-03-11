@@ -2,17 +2,19 @@ GO ?= go
 BINARY := tmux-popup-control
 GOCACHE := $(CURDIR)/.gocache
 GOMODCACHE := $(CURDIR)/.gomodcache
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
 GO_ENV := GOTMUXCC_TRACE=1 GOTMUXCC_TRACE_FILE=$(CURDIR)/gotmuxcc_trace.log GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=off
 
 .SILENT:
 
-.PHONY: build run tidy fmt test clean-cache ensure-dirs cover update-gotmuxcc
+.PHONY: build run tidy fmt test clean-cache ensure-dirs cover update-gotmuxcc release
 
 ensure-dirs:
 	mkdir -p $(GOCACHE) $(GOMODCACHE)
 
 build: ensure-dirs
-	$(GO_ENV) go build -o $(BINARY) .
+	$(GO_ENV) go build $(LDFLAGS) -o $(BINARY) .
 
 run: ensure-dirs
 	$(GO_ENV) go run .
@@ -29,7 +31,7 @@ test: ensure-dirs
 GO_ENV_ONLINE := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=direct
 
 update-gotmuxcc: ensure-dirs
-	$(GO_ENV_ONLINE) go get github.com/atomicstack/gotmuxcc@main
+	$(GO_ENV_ONLINE) go get github.com/atomicstack/gotmuxcc@latest
 	$(GO_ENV_ONLINE) go mod tidy
 	$(GO_ENV_ONLINE) go mod vendor
 
@@ -41,3 +43,23 @@ cover:
 	$(GO) test ./... -coverprofile=coverage.out
 	@echo "Coverage summary:"
 	$(GO) tool cover -func=coverage.out
+
+RELEASE_DIR := dist
+PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
+
+release: ensure-dirs
+	rm -rf $(RELEASE_DIR)
+	mkdir -p $(RELEASE_DIR)
+	$(foreach platform,$(PLATFORMS),\
+		$(eval GOOS := $(word 1,$(subst /, ,$(platform))))\
+		$(eval GOARCH := $(word 2,$(subst /, ,$(platform))))\
+		echo "Building $(GOOS)/$(GOARCH)..." && \
+		$(GO_ENV) GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 \
+			go build $(LDFLAGS) -o $(RELEASE_DIR)/$(BINARY)-$(GOOS)-$(GOARCH) . && \
+	) true
+	chmod +x $(RELEASE_DIR)/$(BINARY)-*
+	cd $(RELEASE_DIR) && for f in $(BINARY)-*; do tar czf "$$f.tar.gz" "$$f" && rm "$$f"; done
+	cd $(RELEASE_DIR) && shasum -a 256 *.tar.gz > checksums.txt
+	gh release create v$(VERSION) $(RELEASE_DIR)/* \
+		--title "v$(VERSION)" \
+		--generate-notes
