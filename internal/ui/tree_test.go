@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
 )
 
 func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool) *Model {
@@ -16,6 +16,22 @@ func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, pan
 	lvl := newLevel("session:tree", "tree", items, node)
 	lvl.Data = ts
 	lvl.Cursor = 0 // tree starts at the top
+	m.treeSessions = sessions
+	m.treeWindows = windows
+	m.treePanes = panes
+	m.stack = append(m.stack, lvl)
+	m.syncViewport(lvl)
+	return m
+}
+
+func testTreeModelWithSize(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool, width int, height int) *Model {
+	m := NewModel("", width, height, false, false, nil, "", "", "", "")
+	ts := menu.NewTreeState(allExpanded)
+	items := ts.BuildTreeItems(sessions, windows, panes)
+	node, _ := m.registry.Find("session:tree")
+	lvl := newLevel("session:tree", "tree", items, node)
+	lvl.Data = ts
+	lvl.Cursor = 0
 	m.treeSessions = sessions
 	m.treeWindows = windows
 	m.treePanes = panes
@@ -277,6 +293,54 @@ func TestTreeFilterCursorNavigation(t *testing.T) {
 	current = h.Model().currentLevel()
 	if current.Cursor != 0 {
 		t.Fatalf("expected cursor to wrap to 0 after %d down presses, got cursor=%d", itemCount, current.Cursor)
+	}
+}
+
+func TestTreeFilteredViewportShowsSelectedItem(t *testing.T) {
+	sessions := []menu.SessionEntry{
+		{Name: "sess00", Windows: 1},
+		{Name: "sess01", Windows: 1},
+		{Name: "sess02", Windows: 1},
+		{Name: "sess03", Windows: 1},
+		{Name: "sess04", Windows: 1},
+		{Name: "sess05", Windows: 1},
+		{Name: "sess06", Windows: 1},
+		{Name: "sess07", Windows: 1},
+	}
+	windows := []menu.WindowEntry{
+		{ID: "0", Label: "0:bash", Session: "sess00", Index: 0},
+		{ID: "0", Label: "0:bash", Session: "sess01", Index: 0},
+		{ID: "0", Label: "0:bash", Session: "sess02", Index: 0},
+		{ID: "0", Label: "0:bash", Session: "sess03", Index: 0},
+		{ID: "0", Label: "0:bash", Session: "sess04", Index: 0},
+		{ID: "0", Label: "0:bash", Session: "sess05", Index: 0},
+		{ID: "0", Label: "0:bash", Session: "sess06", Index: 0},
+		{ID: "0", Label: "0:bash", Session: "sess07", Index: 0},
+	}
+
+	m := testTreeModelWithSize(sessions, windows, nil, false, 80, 8)
+	h := NewHarness(m)
+
+	h.Send(tea.KeyPressMsg{Text: "sess"})
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnd})
+
+	current := h.Model().currentLevel()
+	if current.Filter != "sess" {
+		t.Fatalf("expected active filter to be %q, got %q", "sess", current.Filter)
+	}
+	if current.Cursor != len(current.Items)-1 {
+		t.Fatalf("expected cursor at end of filtered items, got %d of %d", current.Cursor, len(current.Items))
+	}
+	if current.ViewportOffset == 0 {
+		t.Fatalf("expected viewport offset to move below the top, got %d", current.ViewportOffset)
+	}
+
+	view := h.Model().View().Content
+	if !strings.Contains(view, "sess07") {
+		t.Fatalf("expected view to contain selected filtered item 'sess07', got:\n%s", view)
+	}
+	if strings.Contains(view, "sess00") {
+		t.Fatalf("expected top-of-list item 'sess00' to be scrolled out, got:\n%s", view)
 	}
 }
 

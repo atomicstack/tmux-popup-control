@@ -4,9 +4,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 )
 
 func (m *Model) updateFilterCursorModel(msg tea.Msg) tea.Cmd {
@@ -44,7 +44,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.errMsg = ""
 		events.Filter.Cleared(current.ID)
 		m.syncTreeFilter(current)
-		m.syncViewport(current)
+		m.syncFilterViewport(current)
 		return true, m.ensurePreviewForLevel(current)
 	case "ctrl+w":
 		before := current.FilterCursorPos()
@@ -56,7 +56,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.errMsg = ""
 		events.Filter.WordBackspace(current.ID, current.Filter)
 		m.syncTreeFilter(current)
-		m.syncViewport(current)
+		m.syncFilterViewport(current)
 		return true, m.ensurePreviewForLevel(current)
 	case "ctrl+a":
 		before := current.FilterCursorPos()
@@ -155,7 +155,7 @@ func (m *Model) appendToFilter(text string) bool {
 	m.errMsg = ""
 	events.Filter.Append(current.ID, current.Filter)
 	m.syncTreeFilter(current)
-	m.syncViewport(current)
+	m.syncFilterViewport(current)
 	return true
 }
 
@@ -173,7 +173,7 @@ func (m *Model) removeFilterRune() bool {
 	m.errMsg = ""
 	events.Filter.Backspace(current.ID, current.Filter)
 	m.syncTreeFilter(current)
-	m.syncViewport(current)
+	m.syncFilterViewport(current)
 	return true
 }
 

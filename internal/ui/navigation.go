@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
-	tea "charm.land/bubbletea/v2"
 )
 
 func (m *Model) handleEscapeKey() tea.Cmd {
@@ -276,12 +276,24 @@ func (m *Model) moveCursorEnd() bool {
 	return false
 }
 
-
 func (m *Model) syncViewport(l *level) {
 	if l == nil {
 		return
 	}
 	l.EnsureCursorVisible(m.maxVisibleItems())
+}
+
+func (m *Model) syncFilterViewport(l *level) {
+	if l == nil {
+		return
+	}
+	maxVisible := m.maxVisibleItems()
+	if maxVisible <= 0 {
+		l.EnsureCursorVisible(maxVisible)
+		return
+	}
+	anchorRow := (maxVisible - 1) / 3
+	l.EnsureCursorVisibleWithAnchor(maxVisible, anchorRow)
 }
 
 func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
@@ -302,7 +314,7 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 				before := current.FilterCursorPos()
 				current.SetFilter(current.Filter+ghost, len([]rune(current.Filter+ghost)))
 				m.noteFilterCursorChange(current, before)
-				m.syncViewport(current)
+				m.syncFilterViewport(current)
 				return nil
 			}
 		}

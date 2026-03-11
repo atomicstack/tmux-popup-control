@@ -113,3 +113,24 @@ func TestEnsureCursorVisibleAdjustsViewport(t *testing.T) {
 		t.Fatalf("expected offset aligned with cursor, got %d", l.ViewportOffset)
 	}
 }
+
+func TestEnsureCursorVisibleWithAnchorAdjustsViewport(t *testing.T) {
+	l := newTestLevel("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k")
+	l.Cursor = 7
+	l.EnsureCursorVisibleWithAnchor(5, 1)
+	if l.ViewportOffset != 6 {
+		t.Fatalf("expected anchored offset 6, got %d", l.ViewportOffset)
+	}
+
+	l.Cursor = 3
+	l.EnsureCursorVisibleWithAnchor(5, 1)
+	if l.ViewportOffset != 2 {
+		t.Fatalf("expected anchored offset 2, got %d", l.ViewportOffset)
+	}
+
+	l.Cursor = 0
+	l.EnsureCursorVisibleWithAnchor(5, 1)
+	if l.ViewportOffset != 0 {
+		t.Fatalf("expected anchored offset clamped to 0, got %d", l.ViewportOffset)
+	}
+}

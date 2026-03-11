@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -133,10 +133,7 @@ func (m *Model) viewVertical(header string) string {
 			lines = append(lines, styledLine{text: msg, style: styles.Info})
 		} else if isTreeLevel(current.ID) {
 			ts, _ := current.Data.(*menu.TreeState)
-			// Pass full Items (not viewport-windowed displayItems) — the tree
-			// renderer needs the complete filtered item list to maintain
-			// parent-child structure. limitHeight handles overflow.
-			lines = append(lines, m.renderTreeView(current.Items, ts, current.Cursor, m.width)...)
+			lines = append(lines, m.renderTreeView(current.Items, ts, current.Cursor, m.width, current.ViewportOffset, m.maxVisibleItems())...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
@@ -239,7 +236,7 @@ func (m *Model) viewSideBySide(header string) string {
 			contentLines = append(contentLines, styledLine{text: msg, style: styles.Info})
 		} else if isTreeLevel(current.ID) {
 			ts, _ := current.Data.(*menu.TreeState)
-			contentLines = append(contentLines, m.renderTreeView(current.Items, ts, current.Cursor, menuW)...)
+			contentLines = append(contentLines, m.renderTreeView(current.Items, ts, current.Cursor, menuW, current.ViewportOffset, m.maxVisibleItems())...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i

@@ -108,3 +108,41 @@ func (l *Level) EnsureCursorVisible(maxVisible int) {
 		}
 	}
 }
+
+// EnsureCursorVisibleWithAnchor adjusts the viewport offset so the cursor stays
+// visible and, when possible, appears at the supplied row within the viewport.
+func (l *Level) EnsureCursorVisibleWithAnchor(maxVisible int, anchorRow int) {
+	if len(l.Items) == 0 {
+		l.Cursor = 0
+		l.ViewportOffset = 0
+		return
+	}
+	if l.Cursor < 0 {
+		l.Cursor = 0
+	}
+	if l.Cursor >= len(l.Items) {
+		l.Cursor = len(l.Items) - 1
+	}
+	if maxVisible <= 0 {
+		l.ViewportOffset = 0
+		return
+	}
+	maxOffset := len(l.Items) - maxVisible
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if anchorRow < 0 {
+		anchorRow = 0
+	}
+	if anchorRow >= maxVisible {
+		anchorRow = maxVisible - 1
+	}
+	offset := l.Cursor - anchorRow
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+	l.ViewportOffset = offset
+}

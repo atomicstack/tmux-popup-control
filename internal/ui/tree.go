@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2/tree"
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
 )
 
 // minimalEnumerator uses single-dash connectors with sharp corners.
@@ -66,8 +66,8 @@ func buildTree(
 				wid := menu.TreeWindowID(sess.Name, win.Index)
 				wIndicator := treeExpandIndicator(state, wid)
 				pk := fmt.Sprintf("%s\x00%d", sess.Name, win.Index)
-			pc := paneCounts[pk]
-			wLabel := fmt.Sprintf("%s%s (%d panes)", wIndicator, win.Label, pc)
+				pc := paneCounts[pk]
+				wLabel := fmt.Sprintf("%s%s (%d panes)", wIndicator, win.Label, pc)
 
 				windowNode := tree.Root(wLabel)
 
@@ -200,11 +200,9 @@ func (m *Model) syncTreeFilter(current *level) {
 }
 
 // renderTreeView renders the tree as styled lines for display.
-// Each output line is a styledLine with raw=true since the tree
-// renderer embeds ANSI escape codes via lipgloss styles.
 // The items parameter determines which nodes are visible — only
 // sessions/windows/panes whose IDs appear in items are rendered.
-func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorIdx int, width int) []styledLine {
+func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorIdx int, width int, viewportOffset int, maxVisible int) []styledLine {
 	if len(items) == 0 {
 		return nil
 	}
@@ -254,8 +252,21 @@ func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorI
 
 	const indicator = "▌"
 	rawLines := strings.Split(rendered, "\n")
-	result := make([]styledLine, 0, len(rawLines))
-	for i, line := range rawLines {
+	start := viewportOffset
+	if start < 0 {
+		start = 0
+	}
+	if start > len(rawLines) {
+		start = len(rawLines)
+	}
+	end := len(rawLines)
+	if maxVisible > 0 && start+maxVisible < end {
+		end = start + maxVisible
+	}
+	visibleLines := rawLines[start:end]
+	result := make([]styledLine, 0, len(visibleLines))
+	for i, line := range visibleLines {
+		absoluteIdx := start + i
 		fullText := indicator + " " + line
 		if width > 0 {
 			if pad := width - len([]rune(fullText)); pad > 0 {
@@ -264,7 +275,7 @@ func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorI
 		}
 		lineStyle := styles.Item
 		indicatorStyle := styles.ItemIndicator
-		if i == cursorIdx {
+		if absoluteIdx == cursorIdx {
 			lineStyle = styles.SelectedItem
 			indicatorStyle = styles.SelectedItemIndicator
 		}
