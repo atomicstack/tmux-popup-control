@@ -49,7 +49,7 @@ type Plugin struct {
 | Function | Purpose |
 |---|---|
 | `PluginDir() string` | Resolve plugin directory: checks `os.Getenv("TMUX_PLUGIN_MANAGER_PATH")` (matching tpm's behavior — only works if the variable was exported into the shell environment before tmux started), then XDG (`$XDG_CONFIG_HOME/tmux/plugins/`), then falls back to `~/.tmux/plugins/` |
-| `ParseConfig(socketPath string) ([]Plugin, error)` | Read `@plugin` entries from tmux via gotmuxcc's `client.Options("", "-g")` which returns parsed `[]*Option` structs. Filter for keys matching `@plugin`, parse `user/repo#branch` format from each value, resolve each to a Plugin struct with install status |
+| `ParseConfig(socketPath string) ([]Plugin, error)` | Read `@plugin` entries from tmux via gotmuxcc's `client.Command("show-options", "-g")` (because `client.Options()` unconditionally appends `-t <target>` which breaks for global options with no target). Parse the raw output lines as `key value` pairs, filter for `@plugin` keys, parse `user/repo#branch` format from each value, resolve each to a Plugin struct with install status. The client must be `Close()`d after use to avoid leaking `tmux -C` processes |
 | `Installed(pluginDir string) ([]Plugin, error)` | Scan the plugin directory for what is on disk. Detect symlinks via `os.Lstat`. Read `.git` mtime for `UpdatedAt` |
 | `Install(pluginDir string, plugins []Plugin) error` | `git clone --single-branch --recursive` for each uninstalled plugin. Uses `GIT_TERMINAL_PROMPT=0`. Tries direct URL first, falls back to `https://git::@github.com/user/repo` for shorthand sources |
 | `Update(pluginDir string, plugins []Plugin) error` | `git pull` + `git submodule update --init --recursive` for each plugin. Uses `GIT_TERMINAL_PROMPT=0` |
