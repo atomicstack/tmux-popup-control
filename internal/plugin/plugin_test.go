@@ -42,3 +42,72 @@ func TestPluginDir_Default(t *testing.T) {
 		t.Errorf("PluginDir() = %q, want %q", got, want)
 	}
 }
+
+func TestInstalled_ScansDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	pluginDir := filepath.Join(dir, "tmux-sensible")
+	gitDir := filepath.Join(pluginDir, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	symlinkTarget := t.TempDir()
+	symlinkPath := filepath.Join(dir, "tmux-popup-control")
+	if err := os.Symlink(symlinkTarget, symlinkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins, err := Installed(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugins) != 2 {
+		t.Fatalf("got %d plugins, want 2", len(plugins))
+	}
+
+	byName := map[string]Plugin{}
+	for _, p := range plugins {
+		byName[p.Name] = p
+	}
+
+	sensible, ok := byName["tmux-sensible"]
+	if !ok {
+		t.Fatal("missing tmux-sensible")
+	}
+	if sensible.IsSymlink {
+		t.Error("tmux-sensible should not be a symlink")
+	}
+	if !sensible.Installed {
+		t.Error("tmux-sensible should be marked installed")
+	}
+
+	popup, ok := byName["tmux-popup-control"]
+	if !ok {
+		t.Fatal("missing tmux-popup-control")
+	}
+	if !popup.IsSymlink {
+		t.Error("tmux-popup-control should be a symlink")
+	}
+}
+
+func TestInstalled_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	plugins, err := Installed(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugins) != 0 {
+		t.Errorf("got %d plugins, want 0", len(plugins))
+	}
+}
+
+func TestInstalled_NonexistentDir(t *testing.T) {
+	plugins, err := Installed("/nonexistent/path")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plugins) != 0 {
+		t.Errorf("got %d plugins, want 0", len(plugins))
+	}
+}
