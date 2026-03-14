@@ -53,6 +53,8 @@ func BuildRegistry() *Registry {
 		"window:kill",
 		"pane:join",
 		"pane:kill",
+		"plugins:update",
+		"plugins:uninstall",
 	}
 	for _, id := range markMultiSelect {
 		if node, ok := nodes[id]; ok {

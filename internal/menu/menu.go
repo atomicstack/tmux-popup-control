@@ -104,6 +104,7 @@ func RootItems() []Item {
 		{ID: "pane", Label: "pane"},
 		{ID: "window", Label: "window"},
 		{ID: "session", Label: "session"},
+		{ID: "plugins", Label: "plugins"},
 	}
 }
 
@@ -117,6 +118,7 @@ func CategoryLoaders() map[string]Loader {
 		"pane":       loadPaneMenu,
 		"window":     loadWindowMenu,
 		"session":    loadSessionMenu,
+		"plugins":    loadPluginsMenu,
 	}
 }
 
@@ -147,6 +149,10 @@ func ActionHandlers() map[string]Action {
 		"pane:resize:right": PaneResizeRightAction,
 		"pane:resize:up":    PaneResizeUpAction,
 		"pane:resize:down":  PaneResizeDownAction,
+		"plugins:install":   PluginsInstallAction,
+		"plugins:update":    PluginsUpdateAction,
+		"plugins:uninstall": PluginsUninstallAction,
+		"plugins:tidy":      PluginsTidyAction,
 	}
 }
 
@@ -176,6 +182,9 @@ func ActionLoaders() map[string]Loader {
 		"pane:resize:right": loadPaneResizeRightMenu,
 		"pane:resize:up":    loadPaneResizeUpMenu,
 		"pane:resize:down":  loadPaneResizeDownMenu,
+		"plugins:list":      loadPluginsListMenu,
+		"plugins:update":    loadPluginsUpdateMenu,
+		"plugins:uninstall": loadPluginsUninstallMenu,
 	}
 }
 
