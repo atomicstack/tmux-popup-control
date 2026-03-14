@@ -90,6 +90,12 @@ func (m *Model) View() tea.View {
 			content = m.viewSessionFormWithHeader(header)
 			return m.wrapView(content)
 		}
+	case ModePluginConfirm:
+		content = m.pluginConfirmView()
+		return m.wrapView(content)
+	case ModePluginReload:
+		content = m.pluginReloadView()
+		return m.wrapView(content)
 	}
 	if m.hasSidePreview() {
 		content = m.viewSideBySide(header)

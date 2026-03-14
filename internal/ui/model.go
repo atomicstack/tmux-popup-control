@@ -25,6 +25,8 @@ const (
 	ModePaneForm
 	ModeWindowForm
 	ModeSessionForm
+	ModePluginConfirm
+	ModePluginReload
 )
 
 const (
@@ -84,11 +86,13 @@ type Model struct {
 	windows    state.WindowStore
 	panes      state.PaneStore
 	dispatcher *dispatcher.Dispatcher
-	preview      map[string]*previewData
-	previewSeq   int
-	treeSessions []menu.SessionEntry
-	treeWindows  []menu.WindowEntry
-	treePanes    []menu.PaneEntry
+	preview            map[string]*previewData
+	previewSeq         int
+	treeSessions       []menu.SessionEntry
+	treeWindows        []menu.WindowEntry
+	treePanes          []menu.PaneEntry
+	pluginConfirmState *pluginConfirmState
+	pluginReloadState  *pluginReloadState
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
@@ -198,6 +202,10 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 		return m.handleWindowForm(msg)
 	case ModeSessionForm:
 		return m.handleSessionForm(msg)
+	case ModePluginConfirm:
+		return m.handlePluginConfirm(msg)
+	case ModePluginReload:
+		return m.handlePluginReload(msg)
 	default:
 		return false, nil
 	}
@@ -219,7 +227,9 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(commandPreloadMsg{}):     m.handleCommandPreloadMsg,
 		reflect.TypeOf(previewLoadedMsg{}):      m.handlePreviewLoadedMsg,
 		reflect.TypeOf(layoutAppliedMsg{}):      m.handleLayoutAppliedMsg,
-		reflect.TypeOf(tea.MouseWheelMsg{}):     m.handleMouseMsg,
+		reflect.TypeOf(tea.MouseWheelMsg{}):          m.handleMouseMsg,
+		reflect.TypeOf(menu.PluginConfirmPrompt{}):   m.handlePluginConfirmPromptMsg,
+		reflect.TypeOf(menu.PluginReloadPrompt{}):    m.handlePluginReloadPromptMsg,
 	}
 }
 
