@@ -21,6 +21,9 @@ type Styles struct {
 	PreviewTitle      *lipgloss.Style
 	PreviewBody       *lipgloss.Style
 	PreviewError      *lipgloss.Style
+	Checkbox          *lipgloss.Style
+	CheckboxChecked   *lipgloss.Style
+	CheckboxAll       *lipgloss.Style
 }
 
 var defaultStyles = Styles{
@@ -74,6 +77,15 @@ var defaultStyles = Styles{
 	),
 	PreviewError: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
+	),
+	Checkbox: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	),
+	CheckboxChecked: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true),
+	),
+	CheckboxAll: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true),
 	),
 }
 
