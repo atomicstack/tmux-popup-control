@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	"github.com/atomicstack/tmux-popup-control/internal/plugin"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -323,7 +322,7 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level, width i
 	indicatorStyle := styles.ItemIndicator
 	selectDisplay := ""
 	if current.MultiSelect {
-		if id == plugin.AllPluginsSentinel {
+		if id == menu.AllPluginsSentinel {
 			if current.IsSelected(id) {
 				selectDisplay = styles.CheckboxAll.Render("☑") + " "
 			} else {

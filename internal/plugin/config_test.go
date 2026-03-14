@@ -18,6 +18,8 @@ func TestParsePluginEntry(t *testing.T) {
 		{"git@github.com:user/my-plugin", "my-plugin", "git@github.com:user/my-plugin", ""},
 		{"https://github.com/user/my-plugin.git", "my-plugin", "https://github.com/user/my-plugin.git", ""},
 		{"user/plugin-name#main", "plugin-name", "user/plugin-name", "main"},
+		{`"tmux-plugins/tmux-sensible"`, "tmux-sensible", "tmux-plugins/tmux-sensible", ""},
+		{`'tmux-plugins/tmux-yank'`, "tmux-yank", "tmux-plugins/tmux-yank", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.value, func(t *testing.T) {

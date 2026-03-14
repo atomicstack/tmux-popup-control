@@ -17,9 +17,6 @@ type Plugin struct {
 	IsSymlink bool
 }
 
-// AllPluginsSentinel is the ID used for the "update all" toggle in the menu.
-const AllPluginsSentinel = "__all__"
-
 // PluginDir resolves the plugin installation directory.
 // Priority: TMUX_PLUGIN_MANAGER_PATH env var > XDG > ~/.tmux/plugins/
 func PluginDir() string {

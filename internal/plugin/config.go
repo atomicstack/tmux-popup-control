@@ -55,8 +55,10 @@ func defaultOptionsFn(socketPath string) ([]optionPair, error) {
 }
 
 // parsePluginEntry parses a single @plugin value like "user/repo#branch".
+// Strips surrounding quotes that tmux control-mode may include in option values.
 func parsePluginEntry(value string) Plugin {
 	value = strings.TrimSpace(value)
+	value = strings.Trim(value, "'\"")
 	source := value
 	branch := ""
 	if idx := strings.LastIndex(value, "#"); idx >= 0 {

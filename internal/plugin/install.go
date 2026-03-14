@@ -36,6 +36,8 @@ func clonePlugin(p Plugin) error {
 	if _, err := runGitCommand(directArgs...); err == nil {
 		return nil
 	}
+	// Clean up partial clone before fallback attempt.
+	os.RemoveAll(p.Dir)
 
 	ghURL := fmt.Sprintf("https://git::@github.com/%s", p.Source)
 	fallbackArgs := append(append([]string{}, args...), ghURL, p.Dir)

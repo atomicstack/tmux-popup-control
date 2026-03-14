@@ -12,6 +12,9 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/plugin"
 )
 
+// AllPluginsSentinel is the ID used for the "update all" toggle in the plugin menu.
+const AllPluginsSentinel = "__all__"
+
 func loadPluginsMenu(Context) ([]Item, error) {
 	items := []string{"list", "install", "update", "uninstall", "tidy"}
 	return menuItemsFromIDs(items), nil
@@ -55,7 +58,7 @@ func loadPluginsUpdateMenu(_ Context) ([]Item, error) {
 		return nil, err
 	}
 	items := make([]Item, 0, len(installed)+1)
-	items = append(items, Item{ID: plugin.AllPluginsSentinel, Label: "all"})
+	items = append(items, Item{ID: AllPluginsSentinel, Label: "all"})
 	for _, p := range installed {
 		items = append(items, Item{ID: p.Name, Label: p.Name})
 	}
@@ -91,7 +94,6 @@ type PluginConfirmPrompt struct {
 
 func PluginsInstallAction(ctx Context, item Item) tea.Cmd {
 	return func() tea.Msg {
-		events.Plugins.Install("all")
 		pluginDir := plugin.PluginDir()
 		plugins, err := plugin.ParseConfig(ctx.SocketPath)
 		if err != nil {
@@ -106,6 +108,7 @@ func PluginsInstallAction(ctx Context, item Item) tea.Cmd {
 		if uninstalled == 0 {
 			return ActionResult{Info: "All plugins already installed"}
 		}
+		events.Plugins.Install("all")
 		if err := plugin.Install(pluginDir, plugins); err != nil {
 			return ActionResult{Err: err}
 		}
@@ -128,7 +131,7 @@ func PluginsUpdateAction(ctx Context, item Item) tea.Cmd {
 		selected := parseMultiSelectIDs(item.ID)
 		updateAll := false
 		for _, id := range selected {
-			if id == plugin.AllPluginsSentinel {
+			if id == AllPluginsSentinel {
 				updateAll = true
 				break
 			}
