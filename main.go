@@ -10,6 +10,8 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/config"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
+	"github.com/atomicstack/tmux-popup-control/internal/plugin"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	"golang.org/x/term"
 )
 
@@ -32,11 +34,39 @@ func main() {
 
 	traceStartup(runtimeCfg)
 
+	if len(os.Args) > 1 && os.Args[1] == "init-plugins" {
+		if err := runInitPlugins(runtimeCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	if err := app.Run(runtimeCfg.App); err != nil {
 		logging.Error(err)
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func runInitPlugins(cfg config.Config) error {
+	socketPath, err := tmux.ResolveSocketPath(cfg.App.SocketPath)
+	if err != nil {
+		return fmt.Errorf("resolving socket: %w", err)
+	}
+
+	plugins, err := plugin.ParseConfig(socketPath)
+	if err != nil {
+		return fmt.Errorf("reading plugin config: %w", err)
+	}
+
+	pluginDir := plugin.PluginDir()
+	events.Plugins.InitPlugins(len(plugins))
+
+	if err := plugin.Source(pluginDir, plugins); err != nil {
+		return fmt.Errorf("sourcing plugins: %w", err)
+	}
+	return nil
 }
 
 func ensureZeroExitOnHangup() {
