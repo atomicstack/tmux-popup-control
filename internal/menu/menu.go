@@ -182,7 +182,6 @@ func ActionLoaders() map[string]Loader {
 		"pane:resize:right": loadPaneResizeRightMenu,
 		"pane:resize:up":    loadPaneResizeUpMenu,
 		"pane:resize:down":  loadPaneResizeDownMenu,
-		"plugins:list":      loadPluginsListMenu,
 		"plugins:update":    loadPluginsUpdateMenu,
 		"plugins:uninstall": loadPluginsUninstallMenu,
 	}

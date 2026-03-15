@@ -15,38 +15,78 @@ import (
 // AllPluginsSentinel is the ID used for the "update all" toggle in the plugin menu.
 const AllPluginsSentinel = "__all__"
 
-func loadPluginsMenu(Context) ([]Item, error) {
-	items := []string{"list", "install", "update", "uninstall", "tidy"}
-	return menuItemsFromIDs(items), nil
-}
-
-func loadPluginsListMenu(_ Context) ([]Item, error) {
+func loadPluginsMenu(ctx Context) ([]Item, error) {
 	pluginDir := plugin.PluginDir()
 	installed, err := plugin.Installed(pluginDir)
 	if err != nil {
 		return nil, err
 	}
-	if len(installed) == 0 {
-		return []Item{{ID: "__empty__", Label: "No plugins installed"}}, nil
+
+	// Build a merged view: declared plugins with install status + undeclared on-disk plugins.
+	type entry struct {
+		name    string
+		status  string
+		updated string
 	}
-	rows := make([][]string, 0, len(installed))
-	ids := make([]string, 0, len(installed))
+
+	installedSet := make(map[string]plugin.Plugin, len(installed))
 	for _, p := range installed {
-		updated := "unknown"
-		if !p.UpdatedAt.IsZero() {
-			updated = p.UpdatedAt.Format(time.DateOnly)
-		}
-		symlink := ""
-		if p.IsSymlink {
-			symlink = "(symlink)"
-		}
-		rows = append(rows, []string{p.Name, updated, symlink})
-		ids = append(ids, p.Name)
+		installedSet[p.Name] = p
 	}
-	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignRight, table.AlignLeft})
-	items := make([]Item, len(aligned))
-	for i, label := range aligned {
-		items[i] = Item{ID: ids[i], Label: label}
+
+	var entries []entry
+	declaredSet := make(map[string]struct{})
+
+	// Try to get declared plugins from tmux config.
+	if ctx.SocketPath != "" {
+		declared, err := plugin.ParseConfig(ctx.SocketPath)
+		if err == nil {
+			for _, p := range declared {
+				declaredSet[p.Name] = struct{}{}
+				e := entry{name: p.Name}
+				if ip, ok := installedSet[p.Name]; ok {
+					e.status = "installed"
+					if !ip.UpdatedAt.IsZero() {
+						e.updated = ip.UpdatedAt.Format(time.DateOnly)
+					}
+				} else {
+					e.status = "not installed"
+				}
+				entries = append(entries, e)
+			}
+		}
+	}
+
+	// Add undeclared (on-disk but not in config), excluding self.
+	for _, p := range installed {
+		if _, declared := declaredSet[p.Name]; declared {
+			continue
+		}
+		if p.Name == "tmux-popup-control" {
+			continue
+		}
+		e := entry{name: p.Name, status: "undeclared"}
+		if !p.UpdatedAt.IsZero() {
+			e.updated = p.UpdatedAt.Format(time.DateOnly)
+		}
+		entries = append(entries, e)
+	}
+
+	var items []Item
+	if len(entries) > 0 {
+		rows := make([][]string, len(entries))
+		for i, e := range entries {
+			rows[i] = []string{e.name, e.status, e.updated}
+		}
+		aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignRight})
+		for i, label := range aligned {
+			items = append(items, Item{ID: "__plugin:" + entries[i].name, Label: label})
+		}
+		items = append(items, Item{ID: "__sep__", Label: ""})
+	}
+
+	for _, action := range []string{"install", "update", "uninstall", "tidy"} {
+		items = append(items, Item{ID: action, Label: action})
 	}
 	return items, nil
 }
