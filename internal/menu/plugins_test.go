@@ -1,16 +1,10 @@
 package menu
 
 import (
-	"strings"
 	"testing"
 )
 
-func TestLoadPluginsMenu_NoSocket(t *testing.T) {
-	// Point plugin dir to an empty temp dir so we don't pick up real plugins.
-	t.Setenv("TMUX_PLUGIN_MANAGER_PATH", t.TempDir())
-
-	// Without a socket path, no declared plugins are fetched.
-	// Only action items should appear.
+func TestLoadPluginsMenu(t *testing.T) {
 	items, err := loadPluginsMenu(Context{})
 	if err != nil {
 		t.Fatal(err)
@@ -22,26 +16,6 @@ func TestLoadPluginsMenu_NoSocket(t *testing.T) {
 	for i, item := range items {
 		if item.ID != want[i] {
 			t.Errorf("items[%d].ID = %q, want %q", i, item.ID, want[i])
-		}
-	}
-}
-
-func TestLoadPluginsMenu_ActionItemsAlwaysPresent(t *testing.T) {
-	t.Setenv("TMUX_PLUGIN_MANAGER_PATH", t.TempDir())
-
-	items, err := loadPluginsMenu(Context{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	actionIDs := make(map[string]bool)
-	for _, item := range items {
-		if !strings.HasPrefix(item.ID, "__") {
-			actionIDs[item.ID] = true
-		}
-	}
-	for _, want := range []string{"install", "update", "uninstall", "tidy"} {
-		if !actionIDs[want] {
-			t.Errorf("missing action item %q", want)
 		}
 	}
 }

@@ -3,8 +3,11 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/atomicstack/tmux-popup-control/internal/format/table"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/plugin"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	tea "charm.land/bubbletea/v2"
 )
@@ -75,6 +78,22 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	if m.preview == nil {
 		m.preview = make(map[string]*previewData)
 	}
+
+	// Plugin preview is a static overview — same content regardless of cursor.
+	// Rebuilt each time to reflect changes from install/uninstall/etc.
+	if kind == previewKindPlugin {
+		lines := m.pluginPreviewLines()
+		m.previewSeq++
+		m.preview[level.ID] = &previewData{
+			kind:   kind,
+			target: "__plugins__",
+			label:  "Plugins",
+			lines:  lines,
+			seq:    m.previewSeq,
+		}
+		return nil
+	}
+
 	existing, ok := m.preview[level.ID]
 	if ok && existing.target == item.ID && existing.loading {
 		return nil // already fetching this target
@@ -299,6 +318,7 @@ func (m *Model) activePreview() *previewData {
 const previewKindTree previewKind = 10
 
 const previewKindLayout previewKind = 11
+const previewKindPlugin previewKind = 12
 
 func previewKindForLevel(id string) previewKind {
 	switch id {
@@ -312,6 +332,8 @@ func previewKindForLevel(id string) previewKind {
 		return previewKindTree
 	case "window:layout":
 		return previewKindLayout
+	case "plugins":
+		return previewKindPlugin
 	default:
 		return previewKindNone
 	}
@@ -428,6 +450,67 @@ func (m *Model) windowPreviewLines(window string) []string {
 		return []string{"(no panes)"}
 	}
 	return lines
+}
+
+func (m *Model) pluginPreviewLines() []string {
+	pluginDir := plugin.PluginDir()
+	installed, _ := plugin.Installed(pluginDir)
+	installedSet := make(map[string]plugin.Plugin, len(installed))
+	for _, p := range installed {
+		installedSet[p.Name] = p
+	}
+
+	type entry struct {
+		name    string
+		status  string
+		updated string
+	}
+	var entries []entry
+	declaredSet := make(map[string]struct{})
+
+	if m.socketPath != "" {
+		declared, err := plugin.ParseConfig(m.socketPath)
+		if err == nil {
+			for _, p := range declared {
+				declaredSet[p.Name] = struct{}{}
+				e := entry{name: p.Name}
+				if ip, ok := installedSet[p.Name]; ok {
+					e.status = "installed"
+					if !ip.UpdatedAt.IsZero() {
+						e.updated = ip.UpdatedAt.Format(time.DateOnly)
+					}
+				} else {
+					e.status = "not installed"
+				}
+				entries = append(entries, e)
+			}
+		}
+	}
+
+	for _, p := range installed {
+		if _, declared := declaredSet[p.Name]; declared {
+			continue
+		}
+		if p.Name == "tmux-popup-control" {
+			continue
+		}
+		e := entry{name: p.Name, status: "undeclared"}
+		if !p.UpdatedAt.IsZero() {
+			e.updated = p.UpdatedAt.Format(time.DateOnly)
+		}
+		entries = append(entries, e)
+	}
+
+	if len(entries) == 0 {
+		return []string{"(no plugins)"}
+	}
+
+	rows := make([][]string, len(entries))
+	for i, e := range entries {
+		rows[i] = []string{e.name, e.status, e.updated}
+	}
+	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignRight})
+	return aligned
 }
 
 func windowMatchesTarget(entry menu.PaneEntry, target string) bool {

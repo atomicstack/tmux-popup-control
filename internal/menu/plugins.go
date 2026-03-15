@@ -3,11 +3,9 @@ package menu
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/atomicstack/tmux-popup-control/internal/format/table"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/plugin"
 )
@@ -15,80 +13,8 @@ import (
 // AllPluginsSentinel is the ID used for the "update all" toggle in the plugin menu.
 const AllPluginsSentinel = "__all__"
 
-func loadPluginsMenu(ctx Context) ([]Item, error) {
-	pluginDir := plugin.PluginDir()
-	installed, err := plugin.Installed(pluginDir)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build a merged view: declared plugins with install status + undeclared on-disk plugins.
-	type entry struct {
-		name    string
-		status  string
-		updated string
-	}
-
-	installedSet := make(map[string]plugin.Plugin, len(installed))
-	for _, p := range installed {
-		installedSet[p.Name] = p
-	}
-
-	var entries []entry
-	declaredSet := make(map[string]struct{})
-
-	// Try to get declared plugins from tmux config.
-	if ctx.SocketPath != "" {
-		declared, err := plugin.ParseConfig(ctx.SocketPath)
-		if err == nil {
-			for _, p := range declared {
-				declaredSet[p.Name] = struct{}{}
-				e := entry{name: p.Name}
-				if ip, ok := installedSet[p.Name]; ok {
-					e.status = "installed"
-					if !ip.UpdatedAt.IsZero() {
-						e.updated = ip.UpdatedAt.Format(time.DateOnly)
-					}
-				} else {
-					e.status = "not installed"
-				}
-				entries = append(entries, e)
-			}
-		}
-	}
-
-	// Add undeclared (on-disk but not in config), excluding self.
-	for _, p := range installed {
-		if _, declared := declaredSet[p.Name]; declared {
-			continue
-		}
-		if p.Name == "tmux-popup-control" {
-			continue
-		}
-		e := entry{name: p.Name, status: "undeclared"}
-		if !p.UpdatedAt.IsZero() {
-			e.updated = p.UpdatedAt.Format(time.DateOnly)
-		}
-		entries = append(entries, e)
-	}
-
-	var items []Item
-	if len(entries) > 0 {
-		rows := make([][]string, len(entries))
-		for i, e := range entries {
-			rows[i] = []string{e.name, e.status, e.updated}
-		}
-		aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignRight})
-		for i, label := range aligned {
-			items = append(items, Item{ID: "__plugin:" + entries[i].name, Label: label})
-		}
-		items = append(items, Item{ID: "__sep__", Label: ""})
-	}
-
-	for _, action := range []string{"install", "update", "uninstall", "tidy"} {
-		items = append(items, Item{ID: action, Label: action})
-	}
-	return items, nil
+func loadPluginsMenu(_ Context) ([]Item, error) {
+	return menuItemsFromIDs([]string{"install", "update", "uninstall", "tidy"}), nil
 }
 
 func loadPluginsUpdateMenu(_ Context) ([]Item, error) {
