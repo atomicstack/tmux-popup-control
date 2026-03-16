@@ -1,8 +1,8 @@
 package menu
 
 import (
-	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -23,10 +23,21 @@ func loadPluginsUpdateMenu(_ Context) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	items := make([]Item, 0, len(installed)+1)
-	items = append(items, Item{ID: AllPluginsSentinel, Label: "all"})
+	maxNameLen := 0
 	for _, p := range installed {
-		items = append(items, Item{ID: p.Name, Label: p.Name})
+		if len(p.Name) > maxNameLen {
+			maxNameLen = len(p.Name)
+		}
+	}
+	items := make([]Item, 0, len(installed)+1)
+	items = append(items, Item{ID: AllPluginsSentinel, Label: "[all]"})
+	for _, p := range installed {
+		label := p.Name
+		if !p.UpdatedAt.IsZero() {
+			pad := maxNameLen - len(p.Name) + 2
+			label += strings.Repeat(" ", pad) + p.UpdatedAt.Format(time.DateOnly)
+		}
+		items = append(items, Item{ID: p.Name, Label: label})
 	}
 	return items, nil
 }
@@ -44,11 +55,18 @@ func loadPluginsUninstallMenu(_ Context) ([]Item, error) {
 	return items, nil
 }
 
-// PluginReloadPrompt is sent after a plugin operation succeeds.
-type PluginReloadPrompt struct {
+// PluginInstallStart carries the list of uninstalled plugins for per-plugin
+// progress tracking in the UI.
+type PluginInstallStart struct {
 	Plugins   []plugin.Plugin
 	PluginDir string
-	Summary   string
+}
+
+// PluginUpdateStart carries the list of plugins to update with per-plugin
+// progress tracking in the UI.
+type PluginUpdateStart struct {
+	Plugins   []plugin.Plugin
+	PluginDir string
 }
 
 // PluginConfirmPrompt is sent before destructive plugin operations.
@@ -65,23 +83,18 @@ func PluginsInstallAction(ctx Context, item Item) tea.Cmd {
 		if err != nil {
 			return ActionResult{Err: err}
 		}
-		var uninstalled int
+		var toInstall []plugin.Plugin
 		for _, p := range plugins {
 			if !p.Installed {
-				uninstalled++
+				toInstall = append(toInstall, p)
 			}
 		}
-		if uninstalled == 0 {
+		if len(toInstall) == 0 {
 			return ActionResult{Info: "All plugins already installed"}
 		}
-		events.Plugins.Install("all")
-		if err := plugin.Install(pluginDir, plugins); err != nil {
-			return ActionResult{Err: err}
-		}
-		return PluginReloadPrompt{
-			Plugins:   plugins,
+		return PluginInstallStart{
+			Plugins:   toInstall,
 			PluginDir: pluginDir,
-			Summary:   fmt.Sprintf("Installed %d plugin(s)", uninstalled),
 		}
 	}
 }
@@ -118,16 +131,12 @@ func PluginsUpdateAction(ctx Context, item Item) tea.Cmd {
 			}
 		}
 
-		for _, p := range toUpdate {
-			events.Plugins.Update(p.Name)
+		if len(toUpdate) == 0 {
+			return ActionResult{Info: "No plugins selected"}
 		}
-		if err := plugin.Update(pluginDir, toUpdate); err != nil {
-			return ActionResult{Err: err}
-		}
-		return PluginReloadPrompt{
+		return PluginUpdateStart{
 			Plugins:   toUpdate,
 			PluginDir: pluginDir,
-			Summary:   fmt.Sprintf("Updated %d plugin(s)", len(toUpdate)),
 		}
 	}
 }

@@ -37,6 +37,70 @@ func TestParsePluginEntry(t *testing.T) {
 	}
 }
 
+func TestParseConfigLines(t *testing.T) {
+	content := `
+# comment line
+set -g @plugin 'tmux-plugins/tmux-sensible'
+set -g @plugin 'tmux-plugins/tmux-yank'
+set-option -g @plugin "user/my-plugin#dev"
+set -g status-left ''
+# another comment
+set -gq @plugin bare-plugin
+run '$HOME/.tmux/plugins/tpm/tpm'
+`
+	pairs := parseConfigLines(content)
+	want := []struct {
+		key   string
+		value string
+	}{
+		{"@plugin", "'tmux-plugins/tmux-sensible'"},
+		{"@plugin", "'tmux-plugins/tmux-yank'"},
+		{"@plugin", `"user/my-plugin#dev"`},
+		{"@plugin", "bare-plugin"},
+	}
+	if len(pairs) != len(want) {
+		t.Fatalf("got %d pairs, want %d: %+v", len(pairs), len(want), pairs)
+	}
+	for i, w := range want {
+		if pairs[i].Key != w.key || pairs[i].Value != w.value {
+			t.Errorf("pairs[%d] = {%q, %q}, want {%q, %q}", i, pairs[i].Key, pairs[i].Value, w.key, w.value)
+		}
+	}
+}
+
+func TestParseConfigLines_Empty(t *testing.T) {
+	pairs := parseConfigLines("")
+	if len(pairs) != 0 {
+		t.Fatalf("got %d pairs, want 0", len(pairs))
+	}
+	pairs = parseConfigLines("# only comments\n# more comments\n")
+	if len(pairs) != 0 {
+		t.Fatalf("got %d pairs for comments-only, want 0", len(pairs))
+	}
+}
+
+func TestParseConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "tmux.conf")
+	content := "set -g @plugin 'tmux-plugins/tmux-sensible'\nset -g @plugin 'tmux-plugins/tmux-yank'\n"
+	if err := os.WriteFile(cfgPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pairs, err := parseConfigFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pairs) != 2 {
+		t.Fatalf("got %d pairs, want 2", len(pairs))
+	}
+	if pairs[0].Value != "'tmux-plugins/tmux-sensible'" {
+		t.Errorf("pairs[0].Value = %q, want quoted sensible", pairs[0].Value)
+	}
+	if pairs[1].Value != "'tmux-plugins/tmux-yank'" {
+		t.Errorf("pairs[1].Value = %q, want quoted yank", pairs[1].Value)
+	}
+}
+
 func TestParsePluginEntries(t *testing.T) {
 	options := []optionPair{
 		{"@plugin", "tmux-plugins/tpm"},

@@ -28,3 +28,13 @@ func ListKeys(socketPath string) (string, error) {
 
 	return client.Command("list-keys")
 }
+
+// RunCommand sends an arbitrary tmux command via control mode.
+func RunCommand(socketPath string, args ...string) (string, error) {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return "", err
+	}
+
+	return client.Command(args...)
+}

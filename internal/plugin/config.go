@@ -35,23 +35,66 @@ func defaultOptionsFn(socketPath string) ([]optionPair, error) {
 	}
 	defer client.Close()
 
-	raw, err := client.Command("show-options", "-g")
+	// tmux global options are uniquely keyed — setting @plugin multiple times
+	// overwrites rather than appending. Read config file(s) directly instead,
+	// the same approach tpm uses.
+	raw, err := client.Command("display-message", "-p", "#{config_files}")
 	if err != nil {
-		return nil, fmt.Errorf("show-options -g: %w", err)
+		return nil, fmt.Errorf("display-message config_files: %w", err)
 	}
+	var allPairs []optionPair
+	for _, cfgPath := range strings.Split(strings.TrimSpace(raw), ",") {
+		cfgPath = strings.TrimSpace(cfgPath)
+		if cfgPath == "" {
+			continue
+		}
+		pairs, err := parseConfigFile(cfgPath)
+		if err != nil {
+			continue // skip unreadable files
+		}
+		allPairs = append(allPairs, pairs...)
+	}
+	return allPairs, nil
+}
+
+// parseConfigFile reads a tmux config file and extracts @plugin declarations.
+func parseConfigFile(path string) ([]optionPair, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return parseConfigLines(string(data)), nil
+}
+
+// parseConfigLines extracts @plugin declarations from tmux config content.
+// Matches lines like: set -g @plugin 'user/repo' or set-option -g @plugin "user/repo#branch"
+func parseConfigLines(content string) []optionPair {
 	var pairs []optionPair
-	for _, line := range strings.Split(raw, "\n") {
+	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		parts := strings.SplitN(line, " ", 2)
-		if len(parts) != 2 {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
 			continue
 		}
-		pairs = append(pairs, optionPair{Key: parts[0], Value: parts[1]})
+		if fields[0] != "set" && fields[0] != "set-option" {
+			continue
+		}
+		pluginIdx := -1
+		for i := 1; i < len(fields); i++ {
+			if fields[i] == "@plugin" {
+				pluginIdx = i
+				break
+			}
+		}
+		if pluginIdx < 0 || pluginIdx+1 >= len(fields) {
+			continue
+		}
+		pairs = append(pairs, optionPair{Key: "@plugin", Value: fields[pluginIdx+1]})
 	}
-	return pairs, nil
+	return pairs
 }
 
 // parsePluginEntry parses a single @plugin value like "user/repo#branch".

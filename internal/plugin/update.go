@@ -2,6 +2,20 @@ package plugin
 
 import "fmt"
 
+// UpdateOne pulls the latest changes for a single plugin and updates submodules.
+func UpdateOne(p Plugin) error {
+	if !p.Installed || p.Dir == "" {
+		return fmt.Errorf("plugin %s is not installed", p.Name)
+	}
+	if _, err := runGitCommand("-C", p.Dir, "pull"); err != nil {
+		return fmt.Errorf("git pull failed: %w", err)
+	}
+	if _, err := runGitCommand("-C", p.Dir, "submodule", "update", "--init", "--recursive"); err != nil {
+		return fmt.Errorf("submodule update failed: %w", err)
+	}
+	return nil
+}
+
 // Update pulls the latest changes for each plugin and updates submodules.
 func Update(pluginDir string, plugins []Plugin) error {
 	var errs []error

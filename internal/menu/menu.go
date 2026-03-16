@@ -103,8 +103,8 @@ func RootItems() []Item {
 		{ID: "command", Label: "command"},
 		{ID: "pane", Label: "pane"},
 		{ID: "window", Label: "window"},
-		{ID: "session", Label: "session"},
 		{ID: "plugins", Label: "plugins"},
+		{ID: "session", Label: "session"},
 	}
 }
 

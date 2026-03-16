@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/atomicstack/tmux-popup-control/internal/app"
 	"github.com/atomicstack/tmux-popup-control/internal/config"
@@ -34,8 +36,16 @@ func main() {
 
 	traceStartup(runtimeCfg)
 
-	if len(os.Args) > 1 && os.Args[1] == "init-plugins" {
-		if err := runInitPlugins(runtimeCfg); err != nil {
+	if len(os.Args) > 1 && os.Args[1] == "install-and-init-plugins" {
+		if err := runInstallAndInitPlugins(runtimeCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "deferred-install" {
+		if err := runDeferredInstall(runtimeCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -49,7 +59,7 @@ func main() {
 	}
 }
 
-func runInitPlugins(cfg config.Config) error {
+func runInstallAndInitPlugins(cfg config.Config) error {
 	socketPath, err := tmux.ResolveSocketPath(cfg.App.SocketPath)
 	if err != nil {
 		return fmt.Errorf("resolving socket: %w", err)
@@ -63,10 +73,82 @@ func runInitPlugins(cfg config.Config) error {
 	pluginDir := plugin.PluginDir()
 	events.Plugins.InitPlugins(len(plugins))
 
+	// Source already-installed plugins immediately.
 	if err := plugin.Source(pluginDir, plugins); err != nil {
 		return fmt.Errorf("sourcing plugins: %w", err)
 	}
+
+	// If any plugins need installing, schedule a deferred popup so the user
+	// sees the interactive install UI once tmux finishes starting.
+	for _, p := range plugins {
+		if !p.Installed {
+			return deferPluginInstall(socketPath)
+		}
+	}
 	return nil
+}
+
+// deferPluginInstall schedules a background tmux command that waits for
+// startup to complete, then opens the install TUI in a display-popup.
+func deferPluginInstall(socketPath string) error {
+	binary, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable: %w", err)
+	}
+	cmd := fmt.Sprintf("%s deferred-install -socket %s",
+		shellQuote(binary), shellQuote(socketPath))
+	_, err = tmux.RunCommand(socketPath, "run-shell", "-b", cmd)
+	return err
+}
+
+// runDeferredInstall is invoked via run-shell -b after the main
+// install-and-init-plugins command completes. It waits for tmux to be
+// fully ready, then opens the install TUI in a display-popup.
+func runDeferredInstall(cfg config.Config) error {
+	socketPath, err := tmux.ResolveSocketPath(cfg.App.SocketPath)
+	if err != nil {
+		return fmt.Errorf("resolving socket: %w", err)
+	}
+
+	plugins, err := plugin.ParseConfig(socketPath)
+	if err != nil {
+		return fmt.Errorf("reading plugin config: %w", err)
+	}
+
+	var needInstall bool
+	for _, p := range plugins {
+		if !p.Installed {
+			needInstall = true
+			break
+		}
+	}
+	if !needInstall {
+		return nil
+	}
+
+	// Wait for tmux to finish starting so display-popup has a client.
+	time.Sleep(500 * time.Millisecond)
+
+	// Find the real terminal client — display-popup must target it rather
+	// than the control-mode connection gotmuxcc uses.
+	clientName, err := tmux.FindTerminalClient(socketPath)
+	if err != nil {
+		return fmt.Errorf("finding terminal client: %w", err)
+	}
+
+	binary, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable: %w", err)
+	}
+	popupCmd := fmt.Sprintf("%s --root-menu plugins:install -socket %s",
+		shellQuote(binary), shellQuote(socketPath))
+	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
+	return err
+}
+
+// shellQuote wraps s in single quotes, escaping any embedded single quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func ensureZeroExitOnHangup() {

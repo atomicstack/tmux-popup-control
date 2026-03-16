@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -74,6 +75,29 @@ func popupSessionName(client tmuxClient) string {
 	}
 
 	return ""
+}
+
+// FindTerminalClient returns the name of the first non-control-mode client
+// attached to the tmux server, or an error if none is found.
+func FindTerminalClient(socketPath string) (string, error) {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return "", err
+	}
+	clients, err := client.ListClients()
+	if err != nil {
+		return "", err
+	}
+	for _, c := range clients {
+		if c == nil || c.ControlMode {
+			continue
+		}
+		name := strings.TrimSpace(c.Name)
+		if isValidClientName(name) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("no terminal client found")
 }
 
 // isValidClientName checks that name looks like a real tmux client

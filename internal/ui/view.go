@@ -93,8 +93,8 @@ func (m *Model) View() tea.View {
 	case ModePluginConfirm:
 		content = m.pluginConfirmView()
 		return m.wrapView(content)
-	case ModePluginReload:
-		content = m.pluginReloadView()
+	case ModePluginInstall:
+		content = m.pluginInstallView()
 		return m.wrapView(content)
 	}
 	if m.hasSidePreview() {
@@ -322,16 +322,10 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level, width i
 	indicatorStyle := styles.ItemIndicator
 	selectDisplay := ""
 	if current.MultiSelect {
-		if id == menu.AllPluginsSentinel {
-			if current.IsSelected(id) {
-				selectDisplay = styles.CheckboxAll.Render("☑") + " "
-			} else {
-				selectDisplay = styles.CheckboxAll.Render("☐") + " "
-			}
-		} else if current.IsSelected(id) {
-			selectDisplay = styles.CheckboxChecked.Render("☑") + " "
+		if current.IsSelected(id) {
+			selectDisplay = styles.CheckboxChecked.Render("■") + " "
 		} else {
-			selectDisplay = styles.Checkbox.Render("☐") + " "
+			selectDisplay = styles.Checkbox.Render("□") + " "
 		}
 	}
 	if idx == current.Cursor {
@@ -340,7 +334,7 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level, width i
 	}
 	fullText := indicator + " " + selectDisplay + label
 	if width > 0 {
-		if pad := width - len([]rune(fullText)); pad > 0 {
+		if pad := width - lipgloss.Width(fullText); pad > 0 {
 			fullText += strings.Repeat(" ", pad)
 		}
 	}

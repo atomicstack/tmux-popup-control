@@ -26,7 +26,7 @@ const (
 	ModeWindowForm
 	ModeSessionForm
 	ModePluginConfirm
-	ModePluginReload
+	ModePluginInstall
 )
 
 const (
@@ -92,7 +92,8 @@ type Model struct {
 	treeWindows        []menu.WindowEntry
 	treePanes          []menu.PaneEntry
 	pluginConfirmState *pluginConfirmState
-	pluginReloadState  *pluginReloadState
+	pluginInstallState *pluginInstallState
+	initCmd            tea.Cmd
 }
 
 // NewModel initialises the UI state with the root menu and configuration.
@@ -159,6 +160,10 @@ func (m *Model) Init() tea.Cmd {
 	if cmd := m.filterCursor.Focus(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if m.initCmd != nil {
+		cmds = append(cmds, m.initCmd)
+		m.initCmd = nil
+	}
 	if m.commandItemsCache == nil {
 		if node, ok := m.registry.Find("command"); ok && node.Loader != nil {
 			cmds = append(cmds, preloadCommandList(m.socketPath, node.Loader))
@@ -204,8 +209,8 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 		return m.handleSessionForm(msg)
 	case ModePluginConfirm:
 		return m.handlePluginConfirm(msg)
-	case ModePluginReload:
-		return m.handlePluginReload(msg)
+	case ModePluginInstall:
+		return m.handlePluginInstallKey(msg)
 	default:
 		return false, nil
 	}
@@ -229,7 +234,10 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(layoutAppliedMsg{}):      m.handleLayoutAppliedMsg,
 		reflect.TypeOf(tea.MouseWheelMsg{}):          m.handleMouseMsg,
 		reflect.TypeOf(menu.PluginConfirmPrompt{}):   m.handlePluginConfirmPromptMsg,
-		reflect.TypeOf(menu.PluginReloadPrompt{}):    m.handlePluginReloadPromptMsg,
+		reflect.TypeOf(pluginRemovalDoneMsg{}):       m.handlePluginRemovalDoneMsg,
+		reflect.TypeOf(menu.PluginInstallStart{}):    m.handlePluginInstallStartMsg,
+		reflect.TypeOf(menu.PluginUpdateStart{}):     m.handlePluginUpdateStartMsg,
+		reflect.TypeOf(pluginInstallDoneMsg{}):       m.handlePluginInstallDoneMsg,
 	}
 }
 

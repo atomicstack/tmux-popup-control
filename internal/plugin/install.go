@@ -5,6 +5,14 @@ import (
 	"os"
 )
 
+// InstallOne clones a single plugin that is not yet installed.
+func InstallOne(pluginDir string, p Plugin) error {
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		return fmt.Errorf("creating plugin directory: %w", err)
+	}
+	return clonePlugin(p)
+}
+
 // Install clones plugins that are not yet installed.
 func Install(pluginDir string, plugins []Plugin) error {
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {

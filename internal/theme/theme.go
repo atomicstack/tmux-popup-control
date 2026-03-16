@@ -24,6 +24,8 @@ type Styles struct {
 	Checkbox          *lipgloss.Style
 	CheckboxChecked   *lipgloss.Style
 	CheckboxAll       *lipgloss.Style
+	ProgressFilled    *lipgloss.Style
+	ProgressEmpty     *lipgloss.Style
 }
 
 var defaultStyles = Styles{
@@ -82,10 +84,16 @@ var defaultStyles = Styles{
 		lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
 	),
 	CheckboxChecked: ptr(
-		lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true),
 	),
 	CheckboxAll: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true),
+	),
+	ProgressFilled: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("33")),
+	),
+	ProgressEmpty: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("238")),
 	),
 }
 

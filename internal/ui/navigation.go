@@ -308,6 +308,25 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		if current := m.currentLevel(); current != nil {
 			if current.MultiSelect {
 				current.ToggleCurrentSelection()
+				// Sync "all" sentinel: toggling "all" on selects everything,
+				// toggling "all" off clears everything, deselecting any item
+				// while "all" is active deselects "all".
+				if current.Cursor >= 0 && current.Cursor < len(current.Items) {
+					item := current.Items[current.Cursor]
+					if item.ID == menu.AllPluginsSentinel {
+						if current.IsSelected(item.ID) {
+							for _, it := range current.Items {
+								if !current.IsSelected(it.ID) {
+									current.ToggleSelection(it.ID)
+								}
+							}
+						} else {
+							current.ClearSelection()
+						}
+					} else if !current.IsSelected(item.ID) && current.IsSelected(menu.AllPluginsSentinel) {
+						current.ToggleSelection(menu.AllPluginsSentinel)
+					}
+				}
 				return nil
 			}
 			if ghost := m.autoCompleteGhost(); ghost != "" {
@@ -451,6 +470,22 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		m.errMsg = fmt.Sprintf("Unknown root menu %q", trimmed)
 		m.rootMenuID = ""
 		m.rootTitle = defaultRootTitle
+		return
+	}
+
+	// If the node is a leaf action with no loader, execute it immediately.
+	if node.Loader == nil && node.Action != nil {
+		ctx := m.menuContext()
+		m.loading = true
+		m.pendingID = node.ID
+		m.initCmd = m.bus.Execute(ctx, command.Request{
+			ID:      node.ID,
+			Label:   node.ID,
+			Handler: node.Action,
+			Item:    menu.Item{ID: node.ID, Label: node.ID},
+		})
+		m.rootMenuID = node.ID
+		m.rootTitle = headerSegmentCleaner.Replace(node.ID)
 		return
 	}
 
