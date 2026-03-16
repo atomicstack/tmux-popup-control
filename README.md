@@ -1,8 +1,11 @@
-# tmux-popup-control [BETA]
+# tmux-popup-control
 
-A terminal UI for managing tmux sessions, windows, and panes from inside a
-`tmux display-popup`. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea)
-and [Lip Gloss](https://github.com/charmbracelet/lipgloss) (v2), inspired by
+A terminal UI for managing tmux sessions, windows, panes, and plugins from
+inside a `tmux display-popup`. Built with
+[Bubble Tea](https://github.com/charmbracelet/bubbletea) and
+[Lip Gloss](https://github.com/charmbracelet/lipgloss) (v2), using a
+persistent control-mode connection via
+[gotmuxcc](https://github.com/atomicstack/gotmuxcc). Inspired by
 [tmux-fzf](https://github.com/sainnhe/tmux-fzf).
 
 ## Features
@@ -13,51 +16,54 @@ and [Lip Gloss](https://github.com/charmbracelet/lipgloss) (v2), inspired by
 - **Rename** sessions via inline form
 - **Kill** sessions
 - **Detach** clients from sessions
-- **Tree view** showing the full session/window/pane hierarchy with
-  expand/collapse, filtering, and per-node previews
+- **Tree view** — full session/window/pane hierarchy with expand/collapse,
+  multi-word fuzzy filtering across the tree, and per-node live previews
 
 ### Window management
 - **Switch** windows with live pane-capture preview
 - **Rename** windows via inline form
-- **Kill** windows (multi-select supported)
+- **Kill** windows (multi-select)
 - **Swap** windows
 - **Move** windows between sessions
 - **Link** windows into other sessions
+- **Layout** presets with live preview (even-horizontal, even-vertical,
+  main-horizontal, main-vertical, tiled)
 
 ### Pane management
 - **Switch** panes with live pane-capture preview
 - **Rename** panes via inline form
-- **Kill** panes (multi-select supported)
+- **Kill** panes (multi-select)
 - **Swap** panes
-- **Join** panes from other windows (multi-select supported)
+- **Join** panes from other windows (multi-select)
 - **Break** pane out to its own window
 - **Resize** panes (left/right/up/down)
-- **Layout** presets (even-horizontal, even-vertical, main-horizontal, etc.)
+
+### Plugin management
+- **Install** plugins declared via `@plugin` in tmux config (tpm-compatible)
+- **Update** plugins via git pull (multi-select, with `[all]` option)
+- **Uninstall** plugins with per-plugin confirmation (multi-select, with `[all]` option)
+- **Status columns** in update/uninstall submenus and preview panel showing
+  installed/undeclared state with color coding
+- **`install-and-init-plugins`** CLI subcommand — drop-in replacement for tpm's
+  `run '~/.tmux/plugins/tpm/tpm'` in tmux.conf; sources installed plugins at
+  startup and opens a deferred popup for any that need installing
 
 ### Other menus
-- **Keybinding** browser -- lists all tmux key bindings, filterable
-- **Command** browser -- lists all tmux commands, filterable
+- **Keybinding** browser — lists all tmux key bindings, filterable
+- **Command** browser — lists all tmux commands, filterable
 
 ### UI
 - Fuzzy-search filtering on every menu level
 - Breadcrumb navigation with push/pop menu stack
-- Side-by-side preview panel (pane capture with ANSI rendering, mouse-wheel
-  scrollable) for session/window/pane switch menus
-- Background polling (~4 Hz) keeps menu data in sync with tmux state
-- Multi-select with Tab for bulk operations (kill, join)
+- Side-by-side preview panel with ANSI rendering and mouse-wheel scrolling
+- Background polling keeps menu data in sync with tmux state
+- Multi-select with Tab for bulk operations
 - Alt-screen with mouse cell-motion support
 
 ## Not yet implemented
 
-- **Process management** -- menu entries exist (display, tree, terminate, kill,
-  interrupt, continue, stop, quit, hangup) but no action handlers are wired up
-- **Clipboard** -- menu entries exist (tmux buffers, system clipboard via copyq)
-  but no action handlers are wired up
-- Custom tmux format strings for session/window labels
-  (`TMUX_POPUP_CONTROL_SESSION_FORMAT`, `TMUX_POPUP_CONTROL_WINDOW_FORMAT`)
-- Window/pane filter expressions (`TMUX_POPUP_CONTROL_WINDOW_FILTER`)
-- Toggling current session/window/pane visibility in switch menus
-  (`TMUX_POPUP_CONTROL_SWITCH_CURRENT`)
+- **Process management** — menu entries exist but no action handlers are wired up
+- **Clipboard** — menu entries exist but no action handlers are wired up
 
 ## Prerequisites
 
@@ -70,25 +76,22 @@ The repository keeps Go build artifacts inside the workspace (`.gocache/`,
 `.gomodcache/`) so it works cleanly in sandboxed environments. Use the Makefile:
 
 ```sh
-make build    # builds the binary ./tmux-popup-control
-make run      # runs the application
-make test     # runs all tests
-make cover    # runs tests with coverage report
-make tidy     # refreshes go.mod/go.sum
-make fmt      # gofmt on the repository
-```
-
-To clear the local caches:
-
-```sh
-make clean-cache
+make build           # builds ./tmux-popup-control
+make run             # runs the application
+make test            # runs all tests
+make cover           # runs tests with coverage report
+make fmt             # gofmt -w .
+make tidy            # go mod tidy
+make clean-cache     # removes .gocache/ and .gomodcache/
+make update-gotmuxcc # fetches latest gotmuxcc + re-vendors (online)
+make release         # cross-compiles + creates GitHub release via gh
 ```
 
 ## Configuration
 
 | Flag / env var | Purpose |
 |---|---|
-| `--socket` / `TMUX_POPUP_CONTROL_SOCKET` | tmux socket path (falls back to `$TMUX`) |
+| `--socket` / `TMUX_POPUP_CONTROL_SOCKET` | tmux socket path (falls back to `TMUX_POPUP_SOCKET`, then `$TMUX`) |
 | `--root-menu` / `TMUX_POPUP_CONTROL_ROOT_MENU` | open directly into a submenu (e.g. `window`, `pane:swap`, `session:tree`) |
 | `--menu-args` / `TMUX_POPUP_CONTROL_MENU_ARGS` | arguments for the target menu (e.g. `expanded` for `session:tree`) |
 | `--width` / `TMUX_POPUP_CONTROL_WIDTH` | viewport width in cells (0 = terminal width) |
@@ -97,28 +100,58 @@ make clean-cache
 | `--verbose` / `TMUX_POPUP_CONTROL_VERBOSE` | print success messages for actions |
 | `--log-file` / `TMUX_POPUP_CONTROL_LOG_FILE` | log file path |
 | `--trace` / `TMUX_POPUP_CONTROL_TRACE` | enable verbose JSON trace logging |
+| `TMUX_POPUP_CONTROL_CLIENT` | explicit client ID override (env only) |
+| `TMUX_POPUP_CONTROL_SESSION` | explicit session name override (env only) |
+
+### CLI subcommands
+
+| Subcommand | Purpose |
+|---|---|
+| `install-and-init-plugins` | sources installed plugins at tmux startup; opens a deferred install popup for any missing plugins |
+| `deferred-install` | internal helper invoked via `run-shell -b`; waits for tmux startup, then opens the install UI in a `display-popup` |
+| `--version` | prints the version string and exits |
+
+### Migrating from tpm
+
+Replace the tpm `run` line in `~/.tmux.conf`:
+
+```tmux
+# before
+run '~/.tmux/plugins/tpm/tpm'
+
+# after
+run '/path/to/tmux-popup-control install-and-init-plugins'
+```
+
+Keep all `set -g @plugin '...'` declarations unchanged — tmux-popup-control
+reads the same format.
 
 ## Architecture
 
 See `CLAUDE.md` for detailed architecture notes. In brief:
 
 ```
-main.go              CLI entry point, config loading, signal handling
-internal/config/     CLI flags + env vars
-internal/app/        wires backend + UI model, runs tea.Program
-internal/backend/    polls tmux state (~4 Hz) via goroutines
-internal/state/      thread-safe in-memory stores (sessions, windows, panes)
-internal/tmux/       tmux operations via gotmuxcc control-mode + exec fallback
-internal/menu/       menu tree definitions, loaders, action handlers
-internal/ui/         Bubble Tea model, split across focused files
-internal/theme/      lipgloss styles
-internal/logging/    structured JSON log file
+main.go                   CLI entry point, config, signal handling, plugin subcommands
+internal/config/          CLI flags + env vars → Config struct
+internal/app/             wires backend + UI model, runs tea.Program
+internal/backend/         polls tmux state via goroutines
+internal/state/           thread-safe in-memory stores (sessions, windows, panes)
+internal/tmux/            tmux operations via gotmuxcc control-mode + exec fallback
+internal/menu/            menu tree definitions, loaders, action handlers
+internal/ui/              Bubble Tea model, split across focused files
+internal/ui/state/        per-level items, cursor, filter, selection, viewport
+internal/format/table/    columnar table formatting with alignment
+internal/plugin/          plugin management (discover, install, update, uninstall, source)
+internal/theme/           lipgloss styles
+internal/logging/         structured JSON log file + trace events
+internal/testutil/        integration test helpers
 ```
 
 ## Dependencies
 
-- [bubbletea v2](https://charm.land/bubbletea/v2) -- terminal UI framework
-- [bubbles v2](https://charm.land/bubbles/v2) -- text input, cursor components
-- [lipgloss v2](https://charm.land/lipgloss/v2) -- terminal styling and layout
-- [gotmuxcc](https://github.com/atomicstack/gotmuxcc) -- tmux control-mode client (vendored)
-- [fuzzysearch](https://github.com/lithammer/fuzzysearch) -- fuzzy string matching
+- [bubbletea v2](https://github.com/charmbracelet/bubbletea) — terminal UI framework
+- [bubbles v2](https://github.com/charmbracelet/bubbles) — text input, cursor components
+- [lipgloss v2](https://github.com/charmbracelet/lipgloss) — terminal styling and layout
+- [charmbracelet/x/ansi](https://github.com/charmbracelet/x) — ANSI-aware string operations
+- [gotmuxcc](https://github.com/atomicstack/gotmuxcc) — tmux control-mode client (vendored)
+- [fuzzysearch](https://github.com/lithammer/fuzzysearch) — fuzzy string matching
