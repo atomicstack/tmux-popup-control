@@ -8,23 +8,53 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+)
+
+var (
+	buildOnce    sync.Once
+	sharedBin    string
+	sharedBinErr error
 )
 
 func buildBinary(t *testing.T) string {
 	t.Helper()
 	RequireTmux(t)
-	root := repoRoot(t)
-	tdir := t.TempDir()
-	bin := filepath.Join(tdir, "tmux-popup-control")
-	cmd := exec.Command("go", "build", "-o", bin, "./")
-	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOCACHE="+filepath.Join(tdir, ".gocache"))
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("failed to build binary: %v", err)
+	buildOnce.Do(func() {
+		root := findRepoRoot()
+		binDir, err := os.MkdirTemp("", "tmux-popup-control-bin-*")
+		if err != nil {
+			sharedBinErr = fmt.Errorf("create bin temp dir: %w", err)
+			return
+		}
+		bin := filepath.Join(binDir, "tmux-popup-control")
+		cmd := exec.Command("go", "build", "-o", bin, "./")
+		cmd.Dir = root
+		cmd.Env = buildEnv(root)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			sharedBinErr = fmt.Errorf("build binary: %s: %w", output, err)
+			_ = os.RemoveAll(binDir)
+			return
+		}
+		sharedBin = bin
+	})
+	if sharedBinErr != nil {
+		t.Fatalf("failed to build binary: %v", sharedBinErr)
 	}
-	return bin
+	return sharedBin
+}
+
+// buildEnv returns the environment for go build, using the workspace caches.
+func buildEnv(root string) []string {
+	env := os.Environ()
+	return append(env,
+		"GOCACHE="+filepath.Join(root, ".gocache"),
+		"GOMODCACHE="+filepath.Join(root, ".gomodcache"),
+		"GOFLAGS=-modcacherw",
+		"GOPROXY=off",
+	)
 }
 
 // launchBinary starts the tmux-popup-control binary in a new detached session
@@ -146,9 +176,13 @@ func shellQuote(s string) string {
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
+	return findRepoRoot()
+}
+
+func findRepoRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {
-		t.Fatalf("getwd failed: %v", err)
+		return "."
 	}
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
