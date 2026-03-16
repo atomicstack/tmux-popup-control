@@ -9,7 +9,7 @@ func TestLoadPluginsMenu(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"install", "update", "uninstall", "tidy"}
+	want := []string{"install", "update", "uninstall"}
 	if len(items) != len(want) {
 		t.Fatalf("got %d items, want %d", len(items), len(want))
 	}

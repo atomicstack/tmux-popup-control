@@ -9,8 +9,9 @@ import (
 
 // Item represents a selectable menu entry.
 type Item struct {
-	ID    string
-	Label string
+	ID          string
+	Label       string
+	StyledLabel string // optional; when set, used for display instead of Label
 }
 
 // Level describes a breadcrumb component for display purposes.
@@ -152,7 +153,6 @@ func ActionHandlers() map[string]Action {
 		"plugins:install":   PluginsInstallAction,
 		"plugins:update":    PluginsUpdateAction,
 		"plugins:uninstall": PluginsUninstallAction,
-		"plugins:tidy":      PluginsTidyAction,
 	}
 }
 

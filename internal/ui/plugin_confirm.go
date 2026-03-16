@@ -38,7 +38,7 @@ type pluginConfirmState struct {
 	entries   []pluginConfirmEntry
 	current   int // index of entry currently being asked
 	pluginDir string
-	operation string // "uninstall" or "tidy"
+	operation string // "uninstall"
 	phase     pluginConfirmPhase
 	summary   string
 	confirmed []plugin.Plugin // plugins that were removed (for reload)
@@ -202,12 +202,8 @@ func (m *Model) handlePluginRemovalDoneMsg(msg tea.Msg) tea.Cmd {
 		}
 	}
 
-	action := "Uninstalled"
-	if s.operation == "tidy" {
-		action = "Tidied"
-	}
 	s.phase = pluginConfirmPhaseDone
-	s.summary = fmt.Sprintf("%s %d plugin(s)", action, len(confirmed))
+	s.summary = fmt.Sprintf("Uninstalled %d plugin(s)", len(confirmed))
 	s.confirmed = confirmed
 	return nil
 }
@@ -220,14 +216,8 @@ func (m *Model) pluginConfirmView() string {
 	}
 
 	headerText := "Uninstalling plugins..."
-	if s.operation == "tidy" {
-		headerText = "Tidying plugins..."
-	}
 	if s.phase == pluginConfirmPhaseDone {
 		headerText = "Uninstall complete"
-		if s.operation == "tidy" {
-			headerText = "Tidy complete"
-		}
 	}
 
 	var b strings.Builder

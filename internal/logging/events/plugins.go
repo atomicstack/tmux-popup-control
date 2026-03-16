@@ -20,10 +20,6 @@ func (PluginTracer) Uninstall(name string) {
 	logging.Trace("plugins.uninstall", map[string]interface{}{"name": name})
 }
 
-func (PluginTracer) Tidy(name string) {
-	logging.Trace("plugins.tidy", map[string]interface{}{"name": name})
-}
-
 func (PluginTracer) Source(name string) {
 	logging.Trace("plugins.source", map[string]interface{}{"name": name})
 }

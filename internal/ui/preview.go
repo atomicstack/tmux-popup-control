@@ -10,6 +10,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/plugin"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type previewKind int
@@ -85,11 +86,12 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 		lines := m.pluginPreviewLines()
 		m.previewSeq++
 		m.preview[level.ID] = &previewData{
-			kind:   kind,
-			target: "__plugins__",
-			label:  "Plugins",
-			lines:  lines,
-			seq:    m.previewSeq,
+			kind:    kind,
+			target:  "__plugins__",
+			label:   "Plugins",
+			lines:   lines,
+			seq:     m.previewSeq,
+			rawANSI: true,
 		}
 		return nil
 	}
@@ -510,7 +512,38 @@ func (m *Model) pluginPreviewLines() []string {
 		rows[i] = []string{e.name, e.status, e.updated}
 	}
 	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignRight})
+
+	// Apply colour to the status column after alignment so ANSI codes
+	// don't interfere with column width calculation.
+	for i, e := range entries {
+		if styled := pluginStatusStyled(e.status); styled != "" {
+			// Search after the plugin name to avoid false matches.
+			if idx := strings.Index(aligned[i][len(e.name):], e.status); idx >= 0 {
+				pos := len(e.name) + idx
+				aligned[i] = aligned[i][:pos] + styled + aligned[i][pos+len(e.status):]
+			}
+		}
+	}
 	return aligned
+}
+
+var (
+	pluginStatusInstalled   = lipgloss.NewStyle().Foreground(lipgloss.Color("34"))
+	pluginStatusUninstalled = lipgloss.NewStyle().Foreground(lipgloss.Color("172"))
+	pluginStatusUndeclared  = lipgloss.NewStyle().Foreground(lipgloss.Color("93"))
+)
+
+func pluginStatusStyled(status string) string {
+	switch status {
+	case "installed":
+		return pluginStatusInstalled.Render(status)
+	case "not installed":
+		return pluginStatusUninstalled.Render(status)
+	case "undeclared":
+		return pluginStatusUndeclared.Render(status)
+	default:
+		return ""
+	}
 }
 
 func windowMatchesTarget(entry menu.PaneEntry, target string) bool {

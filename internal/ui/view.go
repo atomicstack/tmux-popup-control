@@ -143,7 +143,7 @@ func (m *Model) viewVertical(header string) string {
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
-				lines = append(lines, m.buildItemLine(item.ID, item.Label, idx, current, m.width))
+				lines = append(lines, m.buildItemLine(item, idx, current, m.width))
 			}
 		}
 	}
@@ -246,7 +246,7 @@ func (m *Model) viewSideBySide(header string) string {
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
-				contentLines = append(contentLines, m.buildItemLine(item.ID, item.Label, idx, current, menuW))
+				contentLines = append(contentLines, m.buildItemLine(item, idx, current, menuW))
 			}
 		}
 	}
@@ -316,7 +316,7 @@ func (m *Model) viewSideBySide(header string) string {
 // buildItemLine constructs a single styledLine for a menu item.
 // width is the target column width; when > 0 the text is padded so that
 // the selected item's background spans the full container.
-func (m *Model) buildItemLine(id, label string, idx int, current *level, width int) styledLine {
+func (m *Model) buildItemLine(item menu.Item, idx int, current *level, width int) styledLine {
 	indicator := "▌"
 	lineStyle := styles.Item
 	indicatorStyle := styles.ItemIndicator
@@ -325,9 +325,9 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level, width i
 		lineStyle = styles.SelectedItem
 	}
 	if current.MultiSelect {
-		return m.buildMultiSelectLine(id, label, indicator, lineStyle, indicatorStyle, current, width)
+		return m.buildMultiSelectLine(item, indicator, lineStyle, indicatorStyle, current, width)
 	}
-	fullText := indicator + " " + label
+	fullText := indicator + " " + item.Label
 	if width > 0 {
 		if pad := width - lipgloss.Width(fullText); pad > 0 {
 			fullText += strings.Repeat(" ", pad)
@@ -345,10 +345,10 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level, width i
 // Each segment (indicator, checkbox, body) is rendered independently to avoid
 // ANSI nesting issues where an inner reset would break the outer background.
 // The result is marked raw so applyWidth uses ANSI-aware truncation.
-func (m *Model) buildMultiSelectLine(id, label, indicator string, lineStyle, indicatorStyle *lipgloss.Style, current *level, width int) styledLine {
+func (m *Model) buildMultiSelectLine(item menu.Item, indicator string, lineStyle, indicatorStyle *lipgloss.Style, current *level, width int) styledLine {
 	var cbChar string
 	var cbBaseStyle *lipgloss.Style
-	if current.IsSelected(id) {
+	if current.IsSelected(item.ID) {
 		cbChar = "■"
 		cbBaseStyle = styles.CheckboxChecked
 	} else {
@@ -361,9 +361,14 @@ func (m *Model) buildMultiSelectLine(id, label, indicator string, lineStyle, ind
 		cbStyle = cbStyle.Inherit(*lineStyle)
 	}
 
-	bodyContent := label
+	// Use plain Label for width measurement, StyledLabel for display.
+	displayLabel := item.Label
+	if item.StyledLabel != "" {
+		displayLabel = item.StyledLabel
+	}
+	bodyContent := displayLabel
 	if width > 0 {
-		visWidth := lipgloss.Width(indicator + " " + cbChar + " " + label)
+		visWidth := lipgloss.Width(indicator + " " + cbChar + " " + item.Label)
 		if pad := width - visWidth; pad > 0 {
 			bodyContent += strings.Repeat(" ", pad)
 		}
