@@ -40,6 +40,14 @@ make update-gotmuxcc # fetches latest gotmuxcc + re-vendors (online)
 make release         # cross-compiles + creates GitHub release via gh
 ```
 
+### Releasing
+
+`make release` cross-compiles, packages tarballs, generates checksums, and calls `gh release create`. The version comes from `git describe --tags`, so **tag first** (`git tag vX.Y.Z`), **push the tag** (`git push origin vX.Y.Z`), then run `make release VERSION=X.Y.Z`. The `VERSION` override ensures the ldflags match the tag even if `git describe` adds a suffix.
+
+To supply custom release notes instead of `--generate-notes`, write a notes file and pass it: override the `gh release create` step manually or edit the Makefile target. The `gh release create` flag for notes is `--notes-file` (or `-n` for inline `--notes`), **not** `--body`.
+
+**Do not build binaries separately before running `make release`** — the Makefile target already handles cross-compilation. Building manually first just duplicates the work.
+
 To run a single test or package:
 ```sh
 GOCACHE=$(pwd)/.gocache GOMODCACHE=$(pwd)/.gomodcache GOFLAGS=-modcacherw GOPROXY=off go test ./internal/tmux/... -run TestFetchSessions
