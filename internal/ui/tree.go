@@ -67,13 +67,13 @@ func buildTree(
 				wIndicator := treeExpandIndicator(state, wid)
 				pk := fmt.Sprintf("%s\x00%d", sess.Name, win.Index)
 				pc := paneCounts[pk]
-				wLabel := fmt.Sprintf("%s%s (%d panes)", wIndicator, win.Label, pc)
+				wLabel := fmt.Sprintf("%s%s (%d panes)", wIndicator, menu.TreeWindowLabel(win), pc)
 
 				windowNode := tree.Root(wLabel)
 
 				if state.IsExpanded(wid) {
 					for _, pane := range paneByWindow[fmt.Sprintf("%s\x00%d", sess.Name, win.Index)] {
-						windowNode.Child(pane.Label)
+						windowNode.Child(menu.TreePaneLabel(pane))
 					}
 				}
 				sessionNode.Child(windowNode)

@@ -398,6 +398,40 @@ func TestTreeFilterAllItemsSelectable(t *testing.T) {
 	}
 }
 
+func TestTreeRendersCompactLabels(t *testing.T) {
+	sessions := []menu.SessionEntry{
+		{Name: "dev", Windows: 1},
+	}
+	windows := []menu.WindowEntry{
+		{ID: "@1", Label: "dev:0: bash", Name: "bash", Session: "dev", Index: 0},
+	}
+	panes := []menu.PaneEntry{
+		{ID: "%1", Label: "dev:0.0: [bash:~] vim  [120x40]", Session: "dev", WindowIdx: 0, Index: 0},
+	}
+
+	m := testTreeModel(sessions, windows, panes, true)
+	view := m.View().Content
+
+	// Window label should use compact form (no session prefix).
+	if strings.Contains(view, "dev:0:") {
+		t.Fatalf("expected compact window label without session prefix, got:\n%s", view)
+	}
+	if !strings.Contains(view, "0: bash") {
+		t.Fatalf("expected compact window label '0: bash', got:\n%s", view)
+	}
+
+	// Pane label should strip prefix and swap [name:cwd] after command.
+	if strings.Contains(view, "dev:0.0:") {
+		t.Fatalf("expected compact pane label without session prefix, got:\n%s", view)
+	}
+	if strings.Contains(view, "[bash:~] vim") {
+		t.Fatalf("expected [name:cwd] to be swapped after command, got:\n%s", view)
+	}
+	if !strings.Contains(view, "vim [bash:~]") {
+		t.Fatalf("expected 'vim [bash:~]' (command before name/cwd), got:\n%s", view)
+	}
+}
+
 func TestBuildTreeDFSOrder(t *testing.T) {
 	sessions := []menu.SessionEntry{
 		{Name: "a", Windows: 1},

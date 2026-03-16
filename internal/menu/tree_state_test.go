@@ -320,6 +320,125 @@ func TestFilterItemsMultiWordPaneContext(t *testing.T) {
 	}
 }
 
+func TestTreeWindowLabel(t *testing.T) {
+	tests := []struct {
+		name    string
+		entry   WindowEntry
+		want    string
+	}{
+		{
+			name:  "strips session prefix",
+			entry: WindowEntry{Label: "main:0: bash", Session: "main", Index: 0},
+			want:  "0: bash",
+		},
+		{
+			name:  "different session and index",
+			entry: WindowEntry{Label: "work:2: vim", Session: "work", Index: 2},
+			want:  "2: vim",
+		},
+		{
+			name:  "no prefix match returns label unchanged",
+			entry: WindowEntry{Label: "bash", Session: "main", Index: 0},
+			want:  "bash",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := TreeWindowLabel(tt.entry); got != tt.want {
+				t.Errorf("TreeWindowLabel() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTreePaneLabel(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry PaneEntry
+		want  string
+	}{
+		{
+			name: "strips prefix and swaps blocks",
+			entry: PaneEntry{
+				Label:     "dev:0.1: [bash:~] vim  [120x40] [history 500/10000, 12345 bytes] [active]",
+				Session:   "dev",
+				WindowIdx: 0,
+				Index:     1,
+			},
+			want: "1: vim [bash:~]  [120x40] [history 500/10000, 12345 bytes] [active]",
+		},
+		{
+			name: "no prefix match still swaps blocks",
+			entry: PaneEntry{
+				Label:     "[zsh:/tmp] top  [80x24]",
+				Session:   "main",
+				WindowIdx: 0,
+				Index:     0,
+			},
+			want: "0: top [zsh:/tmp]  [80x24]",
+		},
+		{
+			name: "plain label without brackets",
+			entry: PaneEntry{
+				Label:     "pane-1",
+				Session:   "main",
+				WindowIdx: 0,
+				Index:     0,
+			},
+			want: "0: pane-1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := TreePaneLabel(tt.entry); got != tt.want {
+				t.Errorf("TreePaneLabel() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSwapLeadingBracketBlock(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"[bash:~] vim  [80x24]", "vim [bash:~]  [80x24]"},
+		{"[name:title] cmd", "cmd [name:title]"},
+		{"no brackets here", "no brackets here"},
+		{"[only bracket]", "[only bracket]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := swapLeadingBracketBlock(tt.input); got != tt.want {
+				t.Errorf("swapLeadingBracketBlock(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildTreeItemsUsesCompactLabels(t *testing.T) {
+	sessions := []SessionEntry{{Name: "dev", Windows: 1}}
+	windows := []WindowEntry{{
+		ID: "@1", Label: "dev:0: bash", Session: "dev", Index: 0,
+	}}
+	panes := []PaneEntry{{
+		ID: "%1", Label: "dev:0.0: [bash:~] zsh  [80x24]", Session: "dev", WindowIdx: 0, Index: 0,
+	}}
+
+	state := NewTreeState(true)
+	items := state.BuildTreeItems(sessions, windows, panes)
+
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(items))
+	}
+	if items[1].Label != "0: bash" {
+		t.Errorf("window label = %q, want %q", items[1].Label, "0: bash")
+	}
+	if items[2].Label != "0: zsh [bash:~]  [80x24]" {
+		t.Errorf("pane label = %q, want %q", items[2].Label, "0: zsh [bash:~]  [80x24]")
+	}
+}
+
 func TestTreeIsExpandable(t *testing.T) {
 	if !TreeIsExpandable("tree:s:main") {
 		t.Error("session should be expandable")

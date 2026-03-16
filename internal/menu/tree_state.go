@@ -91,6 +91,49 @@ func paneKey(session string, windowIdx int) string {
 	return fmt.Sprintf("%s\x00%d", session, windowIdx)
 }
 
+// treeWindowLabel produces a compact label for a window in the tree.
+// Since windows are nested under their session, the "session:" prefix is
+// stripped, leaving just "index: rest".
+func TreeWindowLabel(win WindowEntry) string {
+	prefix := fmt.Sprintf("%s:%d: ", win.Session, win.Index)
+	if strings.HasPrefix(win.Label, prefix) {
+		return fmt.Sprintf("%d: %s", win.Index, win.Label[len(prefix):])
+	}
+	return win.Label
+}
+
+// treePaneLabel produces a compact label for a pane in the tree.
+// The "session:window." prefix is stripped, leaving just "paneIndex: rest",
+// and the [name:title] block is moved after the command.
+func TreePaneLabel(pane PaneEntry) string {
+	prefix := fmt.Sprintf("%s:%d.%d: ", pane.Session, pane.WindowIdx, pane.Index)
+	rest := strings.TrimPrefix(pane.Label, prefix)
+	rest = swapLeadingBracketBlock(rest)
+	return fmt.Sprintf("%d: %s", pane.Index, rest)
+}
+
+// swapLeadingBracketBlock rearranges "[name:title] command ..." to
+// "command [name:title] ...". If the string doesn't start with a bracket
+// block, it is returned unchanged.
+func swapLeadingBracketBlock(s string) string {
+	if !strings.HasPrefix(s, "[") {
+		return s
+	}
+	close := strings.Index(s, "] ")
+	if close < 0 {
+		return s
+	}
+	bracket := s[:close+1]
+	after := strings.TrimLeft(s[close+1:], " ")
+	cmdEnd := strings.Index(after, "  ")
+	if cmdEnd < 0 {
+		return after + " " + bracket
+	}
+	command := after[:cmdEnd]
+	remaining := after[cmdEnd:]
+	return command + " " + bracket + remaining
+}
+
 func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntry, panes []PaneEntry) []Item {
 	winBySession := make(map[string][]WindowEntry)
 	for _, w := range windows {
@@ -112,14 +155,14 @@ func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntr
 		}
 		for _, win := range winBySession[sess.Name] {
 			wid := TreeWindowID(sess.Name, win.Index)
-			items = append(items, Item{ID: wid, Label: win.Label})
+			items = append(items, Item{ID: wid, Label: TreeWindowLabel(win)})
 
 			if !s.IsExpanded(wid) {
 				continue
 			}
 			for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
 				pid := TreePaneID(sess.Name, win.Index, pane.ID)
-				items = append(items, Item{ID: pid, Label: pane.Label})
+				items = append(items, Item{ID: pid, Label: TreePaneLabel(pane)})
 			}
 		}
 	}
@@ -162,12 +205,12 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 				pid := TreePaneID(sess.Name, win.Index, pane.ID)
 				paneContext := winContext + " " + pane.Label + " " + pane.ID
 				if treeAllWordsMatch(paneContext, words) {
-					windowChildren = append(windowChildren, Item{ID: pid, Label: pane.Label})
+					windowChildren = append(windowChildren, Item{ID: pid, Label: TreePaneLabel(pane)})
 				}
 			}
 
 			if windowMatches || len(windowChildren) > 0 {
-				sessionChildren = append(sessionChildren, Item{ID: wid, Label: win.Label})
+				sessionChildren = append(sessionChildren, Item{ID: wid, Label: TreeWindowLabel(win)})
 				sessionChildren = append(sessionChildren, windowChildren...)
 			}
 		}
@@ -190,10 +233,10 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 					if alreadyAdded {
 						continue
 					}
-					sessionChildren = append(sessionChildren, Item{ID: wid, Label: win.Label})
+					sessionChildren = append(sessionChildren, Item{ID: wid, Label: TreeWindowLabel(win)})
 					for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
 						pid := TreePaneID(sess.Name, win.Index, pane.ID)
-						sessionChildren = append(sessionChildren, Item{ID: pid, Label: pane.Label})
+						sessionChildren = append(sessionChildren, Item{ID: pid, Label: TreePaneLabel(pane)})
 					}
 				}
 			}
