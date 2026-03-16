@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace tpm by adding plugin management to tmux-popup-control — an `internal/plugin/` package for git-based operations, a "plugins" menu in the popup UI, and an `init-plugins` CLI subcommand.
+**Goal:** Replace tpm by adding plugin management to tmux-popup-control — an `internal/plugin/` package for git-based operations, a "plugins" menu in the popup UI, and an `install-and-init-plugins` CLI subcommand.
 
-**Architecture:** New `internal/plugin/` package encapsulates all plugin logic (parse config, install, update, uninstall, tidy, source). Menu layer (`internal/menu/plugins.go`) provides loaders and actions that call into the plugin package. Two new UI modes (`ModePluginConfirm`, `ModePluginReload`) handle deletion confirmation and reload prompts. The `init-plugins` subcommand reuses the plugin package for tmux startup sourcing.
+**Architecture:** New `internal/plugin/` package encapsulates all plugin logic (parse config, install, update, uninstall, tidy, source). Menu layer (`internal/menu/plugins.go`) provides loaders and actions that call into the plugin package. Two new UI modes (`ModePluginConfirm`, `ModePluginReload`) handle deletion confirmation and reload prompts. The `install-and-init-plugins` subcommand reuses the plugin package for tmux startup sourcing.
 
 **Tech Stack:** Go, Bubble Tea (charm.land/bubbletea/v2), lipgloss, gotmuxcc (vendored), os/exec for git
 
@@ -1582,7 +1582,7 @@ git commit -m "test(plugin): add plugin menu loader tests"
 
 ---
 
-## Chunk 3: UI modes and init-plugins subcommand
+## Chunk 3: UI modes and install-and-init-plugins subcommand
 
 ### Task 10: Plugin confirmation and reload UI modes
 
@@ -1926,17 +1926,17 @@ git commit -m "feat(plugin): add coloured checkbox rendering for multi-select"
 
 ---
 
-### Task 12: init-plugins CLI subcommand
+### Task 12: install-and-init-plugins CLI subcommand
 
 **Files:**
 - Modify: `main.go`
 
-- [ ] **Step 1: Add init-plugins dispatch**
+- [ ] **Step 1: Add install-and-init-plugins dispatch**
 
 In `main.go`, after `config.MustLoad()` and logging setup, add the subcommand check. Place it after `logging.Configure` so logging is available, but before `app.Run`:
 
 ```go
-if len(os.Args) > 1 && os.Args[1] == "init-plugins" {
+if len(os.Args) > 1 && os.Args[1] == "install-and-init-plugins" {
 	if err := runInitPlugins(runtimeCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -1980,7 +1980,7 @@ Expected: Compiles successfully
 
 ```bash
 git add main.go
-git commit -m "feat(plugin): add init-plugins CLI subcommand"
+git commit -m "feat(plugin): add install-and-init-plugins CLI subcommand"
 ```
 
 ---
@@ -1999,9 +1999,9 @@ Expected: All tests PASS
 Run: `make build`
 Expected: Binary compiles
 
-- [ ] **Step 3: Verify init-plugins runs**
+- [ ] **Step 3: Verify install-and-init-plugins runs**
 
-Run: `./tmux-popup-control init-plugins 2>&1; echo "exit: $?"`
+Run: `./tmux-popup-control install-and-init-plugins 2>&1; echo "exit: $?"`
 Expected: Either succeeds (exit 0) or fails gracefully with "Error resolving socket" if not inside tmux (exit 1). Should not panic.
 
 - [ ] **Step 4: Final commit if any fixups were needed**

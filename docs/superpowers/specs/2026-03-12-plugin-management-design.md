@@ -108,7 +108,7 @@ plugins
 | `PluginsInstallAction` | `ActionHandlers["plugins:install"]` | Calls `plugin.ParseConfig()` + `plugin.Install()` for all uninstalled-but-declared plugins. Returns `PluginReloadPrompt` on success |
 | `PluginsUpdateAction` | `ActionHandlers["plugins:update"]` | Calls `plugin.Update()` for selected plugins. If the `AllPluginsSentinel` ID is among the selected items, updates all installed plugins. Returns `PluginReloadPrompt` on success |
 | `PluginsUninstallAction` | `ActionHandlers["plugins:uninstall"]` | For each selected plugin, shows confirmation prompt: "Are you sure you want to remove the plugin named {name} in the directory {dir}?" — proceeds only on explicit confirmation. Then calls `plugin.Uninstall()`. Returns `PluginReloadPrompt` on success |
-| `PluginsTidyAction` | `ActionHandlers["plugins:tidy"]` | Computes the removal set by calling `plugin.Installed()` and `plugin.ParseConfig()` to find the diff (installed but not declared). Returns a `PluginConfirmPrompt` with this set. After per-plugin confirmation, calls `plugin.Uninstall()` on the confirmed subset (not `plugin.Tidy()` directly — `Tidy` is only used by `init-plugins` or non-interactive contexts). Returns `PluginReloadPrompt` on success |
+| `PluginsTidyAction` | `ActionHandlers["plugins:tidy"]` | Computes the removal set by calling `plugin.Installed()` and `plugin.ParseConfig()` to find the diff (installed but not declared). Returns a `PluginConfirmPrompt` with this set. After per-plugin confirmation, calls `plugin.Uninstall()` on the confirmed subset (not `plugin.Tidy()` directly — `Tidy` is only used by `install-and-init-plugins` or non-interactive contexts). Returns `PluginReloadPrompt` on success |
 
 #### Deletion confirmation
 
@@ -157,12 +157,12 @@ The `PluginReloadPrompt` message carries the list of affected plugins, the plugi
 
 Plugin loaders do not need data injected into `menu.Context`. Unlike sessions/windows/panes (which come from the backend poller), plugin data is loaded on-demand from the filesystem. Loaders only need `SocketPath` (already in Context) to resolve the plugin directory.
 
-### CLI subcommand: `init-plugins`
+### CLI subcommand: `install-and-init-plugins`
 
 Replaces tpm's startup role. Users put this in `~/.tmux.conf`:
 
 ```bash
-run '~/.local/bin/tmux-popup-control init-plugins'
+run '~/.local/bin/tmux-popup-control install-and-init-plugins'
 ```
 
 #### Behavior
@@ -177,11 +177,11 @@ Does **not** auto-install missing plugins — that is an explicit user action vi
 
 #### Implementation in `main.go`
 
-The `init-plugins` check is placed **after** `config.MustLoad()` so that the `-socket` flag and `TMUX_POPUP_CONTROL_SOCKET` env var are parsed and available, and logging is configured. The socket path comes from the parsed config's `SocketPath` field, falling back to `tmux.ResolveSocketPath("")` if empty. Errors from `ResolveSocketPath` must be checked and cause a non-zero exit.
+The `install-and-init-plugins` check is placed **after** `config.MustLoad()` so that the `-socket` flag and `TMUX_POPUP_CONTROL_SOCKET` env var are parsed and available, and logging is configured. The socket path comes from the parsed config's `SocketPath` field, falling back to `tmux.ResolveSocketPath("")` if empty. Errors from `ResolveSocketPath` must be checked and cause a non-zero exit.
 
 ```go
 cfg := config.MustLoad()
-if len(os.Args) > 1 && os.Args[1] == "init-plugins" {
+if len(os.Args) > 1 && os.Args[1] == "install-and-init-plugins" {
     socketPath, err := tmux.ResolveSocketPath(cfg.App.SocketPath)
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -250,7 +250,7 @@ In `internal/plugin/integration_test.go`. Skipped when `git` is unavailable. Clo
 
 | File | Change |
 |---|---|
-| `main.go` | Add `init-plugins` subcommand dispatch before Bubble Tea startup |
+| `main.go` | Add `install-and-init-plugins` subcommand dispatch before Bubble Tea startup |
 | `internal/menu/menu.go` | Add "plugins" to `RootItems()`, `CategoryLoaders()`, `ActionLoaders()`, `ActionHandlers()` |
 | `internal/menu/registry.go` | Add `plugins:update` and `plugins:uninstall` to `markMultiSelect` |
 | `internal/ui/model.go` | Add `ModePluginConfirm` and `ModePluginReload` to Mode enum, add `PluginConfirmState` struct, register handlers for `PluginConfirmPrompt` and `PluginReloadPrompt` message types, add `handlePluginConfirm` and `handlePluginReload` methods |
@@ -260,5 +260,5 @@ In `internal/plugin/integration_test.go`. Skipped when `git` is unavailable. Clo
 Users migrating from tpm:
 
 1. Keep all `set -g @plugin '...'` lines unchanged
-2. Replace `run '~/.tmux/plugins/tpm/tpm'` with `run '/path/to/tmux-popup-control init-plugins'`
+2. Replace `run '~/.tmux/plugins/tpm/tpm'` with `run '/path/to/tmux-popup-control install-and-init-plugins'`
 3. Optionally remove tpm from `~/.tmux/plugins/` and its `@plugin` declaration
