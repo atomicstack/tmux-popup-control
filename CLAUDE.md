@@ -93,6 +93,8 @@ Root menu categories (in display order): process, clipboard, keybinding, command
 
 The UI maintains a `stack []*level` where each level holds the current items, cursor, filter state, and viewport offset. Navigation pushes/pops levels. Multi-select (tab to mark) is enabled per node in the registry (`window:kill`, `pane:join`, `pane:kill`, `plugins:update`, `plugins:uninstall`).
 
+**Menu item styling:** all menu levels must use `buildItemLine` for consistent rendering. The selected item's highlight (background colour) must fill the full container width. Multi-select lines are rendered as `raw: true` via `buildMultiSelectLine`, which renders each segment (indicator, checkbox, body) independently with composite styles to avoid ANSI nesting issues. Checkbox characters (■/□) use `styles.CheckboxChecked`/`styles.Checkbox` foreground composited with the line's background via `Inherit`.
+
 ### UI decomposition (`internal/ui/`)
 
 | File | Responsibility |
