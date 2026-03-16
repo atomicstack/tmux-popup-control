@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -9,6 +10,9 @@ import (
 
 	"github.com/atomicstack/tmux-popup-control/internal/app"
 )
+
+// ErrVersionRequested is returned by Load when --version is passed.
+var ErrVersionRequested = errors.New("version requested")
 
 // Config captures runtime configuration for the application.
 type Config struct {
@@ -63,9 +67,14 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	logFile := fs.String("log-file", envOrDefault(env, envLogFile, ""), "path to the log file")
 	rootMenu := fs.String("root-menu", envOrDefault(env, envRootMenu, ""), "open directly into the specified menu path")
 	menuArgs := fs.String("menu-args", envOrDefault(env, envMenuArgs, ""), "arguments for the target menu (e.g. 'expanded' for session:tree)")
+	showVersion := fs.Bool("version", false, "print version and exit")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
+	}
+
+	if *showVersion {
+		return Config{}, ErrVersionRequested
 	}
 
 	if *width < 0 {

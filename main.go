@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -21,12 +22,16 @@ import (
 var Version = "dev"
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version") {
+	ensureZeroExitOnHangup()
+	runtimeCfg, err := config.Load()
+	if errors.Is(err, config.ErrVersionRequested) {
 		fmt.Println(Version)
 		os.Exit(0)
 	}
-	ensureZeroExitOnHangup()
-	runtimeCfg := config.MustLoad()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
+		os.Exit(2)
+	}
 	if err := config.Validate(runtimeCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
 		os.Exit(2)
