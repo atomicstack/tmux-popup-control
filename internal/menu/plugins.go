@@ -48,7 +48,8 @@ func loadPluginsUninstallMenu(_ Context) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	items := make([]Item, 0, len(installed))
+	items := make([]Item, 0, len(installed)+1)
+	items = append(items, Item{ID: AllPluginsSentinel, Label: "[all]"})
 	for _, p := range installed {
 		items = append(items, Item{ID: p.Name, Label: p.Name})
 	}
@@ -150,14 +151,26 @@ func PluginsUninstallAction(ctx Context, item Item) tea.Cmd {
 		}
 
 		selected := parseMultiSelectIDs(item.ID)
-		nameSet := make(map[string]struct{}, len(selected))
+		uninstallAll := false
 		for _, id := range selected {
-			nameSet[id] = struct{}{}
+			if id == AllPluginsSentinel {
+				uninstallAll = true
+				break
+			}
 		}
+
 		var toRemove []plugin.Plugin
-		for _, p := range installed {
-			if _, ok := nameSet[p.Name]; ok {
-				toRemove = append(toRemove, p)
+		if uninstallAll {
+			toRemove = installed
+		} else {
+			nameSet := make(map[string]struct{}, len(selected))
+			for _, id := range selected {
+				nameSet[id] = struct{}{}
+			}
+			for _, p := range installed {
+				if _, ok := nameSet[p.Name]; ok {
+					toRemove = append(toRemove, p)
+				}
 			}
 		}
 		if len(toRemove) == 0 {

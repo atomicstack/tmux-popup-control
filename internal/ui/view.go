@@ -320,19 +320,14 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level, width i
 	indicator := "▌"
 	lineStyle := styles.Item
 	indicatorStyle := styles.ItemIndicator
-	selectDisplay := ""
-	if current.MultiSelect {
-		if current.IsSelected(id) {
-			selectDisplay = styles.CheckboxChecked.Render("■") + " "
-		} else {
-			selectDisplay = styles.Checkbox.Render("□") + " "
-		}
-	}
 	if idx == current.Cursor {
 		indicatorStyle = styles.SelectedItemIndicator
 		lineStyle = styles.SelectedItem
 	}
-	fullText := indicator + " " + selectDisplay + label
+	if current.MultiSelect {
+		return m.buildMultiSelectLine(id, label, indicator, lineStyle, indicatorStyle, current, width)
+	}
+	fullText := indicator + " " + label
 	if width > 0 {
 		if pad := width - lipgloss.Width(fullText); pad > 0 {
 			fullText += strings.Repeat(" ", pad)
@@ -343,6 +338,47 @@ func (m *Model) buildItemLine(id, label string, idx int, current *level, width i
 		style:         lineStyle,
 		prefixStyle:   indicatorStyle,
 		highlightFrom: 1, // just the ▌ character
+	}
+}
+
+// buildMultiSelectLine renders a multi-select item with a styled checkbox.
+// Each segment (indicator, checkbox, body) is rendered independently to avoid
+// ANSI nesting issues where an inner reset would break the outer background.
+// The result is marked raw so applyWidth uses ANSI-aware truncation.
+func (m *Model) buildMultiSelectLine(id, label, indicator string, lineStyle, indicatorStyle *lipgloss.Style, current *level, width int) styledLine {
+	var cbChar string
+	var cbBaseStyle *lipgloss.Style
+	if current.IsSelected(id) {
+		cbChar = "■"
+		cbBaseStyle = styles.CheckboxChecked
+	} else {
+		cbChar = "□"
+		cbBaseStyle = styles.Checkbox
+	}
+	// Composite checkbox style: checkbox fg/bold + line background.
+	cbStyle := *cbBaseStyle
+	if lineStyle != nil {
+		cbStyle = cbStyle.Inherit(*lineStyle)
+	}
+
+	bodyContent := label
+	if width > 0 {
+		visWidth := lipgloss.Width(indicator + " " + cbChar + " " + label)
+		if pad := width - visWidth; pad > 0 {
+			bodyContent += strings.Repeat(" ", pad)
+		}
+	}
+
+	styledIndicator := indicatorStyle.Render(indicator)
+	var styledBody string
+	if lineStyle != nil {
+		styledBody = lineStyle.Render(" ") + cbStyle.Render(cbChar) + lineStyle.Render(" "+bodyContent)
+	} else {
+		styledBody = " " + cbStyle.Render(cbChar) + " " + bodyContent
+	}
+	return styledLine{
+		text: styledIndicator + styledBody,
+		raw:  true,
 	}
 }
 
