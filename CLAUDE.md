@@ -22,6 +22,8 @@ Check `todo.md` and `done.md` at the start of sessions to understand current sta
 
 **Key principle:** use the gotmuxcc persistent control-mode connection for all tmux operations. Direct `tmux` exec (`runExecCommand`) is a last resort for operations not yet exposed by gotmuxcc. Never work around gotmuxcc bugs — report them so they can be fixed upstream.
 
+**Do not hand-roll code when a vendored dependency already provides the functionality.** Before writing low-level helpers (ANSI escape codes, string manipulation, formatting), check what `lipgloss`, `charmbracelet/x/ansi`, `bubbletea`, and other vendored libraries expose. For example, use `ansi.Style.ForegroundColor()` instead of emitting raw `\x1b[38;5;…m` sequences.
+
 ## Commands
 
 The repository uses a Makefile that keeps Go build artifacts inside the workspace (`.gocache/`, `.gomodcache/`) and sets `GOPROXY=off` for offline builds. Always use `make` targets rather than raw `go` commands:
