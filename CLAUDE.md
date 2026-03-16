@@ -2,32 +2,40 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Overview:
+This tool is called tmux-popup-control. It is a Golang port and improvement of
+the tmux-fzf (https://github.com/sainnhe/tmux-fzf) plugin for tmux. This tool
+uses Bubble Tea and Lip Gloss from the Charm project for its TUI and styling,
+gotmuxcc by @atomicstack as a tmux control-mode client library, and Fuzzy
+Search by @lithammer for dealing with user input.
+
 ## Project context
 
 The `context/` directory tracks ongoing work:
 - `context/context.md` — project overview and design goals
 - `context/todo.md` — pending work items
 - `context/done.md` — completed work log
-- `context/scratchpad.md` — cross-session environment notes
 
 Check `todo.md` and `done.md` at the start of sessions to understand current state. Update them after completing work.
 
 **Design goals:** colourful, dynamic, modern feel; fast and async (goroutines for background work); code that is clear, concise, and modular (logic in sub-packages, not dumped into the model); comprehensive tests kept in sync with the code.
 
-**Reference implementation:** a local checkout of tmux-fzf lives at `/tmp/tmux-fzf`.
+**Key principle:** use the gotmuxcc persistent control-mode connection for all tmux operations. Direct `tmux` exec (`runExecCommand`) is a last resort for operations not yet exposed by gotmuxcc. Never work around gotmuxcc bugs — report them so they can be fixed upstream.
 
 ## Commands
 
 The repository uses a Makefile that keeps Go build artifacts inside the workspace (`.gocache/`, `.gomodcache/`) and sets `GOPROXY=off` for offline builds. Always use `make` targets rather than raw `go` commands:
 
 ```sh
-make build      # builds ./tmux-popup-control
-make run        # runs the application
-make test       # runs all tests
-make cover      # runs tests with coverage report
-make fmt        # gofmt -w .
-make tidy       # go mod tidy
-make clean-cache
+make build           # builds ./tmux-popup-control
+make run             # runs the application
+make test            # runs all tests
+make cover           # runs tests with coverage report
+make fmt             # gofmt -w .
+make tidy            # go mod tidy
+make clean-cache     # removes .gocache/ and .gomodcache/
+make update-gotmuxcc # fetches latest gotmuxcc + re-vendors (online)
+make release         # cross-compiles + creates GitHub release via gh
 ```
 
 To run a single test or package:
@@ -42,6 +50,12 @@ UPDATE_GOLDEN=1 make test
 
 Integration tests (in `internal/testutil/`, `internal/tmux/integration_test.go`, `internal/ui/integration_test.go`) require a live tmux socket and are skipped automatically when tmux is unavailable.
 
+### CLI subcommands
+
+Besides the default TUI mode, `main.go` supports:
+- `install-and-init-plugins` — called during tmux startup; sources installed plugins, schedules a deferred popup for any uninstalled ones.
+- `deferred-install` — background helper that waits for tmux startup, then opens the plugin install UI in a `display-popup`.
+
 ## Architecture
 
 This is a [Bubble Tea](https://github.com/charmbracelet/bubbletea) TUI that wraps tmux as a popup control menu. The app runs inside a `tmux display-popup` and communicates with tmux via the `gotmuxcc` library (vendored).
@@ -49,28 +63,35 @@ This is a [Bubble Tea](https://github.com/charmbracelet/bubbletea) TUI that wrap
 ### Layer overview
 
 ```
-main.go                → config loading, signal handling, app.Run()
-internal/config/       → CLI flags + env vars → Config struct
-internal/app/          → wires backend.Watcher + ui.Model, runs tea.Program
-internal/backend/      → Watcher polls tmux every 1.5s (sessions/windows/panes) via goroutines
+main.go                   → config loading, signal handling, app.Run(), plugin subcommands
+internal/config/          → CLI flags + env vars → Config struct
+internal/app/             → wires backend.Watcher + ui.Model, runs tea.Program
+internal/backend/         → Watcher polls tmux every 1.5s (sessions/windows/panes) via goroutines
 internal/data/dispatcher/ → converts backend.Events into state store updates
-internal/state/        → SessionStore, WindowStore, PaneStore (in-memory, thread-safe)
-internal/tmux/         → wraps tmux CLI + gotmuxcc for all tmux operations
-internal/menu/         → menu tree definitions, loaders, action handlers
-internal/ui/           → Bubble Tea Model; split across focused files
-internal/theme/        → lipgloss styles (theme.Default())
-internal/logging/      → structured JSON log file; events/ sub-package for trace points
+internal/state/           → SessionStore, WindowStore, PaneStore (in-memory, thread-safe)
+internal/tmux/            → gotmuxcc control-mode client (primary) + exec fallback for tmux operations
+internal/menu/            → menu tree definitions, loaders, action handlers
+internal/ui/              → Bubble Tea Model; split across focused files
+internal/ui/state/        → Level type: items, cursor, filter, selection, viewport for one menu depth
+internal/ui/command/      → command bus for menu action dispatch with trace logging
+internal/format/table/    → columnar table formatting with alignment
+internal/plugin/          → tmux plugin management (discover, install, update, uninstall, source)
+internal/theme/           → lipgloss styles (theme.Default())
+internal/logging/         → structured JSON log file; events/ sub-package for trace points
+internal/testutil/        → integration test helpers (StartTmuxServer, CapturePane, SendKeys, etc.)
 ```
 
 ### Menu system
 
 Menu items are identified by colon-separated IDs (e.g. `session:switch`, `pane:kill`). `internal/menu/registry.go` builds a `Registry` tree from three maps defined in `menu.go`:
 
-- `CategoryLoaders()` — top-level submenu loaders (session, window, pane, etc.)
+- `CategoryLoaders()` — top-level submenu loaders (session, window, pane, process, clipboard, keybinding, command, plugins)
 - `ActionLoaders()` — loaders for nested items within actions
 - `ActionHandlers()` — leaf actions that execute tmux operations
 
-The UI maintains a `stack []*level` where each level holds the current items, cursor, filter state, and viewport offset. Navigation pushes/pops levels. Multi-select (tab to mark) is enabled per node in the registry (`window:kill`, `pane:join`, `pane:kill`).
+Root menu categories (in display order): process, clipboard, keybinding, command, pane, window, plugins, session.
+
+The UI maintains a `stack []*level` where each level holds the current items, cursor, filter state, and viewport offset. Navigation pushes/pops levels. Multi-select (tab to mark) is enabled per node in the registry (`window:kill`, `pane:join`, `pane:kill`, `plugins:update`, `plugins:uninstall`).
 
 ### UI decomposition (`internal/ui/`)
 
@@ -79,32 +100,49 @@ The UI maintains a `stack []*level` where each level holds the current items, cu
 | `model.go` | `Model` struct, `Init`/`Update`, handler dispatch via `reflect.Type` map |
 | `navigation.go` | cursor movement, enter/escape handling, level stack management |
 | `input.go` | text filter input, backspace, filter cursor |
-| `view.go` | `View()` rendering, `limitHeight`, `applyWidth`, viewport logic |
+| `view.go` | `View()` rendering, side-by-side preview layout, viewport logic, mouse handling |
 | `commands.go` | backend event handling, menu loading commands |
 | `prompt.go` | filter prompt rendering |
 | `forms.go` | rename/new-session forms (ModePaneForm, ModeWindowForm, ModeSessionForm) |
 | `backend.go` | `waitForBackendEvent`, backend update dispatch |
-| `preview.go` | inline preview for session/window/pane switch menus |
+| `preview.go` | async preview system (pane capture, tree, layout, plugin overview) |
+| `tree.go` | hierarchical session/window/pane tree view with expand/collapse |
+| `plugin_confirm.go` | plugin uninstall/tidy confirmation UI (cycles through plugins with y/n) |
+| `plugin_install.go` | per-plugin progress display for install/update operations |
+
+UI modes: `ModeMenu`, `ModePaneForm`, `ModeWindowForm`, `ModeSessionForm`, `ModePluginConfirm`, `ModePluginInstall`.
 
 ### State sub-package (`internal/ui/state/`)
 
 `level.go` / `cursor.go` / `filter.go` / `selection.go` / `items.go` — the `Level` type owns items, cursor, filter, selection, and viewport for one menu depth.
 
+### Session tree (`internal/menu/tree_state.go`)
+
+`TreeState` tracks expand/collapse state for hierarchical session/window/pane browsing. `BuildTreeItems` produces a flat item list respecting expand state; `FilterTreeItems` supports fuzzy filtering with ancestor visibility. Tree item IDs use prefixes: `"tree:s:"`, `"tree:w:"`, `"tree:p:"`.
+
 ### tmux layer (`internal/tmux/`)
 
+**Shared control-mode connection:** `newTmux` caches a single long-lived gotmuxcc client behind a `sync.Mutex`, returning the cached instance when the socket path matches and reconnecting when it changes. `tmux.Shutdown()` closes the cached connection at app exit (called via `defer` in `app.Run`).
+
 Two communication paths coexist:
-1. **gotmuxcc control-mode** (`client.go`, `sessions.go`, `windows.go`) — used for structured queries (list sessions, create/rename/kill, switch client).
-2. **exec `tmux` subprocess** (`command.go`, `panes.go`) — used for operations not exposed cleanly via control mode (rename-pane, resize-pane, capture-pane, etc.).
+1. **gotmuxcc control-mode** (`client.go`, `sessions.go`, `windows.go`, `panes.go`, `preview.go`) — the primary path for nearly all tmux operations (list/create/rename/kill sessions and windows, switch client, display-message, capture-pane, rename/resize pane, etc.).
+2. **exec `tmux` subprocess** (`command.go`, `snapshots.go`, `sessions.go`) — resilience fallbacks only (`killSessionCLI`, `detachSessionCLI`, `hasSessionCLI`, `fetchSessionsFallback`), used when control-mode races or is unavailable.
 
 `runExecCommand` is a package-level var (`func(name string, args ...string) commander`) swapped in tests with `withStubCommander`. `newTmux` is similarly swappable for `fakeClient` in tests.
 
-**Important:** every gotmuxcc client must be `Close()`d after use. Failing to do so leaks background `tmux -C` processes.
+**Handle interfaces:** `windowHandle` and `sessionHandle` interfaces abstract gotmuxcc types so lifecycle operations (Select, Kill, Rename, Detach) can be tested with stub handles without a live server. `newWindowHandle` and `newSessionHandle` are injectable package-level vars.
 
-**Handle interfaces:** `windowHandle` and `sessionHandle` interfaces in `internal/tmux` abstract gotmuxcc types so lifecycle operations (Select, Kill, Rename, Detach) can be tested with stub handles without a live server. `newWindowHandle` and `newSessionHandle` are injectable package-level vars.
+**Client identification:** `CurrentClientID` resolves the user's TTY client (not the control-mode client) by finding non-control-mode clients attached to the popup's session. `FindTerminalClient` provides a similar lookup for plugin subcommands.
 
 **Resilience:** fetchers fall back to direct `tmux` CLI calls when control-mode races or returns stale data. Vanished resources are silently ignored rather than failing whole queries.
 
-**Backend polling** (`internal/backend/`) is rate-limited to ~4Hz via a 250ms throttle per poller goroutine.
+### Backend polling (`internal/backend/`)
+
+The `Watcher` runs three goroutines (sessions, windows, panes), each polling on a 1.5s ticker interval. Each poller additionally has a 250ms throttle to prevent bursts if fetches complete faster than expected.
+
+### Plugin system (`internal/plugin/`)
+
+Discovers plugins from `@plugin` declarations in tmux config files (matching tpm conventions). Supports install (git clone with GitHub URL fallback), update (git pull + submodule update), uninstall, tidy (find undeclared plugins), and source (execute `*.tmux` files). `runGitCommand` is a package-level var injectable for tests.
 
 ### Configuration
 
@@ -114,6 +152,9 @@ CLI flags and env vars are both supported. Key env vars:
 |---|---|
 | `TMUX_POPUP_CONTROL_SOCKET` / `TMUX_POPUP_SOCKET` / `$TMUX` | Socket path resolution (flag wins) |
 | `TMUX_POPUP_CONTROL_ROOT_MENU` | Launch directly into a submenu (e.g. `window`, `pane:swap`) |
+| `TMUX_POPUP_CONTROL_MENU_ARGS` | Arguments for target menu (e.g. `"expanded"` for `session:tree`) |
+| `TMUX_POPUP_CONTROL_CLIENT` | Explicit client ID override |
+| `TMUX_POPUP_CONTROL_SESSION` | Explicit session name override |
 | `TMUX_POPUP_CONTROL_WIDTH/HEIGHT` | Override terminal dimensions |
 | `TMUX_POPUP_CONTROL_FOOTER` | Show keybinding hint row |
 | `TMUX_POPUP_CONTROL_LOG_FILE` | Log file path |
@@ -128,19 +169,24 @@ CLI flags and env vars are both supported. Key env vars:
 
 ### Preview system
 
-Previews render below the menu list for `session:switch`, `window:switch`, and `pane:switch` levels. Session and window previews are built synchronously from cached snapshot data in the `Model`. Pane previews fire an async `tmux capture-pane` command (`panePreviewFn`, injectable for tests). Per-level sequence numbers prevent stale responses from overwriting newer data.
+Previews render for switch menus (`session:switch`, `window:switch`, `pane:switch`, `pane:join`), the session tree (`session:tree`), layout selection (`window:layout`), and the plugins menu. The default layout is **side-by-side**: a rounded-border preview panel on the right (60% width) when the terminal is wide enough, falling back to vertical (inline below the list) when too narrow. Mouse wheel scrolling is supported in the preview panel.
+
+Preview content varies by kind: pane/session/window previews use async `client.CapturePane` via control-mode (`panePreviewFn`, injectable for tests), with a fallback to static window/pane lists when no active pane is found. Layout previews apply the selected layout live. Plugin previews show a static status table. Per-level sequence numbers prevent stale responses from overwriting newer data. Pane previews default-scroll to the bottom so recent output is visible.
 
 ### gotmuxcc dependency
 
-The library is vendored under `vendor/`. Changes to gotmuxcc require updating the sibling repo in `~/git_tree/gotmuxcc`, not the vendor copy.
+The library is vendored under `vendor/`. Changes to gotmuxcc require updating the sibling repo in `~/git_tree/gotmuxcc`, not the vendor copy. Use `make update-gotmuxcc` to pull the latest version.
 
 ## Pending work
 
 From `context/todo.md`:
-- Review whether `LinkWindow`/`MoveWindow`/`SwapWindows` and pane move/break flows need `windowHandle`-style abstractions or expanded fake scenarios.
+- Review whether remaining tmux helpers (LinkWindow/MoveWindow/SwapWindows, pane move/break flows) need handle abstractions or expanded fake scenarios.
 - Consider extending integration coverage to pane moves/swaps and multi-session client interactions.
-- Evaluate whether additional message handlers in `model.go` (handler registry management) should be decomposed further or covered with focused tests.
-- Identify further UI cleanups or feature work once the refactor settles.
+- Evaluate whether additional message handlers in `model.go` should be decomposed further or covered with focused tests.
+- Consider adding reconnection logic to the shared control-mode connection if the cached client's transport dies mid-session.
+- Investigate pre-existing `TestRootMenuRendering` integration test failure.
+- Review whether the vertical (inline) preview fallback path is still needed or can be removed.
+- Verify popup width in `main.sh` is set wide enough for comfortable side-by-side preview.
 
 ## Testing patterns
 
@@ -149,3 +195,4 @@ From `context/todo.md`:
 - Golden files live in `testdata/capture/`; regenerate with `UPDATE_GOLDEN=1`.
 - Integration tests (`internal/testutil/`, `internal/tmux/integration_test.go`, `internal/ui/integration_test.go`) build the binary and spin up a temporary tmux server via `StartTmuxServer`. They clear `$TMUX` so the user's own session is never touched, and tear down via `KillServer` to avoid orphaned processes.
 - Each integration test uses a fresh socket path to avoid cross-test contamination.
+- Plugin tests use injectable `runGitCommand` for stubbing git operations.
