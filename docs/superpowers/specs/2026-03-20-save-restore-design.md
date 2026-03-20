@@ -31,6 +31,8 @@ Four new items under the existing `session` category:
 - `session:restore-from` action loader scans the save directory and returns a
   list of saves as menu items → user selects → handler sends
   `ResurrectStart{Operation: "restore", SaveFile: path}` → `ModeResurrect`.
+  If the save directory does not exist or is empty, the loader returns no
+  items and the menu shows the standard empty-list placeholder.
 
 ## CLI subcommands
 
@@ -50,9 +52,15 @@ popup command. Extra parameters are passed via env vars:
 - `restore-sessions` (no flag) → restores from `last` symlink, no extra env
   var.
 
-The popup binary reads `os.Args[1]` (`save-sessions` or `restore-sessions`)
-to determine the operation, and the env vars for parameters. It skips the
-normal menu and enters `ModeResurrect` directly.
+**Popup detection:** The outer CLI invocation (run by the user or a tmux
+keybinding) launches `tmux display-popup` with the binary as the popup
+command, passing a `--resurrect-popup` flag to signal that the binary is
+running inside the popup and should enter `ModeResurrect` directly. The
+operation type is conveyed by `os.Args[1]` (`save-sessions` or
+`restore-sessions`), and optional parameters via env vars. Without
+`--resurrect-popup`, the subcommand launches the popup; with it, the
+subcommand enters the progress UI. This prevents the popup from re-launching
+another popup.
 
 `--name` and `--from` accept either a bare name (resolved in the save
 directory) or a full path.
@@ -122,7 +130,9 @@ The restore logic derives the archive path from the JSON filename by replacing
 
 - Auto-saves: `save_20260320T143022.json`
 - Named snapshots: `my-snapshot.json`
-- `last` — symlink pointing to the most recent auto-save's JSON file.
+- `last` — symlink pointing to the most recent auto-save's JSON file. Named
+  snapshots (`session:save-as`) do **not** update the `last` symlink — it
+  always points to the latest auto-timestamped save only.
 - No automatic pruning for now; users manage their own saves.
 
 ## Directory resolution
@@ -211,9 +221,10 @@ Fetch all sessions, windows, and panes upfront using existing
 
 ### Conflict handling
 
-If a session with the same name already exists, skip it and log a warning.
-The log area will show clearly what was skipped. This behaviour may change in
-the future.
+If a session with the same name already exists, skip it and all its windows
+and panes, logging a warning. Skipped sessions still consume their budgeted
+step count as no-ops so the progress bar total remains accurate. The log area
+will show clearly what was skipped. This behaviour may change in the future.
 
 ## Progress UI
 
@@ -252,8 +263,9 @@ type logEntry struct {
 ### Handler chain
 
 1. `handleResurrectStartMsg` → initialises `resurrectState`, calls
-   `resurrect.Save()` or `resurrect.Restore()`, returns
-   `readResurrectProgress` command.
+   `resurrect.Save()` or `resurrect.Restore()` (which return the channel
+   immediately with no blocking — all discovery and I/O runs in the spawned
+   goroutine), returns `readResurrectProgress` command.
 2. `readResurrectProgress` → reads one event from channel, wraps as
    `resurrectProgressMsg`.
 3. `handleResurrectProgressMsg` → appends to log, updates step/total; if done,
@@ -319,8 +331,17 @@ Error lines use the existing `styles.Error` (red).
 
 ### Save-as form
 
-`ModeSessionSaveForm` reuses the existing form pattern from `forms.go` —
-single text input for the snapshot name, enter to submit, escape to cancel.
+`ModeSessionSaveForm` is added to the `Mode` iota in `model.go` (alongside
+`ModePaneForm`, `ModeWindowForm`, `ModeSessionForm`, etc.) and wired into
+`handleActiveForm` for key routing. It reuses the existing form rendering
+pattern from `forms.go` — single text input for the snapshot name, enter to
+submit, escape to cancel. Validation checks that the name does not collide
+with an existing save file in the save directory (distinct from the existing
+`ModeSessionForm` which validates against tmux session names).
+
+**Named snapshot collision:** If a save file with the chosen name already
+exists, the save overwrites it silently. The form does not prevent reuse of
+an existing name — this allows intentional updates to named snapshots.
 
 ## Configuration
 
@@ -378,17 +399,54 @@ func ListSaves(dir string) ([]SaveEntry, error)
 func LatestSave(dir string) (string, error)
 ```
 
-`Save()` and `Restore()` return a read-only channel and spawn a goroutine
-internally. The UI consumes events via Bubble Tea commands — one command per
-event, each returning a `tea.Cmd` that reads the next event.
+`Save()` and `Restore()` return a read-only channel **immediately** with no
+blocking work on the call path. All discovery (fetching sessions/windows/panes)
+and I/O runs inside the spawned goroutine. The first `ProgressEvent` sent on
+the channel includes the computed `Total` after discovery completes. The UI
+consumes events via Bubble Tea commands — one command per event, each returning
+a `tea.Cmd` that reads the next event.
+
+**Backend poller interaction:** The `backend.Watcher` continues polling during
+save/restore. The gotmuxcc router serialises concurrent commands on the shared
+control-mode connection, so there is no contention. Save/restore operations
+are sequential within their goroutine and do not interfere with background
+polling.
 
 ### Tmux interaction
 
 The package imports `internal/tmux` and uses existing client functions:
 `FetchSessions`, `FetchWindows`, `FetchPanes` for discovery;
 `ListPanesFormat`/`DisplayMessage` for layout data; `CapturePane` for pane
-contents; `NewSession`/`Command` for restore operations. No new tmux
-primitives are needed.
+contents.
+
+**New tmux helpers required for restore:**
+
+The restore path needs operations that do not yet exist on the `tmuxClient`
+interface or as `internal/tmux` public functions:
+
+- `CreateSession(socketPath, name, dir string) error` — wraps
+  `client.NewSession()` or `client.Command("new-session", ...)`.
+- `CreateWindow(socketPath, session string, index int, name, dir string) error`
+  — wraps `client.Command("new-window", "-t", target, "-n", name, "-c", dir, "-d")`.
+  The `-d` flag prevents auto-selection of the new window.
+- `SplitPane(socketPath, target, dir string) error` — wraps
+  `client.Command("split-window", "-t", target, "-c", dir, "-d")`.
+- `SelectLayoutTarget(socketPath, target, layout string) error` — wraps
+  `client.Command("select-layout", "-t", target, layout)`. The existing
+  `SelectLayout` function has no target parameter and applies to the
+  control-mode session's active window, which is unsuitable for batch restore.
+- `CapturePaneContents(socketPath, target string) (string, error)` — wraps
+  `client.CapturePane(target)` for bulk capture with an explicit target. The
+  existing preview-oriented capture functions are not suitable for this use
+  case.
+
+All of these use `client.Command()` (the generic gotmuxcc command interface)
+rather than introducing new gotmuxcc API surface. They follow the existing
+pattern of thin wrappers in `internal/tmux/` that acquire the cached client
+via `newTmux(socketPath)`.
+
+Handle abstractions are not needed for these operations — they are
+fire-and-forget commands that do not return gotmuxcc objects.
 
 ### Testing
 
