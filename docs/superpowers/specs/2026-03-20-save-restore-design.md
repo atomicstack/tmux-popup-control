@@ -340,8 +340,10 @@ with an existing save file in the save directory (distinct from the existing
 `ModeSessionForm` which validates against tmux session names).
 
 **Named snapshot collision:** If a save file with the chosen name already
-exists, the save overwrites it silently. The form does not prevent reuse of
-an existing name — this allows intentional updates to named snapshots.
+exists, the form shows an inline info notice (e.g. "snapshot 'foo' already
+exists — enter to overwrite") but does not block submission. This allows
+intentional updates to named snapshots while making accidental overwrites
+unlikely.
 
 ## Configuration
 
