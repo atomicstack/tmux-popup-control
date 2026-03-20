@@ -35,11 +35,11 @@ func withTmuxOptionFn(fn func(socket, opt string) string) func() {
 // The directory is created if it does not already exist.
 func ResolveDir(socketPath string) (string, error) {
 	if d := os.Getenv("TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR"); d != "" {
-		return ensureDir(d)
+		return ensureDir(os.ExpandEnv(d))
 	}
 
 	if d := tmuxOptionFn(socketPath, "@tmux-popup-control-session-storage-dir"); d != "" {
-		return ensureDir(d)
+		return ensureDir(os.ExpandEnv(d))
 	}
 
 	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
