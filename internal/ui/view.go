@@ -96,6 +96,12 @@ func (m *Model) View() tea.View {
 	case ModePluginInstall:
 		content = m.pluginInstallView()
 		return m.wrapView(content)
+	case ModeResurrect:
+		content = m.resurrectView()
+		return m.wrapView(content)
+	case ModeSessionSaveForm:
+		content = "save as..." // placeholder
+		return m.wrapView(content)
 	}
 	if m.hasSidePreview() {
 		content = m.viewSideBySide(header)
