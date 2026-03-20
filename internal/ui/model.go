@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -27,12 +29,13 @@ const (
 	ModeSessionForm
 	ModePluginConfirm
 	ModePluginInstall
+	ModeResurrect
+	ModeSessionSaveForm
 )
 
-const (
-	menuHeaderSeparator = "→"
-	defaultRootTitle    = "main menu"
-)
+const menuHeaderSeparator = "→"
+
+var defaultRootTitle = filepath.Base(os.Args[0])
 
 var styles = theme.Default()
 
@@ -93,6 +96,7 @@ type Model struct {
 	treePanes          []menu.PaneEntry
 	pluginConfirmState *pluginConfirmState
 	pluginInstallState *pluginInstallState
+	resurrectState     *resurrectState
 	initCmd            tea.Cmd
 }
 
@@ -211,6 +215,10 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 		return m.handlePluginConfirm(msg)
 	case ModePluginInstall:
 		return m.handlePluginInstallKey(msg)
+	case ModeResurrect:
+		return m.handleResurrectKey(msg)
+	case ModeSessionSaveForm:
+		return false, nil
 	default:
 		return false, nil
 	}
@@ -238,6 +246,9 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(menu.PluginInstallStart{}):    m.handlePluginInstallStartMsg,
 		reflect.TypeOf(menu.PluginUpdateStart{}):     m.handlePluginUpdateStartMsg,
 		reflect.TypeOf(pluginInstallDoneMsg{}):       m.handlePluginInstallDoneMsg,
+		reflect.TypeOf(ResurrectStart{}):             m.handleResurrectStartMsg,
+		reflect.TypeOf(resurrectProgressMsg{}):       m.handleResurrectProgressMsg,
+		reflect.TypeOf(resurrectTickMsg{}):           m.handleResurrectTickMsg,
 	}
 }
 
