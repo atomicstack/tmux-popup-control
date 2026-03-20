@@ -35,3 +35,6 @@ vendor/
 # build/release artifacts
 dist/
 tmux-popup-control
+
+# claude stuff
+.superpowers
