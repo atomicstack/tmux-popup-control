@@ -106,7 +106,7 @@ make release         # cross-compiles + creates GitHub release via gh
 | `--trace` / `TMUX_POPUP_CONTROL_TRACE` | enable verbose JSON trace logging |
 | `TMUX_POPUP_CONTROL_CLIENT` | explicit client ID override (env only) |
 | `TMUX_POPUP_CONTROL_SESSION` | explicit session name override (env only) |
-| `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` / `@tmux-popup-control-session-storage-dir` | override save/restore storage directory (env only / tmux option) |
+| `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` / `@tmux-popup-control-session-storage-dir` | override save/restore storage directory; supports `$HOME` and other env vars (env only / tmux option) |
 | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` / `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save (env only / tmux option) |
 
 ### CLI subcommands
