@@ -1,12 +1,14 @@
 # tmux-popup-control
 
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
-inside a `tmux display-popup`. Built with
-[Bubble Tea](https://github.com/charmbracelet/bubbletea) and
-[Lip Gloss](https://github.com/charmbracelet/lipgloss) (v2), using a
-persistent control-mode connection via
+inside a `tmux display-popup`. Built with [Bubble
+Tea](https://github.com/charmbracelet/bubbletea) and [Lip
+Gloss](https://github.com/charmbracelet/lipgloss) (v2), using a persistent
+control-mode connection via
 [gotmuxcc](https://github.com/atomicstack/gotmuxcc). Inspired by
-[tmux-fzf](https://github.com/sainnhe/tmux-fzf).
+[tmux-fzf](https://github.com/sainnhe/tmux-fzf),
+[tpm](https://github.com/tmux-plugins/tpm), and
+[tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect).
 
 ## Features
 
