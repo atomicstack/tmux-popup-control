@@ -472,6 +472,7 @@ package tmux
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc"
@@ -483,9 +484,8 @@ func CreateSession(socketPath, name, dir string) error {
 		return err
 	}
 	_, err = client.NewSession(&gotmux.SessionOptions{
-		Name:       name,
-		StartDir:   dir,
-		Detached:   true,
+		Name:           name,
+		StartDirectory: dir,
 	})
 	return err
 }
@@ -546,13 +546,25 @@ func SelectWindow(socketPath, target string) error {
 }
 
 func SendPaneContents(socketPath, target, contents string) error {
-	// Use load-buffer + paste-buffer to send contents to a pane.
+	// Write contents to a temp file, then load-buffer + paste-buffer.
 	// send-keys would interpret special characters; load-buffer is literal.
+	// Cannot pipe via stdin through control-mode Command(), so use a file.
+	f, err := os.CreateTemp("", "tmux-pane-contents-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(contents); err != nil {
+		f.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	f.Close()
+
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return err
 	}
-	if _, err := client.Command("load-buffer", "-", contents); err != nil {
+	if _, err := client.Command("load-buffer", f.Name()); err != nil {
 		return fmt.Errorf("load-buffer: %w", err)
 	}
 	_, err = client.Command("paste-buffer", "-t", strings.TrimSpace(target), "-d")
@@ -570,7 +582,7 @@ func CapturePaneContents(socketPath, target string) (string, error) {
 }
 ```
 
-**Note on SendPaneContents:** Uses `load-buffer` + `paste-buffer` rather than `send-keys` because `send-keys` interprets special characters (Enter, Tab, etc.) and would corrupt the content. `load-buffer -` loads from stdin (piped via control-mode `Command`), and `paste-buffer -d` pastes then deletes the buffer. If `load-buffer -` is not supported via control-mode `Command`, fall back to writing a temp file and using `load-buffer /path/to/file`.
+**Note on SendPaneContents:** Uses `load-buffer` + `paste-buffer` rather than `send-keys` because `send-keys` interprets special characters (Enter, Tab, etc.) and would corrupt the content. Content is written to a temp file first because gotmuxcc's `Command()` sends arguments as a command string over control-mode and cannot pipe data to stdin. `paste-buffer -d` pastes then deletes the buffer. The temp file is cleaned up immediately after use.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1103,8 +1115,9 @@ Address any failures introduced by the new code.
 
 - [ ] **Step 4: Commit any fixes**
 
+Stage only the specific files that were fixed (use explicit paths, never `git add -u` or `git add .`), then commit:
+
 ```bash
-git add -u
 git commit -m "fix: address test failures from save/restore integration"
 ```
 
