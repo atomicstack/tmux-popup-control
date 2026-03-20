@@ -29,6 +29,7 @@ func TestResolveDirXDG(t *testing.T) {
 	xdgBase := t.TempDir()
 	t.Setenv("TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR", "")
 	t.Setenv("XDG_DATA_HOME", xdgBase)
+	defer withTmuxOptionFn(func(_, _ string) string { return "" })()
 
 	got, err := ResolveDir("")
 	if err != nil {
@@ -50,6 +51,7 @@ func TestResolveDirHomeFallback(t *testing.T) {
 	t.Setenv("TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR", "")
 	t.Setenv("XDG_DATA_HOME", "")
 	t.Setenv("HOME", home)
+	defer withTmuxOptionFn(func(_, _ string) string { return "" })()
 
 	got, err := ResolveDir("")
 	if err != nil {

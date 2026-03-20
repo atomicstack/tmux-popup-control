@@ -4,26 +4,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 // injectable functions — defaults call the real tmux package functions.
 
-var createSessionFn = func(socketPath, name, dir string) error {
-	return tmux.CreateSession(socketPath, name, dir)
+var createSessionFn = func(socketPath, name, dir, command string) error {
+	return tmux.CreateSession(socketPath, name, dir, command)
 }
 
-var createWindowFn = func(socketPath, session string, index int, name, dir string) error {
-	return tmux.CreateWindow(socketPath, session, index, name, dir)
+var createWindowFn = func(socketPath, session string, index int, name, dir, command string) error {
+	return tmux.CreateWindow(socketPath, session, index, name, dir, command)
 }
 
 var renameWindowFn = func(socketPath, target, newName string) error {
 	return tmux.RenameWindow(socketPath, target, newName)
 }
 
-var splitPaneFn = func(socketPath, target, dir string) error {
-	return tmux.SplitPane(socketPath, target, dir)
+var splitPaneFn = func(socketPath, target, dir, command string) error {
+	return tmux.SplitPane(socketPath, target, dir, command)
 }
 
 var selectLayoutTargetFn = func(socketPath, target, layout string) error {
@@ -38,10 +39,6 @@ var selectWindowFn = func(socketPath, target string) error {
 	return tmux.SelectWindow(socketPath, target)
 }
 
-var sendPaneContentsFn = func(socketPath, target, contents string) error {
-	return tmux.SendPaneContents(socketPath, target, contents)
-}
-
 var switchClientFn = func(socketPath, clientID, target string) error {
 	return tmux.SwitchClient(socketPath, clientID, target)
 }
@@ -50,16 +47,20 @@ var existingSessionsFn = func(socketPath string) (tmux.SessionSnapshot, error) {
 	return tmux.FetchSessions(socketPath)
 }
 
+var defaultCommandFn = func(socketPath string) string {
+	return tmux.DefaultCommand(socketPath)
+}
+
 // with* helpers replace the package-level vars for the duration of a test and
 // return a restore function.
 
-func withCreateSessionFn(fn func(string, string, string) error) func() {
+func withCreateSessionFn(fn func(string, string, string, string) error) func() {
 	orig := createSessionFn
 	createSessionFn = fn
 	return func() { createSessionFn = orig }
 }
 
-func withCreateWindowFn(fn func(string, string, int, string, string) error) func() {
+func withCreateWindowFn(fn func(string, string, int, string, string, string) error) func() {
 	orig := createWindowFn
 	createWindowFn = fn
 	return func() { createWindowFn = orig }
@@ -71,7 +72,7 @@ func withRenameWindowFn(fn func(string, string, string) error) func() {
 	return func() { renameWindowFn = orig }
 }
 
-func withSplitPaneFn(fn func(string, string, string) error) func() {
+func withSplitPaneFn(fn func(string, string, string, string) error) func() {
 	orig := splitPaneFn
 	splitPaneFn = fn
 	return func() { splitPaneFn = orig }
@@ -95,12 +96,6 @@ func withSelectWindowFn(fn func(string, string) error) func() {
 	return func() { selectWindowFn = orig }
 }
 
-func withSendPaneContentsFn(fn func(string, string, string) error) func() {
-	orig := sendPaneContentsFn
-	sendPaneContentsFn = fn
-	return func() { sendPaneContentsFn = orig }
-}
-
 func withSwitchClientFn(fn func(string, string, string) error) func() {
 	orig := switchClientFn
 	switchClientFn = fn
@@ -113,6 +108,12 @@ func withExistingSessionsFn(fn func(string) (tmux.SessionSnapshot, error)) func(
 	return func() { existingSessionsFn = orig }
 }
 
+func withDefaultCommandFn(fn func(string) string) func() {
+	orig := defaultCommandFn
+	defaultCommandFn = fn
+	return func() { defaultCommandFn = orig }
+}
+
 // Restore orchestrates a full session restore and emits ProgressEvents on the
 // returned channel. The channel is closed after a Done event is sent.
 func Restore(cfg Config, file string) <-chan ProgressEvent {
@@ -122,6 +123,15 @@ func Restore(cfg Config, file string) <-chan ProgressEvent {
 		runRestore(cfg, file, ch)
 	}()
 	return ch
+}
+
+// paneStartupCommand builds the startup command for a pane that has saved
+// content. The command prints the saved scrollback then execs into the shell.
+// Double quotes are used around the path so that the quoting works correctly
+// with both gotmuxcc's ShellCommand wrapping (which adds outer single quotes)
+// and the raw client.Command path (which uses quoteArgument).
+func paneStartupCommand(contentPath, defaultCmd string) string {
+	return fmt.Sprintf("cat \"%s\"; exec %s", contentPath, defaultCmd)
 }
 
 func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
@@ -140,14 +150,14 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	}
 
 	// extract pane archive to a temp dir if present
-	var tempDir string
+	var contentDir string
 	if hasPaneArchive {
-		tempDir, err = os.MkdirTemp("", "tmux-restore-*")
+		contentDir, err = os.MkdirTemp("", "tmux-restore-*")
 		if err != nil {
 			return sendError(ch, "creating temp dir: %w", err)
 		}
-		if err := ExtractPaneArchive(archivePath, tempDir); err != nil {
-			_ = os.RemoveAll(tempDir)
+		if err := ExtractPaneArchive(archivePath, contentDir); err != nil {
+			_ = os.RemoveAll(contentDir)
 			return sendError(ch, "extracting pane archive: %w", err)
 		}
 	}
@@ -155,9 +165,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	// fetch existing sessions to detect conflicts
 	existingSnap, err := existingSessionsFn(cfg.SocketPath)
 	if err != nil {
-		if tempDir != "" {
-			_ = os.RemoveAll(tempDir)
-		}
 		return sendError(ch, "fetching existing sessions: %w", err)
 	}
 	existingNames := make(map[string]bool, len(existingSnap.Sessions))
@@ -165,8 +172,28 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		existingNames[s.Name] = true
 	}
 
+	// resolve default command for startup command chains
+	defaultCmd := ""
+	if hasPaneArchive {
+		defaultCmd = defaultCommandFn(cfg.SocketPath)
+	}
+
+	// lookupPaneCmd returns the startup command for a pane if it has saved
+	// content, or empty string otherwise.
+	lookupPaneCmd := func(sessName string, winIdx, paneIdx int) string {
+		if !hasPaneArchive {
+			return ""
+		}
+		paneKey := fmt.Sprintf("%s:%d.%d", sessName, winIdx, paneIdx)
+		path := filepath.Join(contentDir, paneKey)
+		if _, statErr := os.Stat(path); statErr == nil {
+			return paneStartupCommand(path, defaultCmd)
+		}
+		return ""
+	}
+
 	// compute total work units
-	total := computeRestoreTotal(sf, hasPaneArchive)
+	total := computeRestoreTotal(sf)
 
 	ch <- ProgressEvent{
 		Step:    0,
@@ -183,7 +210,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		conflict := existingNames[sess.Name]
 
 		if conflict {
-			// skip session creation but still consume the budgeted steps
 			step++
 			ch <- ProgressEvent{
 				Step:    step,
@@ -195,8 +221,11 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		} else {
 			// determine starting directory from first pane of first window
 			startDir := ""
+			startCmd := ""
 			if len(sess.Windows) > 0 && len(sess.Windows[0].Panes) > 0 {
-				startDir = sess.Windows[0].Panes[0].WorkingDir
+				p0 := sess.Windows[0].Panes[0]
+				startDir = p0.WorkingDir
+				startCmd = lookupPaneCmd(sess.Name, sess.Windows[0].Index, p0.Index)
 			}
 
 			step++
@@ -207,10 +236,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				Kind:    "session",
 				ID:      sess.Name,
 			}
-			if err := createSessionFn(cfg.SocketPath, sess.Name, startDir); err != nil {
-				if tempDir != "" {
-					_ = os.RemoveAll(tempDir)
-				}
+			if err := createSessionFn(cfg.SocketPath, sess.Name, startDir, startCmd); err != nil {
 				return sendError(ch, "creating session %s: %w", sess.Name, err)
 			}
 		}
@@ -219,7 +245,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			winTarget := fmt.Sprintf("%s:%d", sess.Name, win.Index)
 
 			if conflict {
-				// consume budgeted window step as a no-op
 				step++
 				ch <- ProgressEvent{
 					Step:    step,
@@ -239,13 +264,17 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 					ID:      winTarget,
 				}
 				if err := renameWindowFn(cfg.SocketPath, winTarget, win.Name); err != nil {
-					if tempDir != "" {
-						_ = os.RemoveAll(tempDir)
-					}
 					return sendError(ch, "renaming window %s: %w", winTarget, err)
 				}
 			} else {
-				// create additional windows
+				// create additional windows — use first pane's dir and startup command
+				winDir := ""
+				winCmd := ""
+				if len(win.Panes) > 0 {
+					winDir = win.Panes[0].WorkingDir
+					winCmd = lookupPaneCmd(sess.Name, win.Index, win.Panes[0].Index)
+				}
+
 				step++
 				ch <- ProgressEvent{
 					Step:    step,
@@ -254,14 +283,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 					Kind:    "window",
 					ID:      winTarget,
 				}
-				paneDir := ""
-				if len(win.Panes) > 0 {
-					paneDir = win.Panes[0].WorkingDir
-				}
-				if err := createWindowFn(cfg.SocketPath, sess.Name, win.Index, win.Name, paneDir); err != nil {
-					if tempDir != "" {
-						_ = os.RemoveAll(tempDir)
-					}
+				if err := createWindowFn(cfg.SocketPath, sess.Name, win.Index, win.Name, winDir, winCmd); err != nil {
 					return sendError(ch, "creating window %s: %w", winTarget, err)
 				}
 			}
@@ -274,7 +296,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				paneTarget := fmt.Sprintf("%s:%d", sess.Name, win.Index)
 
 				if conflict {
-					// consume budgeted pane step as a no-op
 					step++
 					ch <- ProgressEvent{
 						Step:    step,
@@ -283,6 +304,8 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 						Kind:    "info",
 					}
 				} else {
+					paneCmd := lookupPaneCmd(sess.Name, win.Index, pane.Index)
+
 					step++
 					ch <- ProgressEvent{
 						Step:    step,
@@ -290,10 +313,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 						Message: fmt.Sprintf("splitting pane %s.%d", paneTarget, pane.Index),
 						Kind:    "pane",
 					}
-					if err := splitPaneFn(cfg.SocketPath, paneTarget, pane.WorkingDir); err != nil {
-						if tempDir != "" {
-							_ = os.RemoveAll(tempDir)
-						}
+					if err := splitPaneFn(cfg.SocketPath, paneTarget, pane.WorkingDir, paneCmd); err != nil {
 						return sendError(ch, "splitting pane %s.%d: %w", paneTarget, pane.Index, err)
 					}
 				}
@@ -319,48 +339,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 					Kind:    "info",
 				}
 				if err := selectLayoutTargetFn(cfg.SocketPath, winTarget, win.Layout); err != nil {
-					if tempDir != "" {
-						_ = os.RemoveAll(tempDir)
-					}
 					return sendError(ch, "applying layout for %s: %w", winTarget, err)
-				}
-			}
-		}
-
-		// send pane contents
-		if hasPaneArchive {
-			for _, win := range sess.Windows {
-				for _, pane := range win.Panes {
-					paneKey := fmt.Sprintf("%s:%d.%d", sess.Name, win.Index, pane.Index)
-					paneTarget := paneKey
-					step++
-					if conflict {
-						ch <- ProgressEvent{
-							Step:    step,
-							Total:   total,
-							Message: fmt.Sprintf("skipping pane contents for %s (session conflict)", paneTarget),
-							Kind:    "info",
-						}
-					} else {
-						ch <- ProgressEvent{
-							Step:    step,
-							Total:   total,
-							Message: fmt.Sprintf("sending pane contents for %s", paneTarget),
-							Kind:    "pane",
-						}
-						contentPath := filepath.Join(tempDir, paneKey)
-						contents, readErr := os.ReadFile(contentPath)
-						if readErr != nil {
-							// missing content file is non-fatal: skip this pane
-							continue
-						}
-						if err := sendPaneContentsFn(cfg.SocketPath, paneTarget, string(contents)); err != nil {
-							if tempDir != "" {
-								_ = os.RemoveAll(tempDir)
-							}
-							return sendError(ch, "sending pane contents for %s: %w", paneTarget, err)
-						}
-					}
 				}
 			}
 		}
@@ -370,7 +349,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			winTarget := fmt.Sprintf("%s:%d", sess.Name, win.Index)
 			step++
 
-			// find active pane
 			activePaneIdx := 0
 			for _, pane := range win.Panes {
 				if pane.Active {
@@ -395,9 +373,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 					Kind:    "info",
 				}
 				if err := selectPaneFn(cfg.SocketPath, paneTarget); err != nil {
-					if tempDir != "" {
-						_ = os.RemoveAll(tempDir)
-					}
 					return sendError(ch, "selecting active pane %s: %w", paneTarget, err)
 				}
 			}
@@ -428,9 +403,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				Kind:    "info",
 			}
 			if err := selectWindowFn(cfg.SocketPath, activeWindowTarget); err != nil {
-				if tempDir != "" {
-					_ = os.RemoveAll(tempDir)
-				}
 				return sendError(ch, "selecting active window %s: %w", activeWindowTarget, err)
 			}
 		}
@@ -446,23 +418,20 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	}
 	if sf.ClientSession != "" {
 		if err := switchClientFn(cfg.SocketPath, "", sf.ClientSession); err != nil {
-			if tempDir != "" {
-				_ = os.RemoveAll(tempDir)
-			}
 			return sendError(ch, "switching client to session %s: %w", sf.ClientSession, err)
 		}
 	}
 
-	// clean up temp dir
-	step++
-	ch <- ProgressEvent{
-		Step:    step,
-		Total:   total,
-		Message: "cleaning up",
-		Kind:    "info",
-	}
-	if tempDir != "" {
-		_ = os.RemoveAll(tempDir)
+	// schedule background cleanup of extracted pane content files. the
+	// startup commands (cat "<file>"; exec <shell>) run asynchronously inside
+	// the new panes; we wait 5 seconds to give them time to read the files.
+	// if the process exits before the timer fires the temp dir persists
+	// harmlessly — the OS cleans it up eventually.
+	if contentDir != "" {
+		go func() {
+			time.Sleep(5 * time.Second)
+			_ = os.RemoveAll(contentDir)
+		}()
 	}
 
 	// done
@@ -477,7 +446,9 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 }
 
 // computeRestoreTotal computes the total number of work units for a restore.
-func computeRestoreTotal(sf *SaveFile, hasPaneArchive bool) int {
+// Pane content restore is handled at creation time (via startup commands),
+// so there are no separate send-pane-contents steps.
+func computeRestoreTotal(sf *SaveFile) int {
 	total := 0
 	for _, sess := range sf.Sessions {
 		total++ // create or skip session
@@ -495,12 +466,6 @@ func computeRestoreTotal(sf *SaveFile, hasPaneArchive bool) int {
 			total++ // select-layout
 		}
 
-		if hasPaneArchive {
-			for _, win := range sess.Windows {
-				total += len(win.Panes) // send pane contents
-			}
-		}
-
 		for range sess.Windows {
 			total++ // select active pane
 		}
@@ -509,7 +474,6 @@ func computeRestoreTotal(sf *SaveFile, hasPaneArchive bool) int {
 	}
 
 	total++ // switch client
-	total++ // cleanup
 
 	return total
 }

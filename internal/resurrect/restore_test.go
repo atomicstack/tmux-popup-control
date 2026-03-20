@@ -36,15 +36,15 @@ func writeSaveFile(t *testing.T, dir string, name string, sf *SaveFile) string {
 }
 
 // stubNoOp returns a function that accepts any args and returns nil.
-func noopSession(_, _, _ string) error                 { return nil }
-func noopWindow(_, _ string, _ int, _, _ string) error { return nil }
-func noopRename(_, _, _ string) error                  { return nil }
-func noopSplit(_, _, _ string) error                   { return nil }
-func noopLayout(_, _, _ string) error                  { return nil }
-func noopPane(_, _ string) error                       { return nil }
-func noopSelectWindow(_, _ string) error               { return nil }
-func noopContents(_, _, _ string) error                { return nil }
-func noopSwitch(_, _, _ string) error                  { return nil }
+func noopSession(_, _, _, _ string) error                    { return nil }
+func noopWindow(_, _ string, _ int, _, _, _ string) error    { return nil }
+func noopRename(_, _, _ string) error                        { return nil }
+func noopSplit(_, _, _, _ string) error                      { return nil }
+func noopLayout(_, _, _ string) error                        { return nil }
+func noopPane(_, _ string) error                             { return nil }
+func noopSelectWindow(_, _ string) error                     { return nil }
+func noopSwitch(_, _, _ string) error                        { return nil }
+func noopDefaultCommand(_ string) string                     { return "/bin/bash" }
 
 // collectRestoreEvents drains the channel returned by Restore.
 func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
@@ -69,11 +69,11 @@ func installNoopRestoreFns(t *testing.T) func() {
 	r5 := withSelectLayoutTargetFn(noopLayout)
 	r6 := withSelectPaneFn(noopPane)
 	r7 := withSelectWindowFn(noopSelectWindow)
-	r8 := withSendPaneContentsFn(noopContents)
-	r9 := withSwitchClientFn(noopSwitch)
-	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+	r8 := withSwitchClientFn(noopSwitch)
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
 		return tmux.SessionSnapshot{}, nil
 	})
+	r10 := withDefaultCommandFn(noopDefaultCommand)
 	return func() {
 		r1()
 		r2()
@@ -187,16 +187,9 @@ func TestRestoreNoPaneArchive(t *testing.T) {
 		t.Fatalf("unexpected done state: done=%v err=%v", last.Done, last.Err)
 	}
 
-	// no pane-contents events
-	for _, ev := range events {
-		if ev.Kind == "pane" && ev.Step > 0 {
-			// only pane split events are ok
-		}
-	}
-
 	// total should not include pane contents steps
 	// session(1) + window(1) + layout(1) + active-pane(1) + active-window(1) + switch(1) + cleanup(1) = 7
-	expected := computeRestoreTotal(sf, false)
+	expected := computeRestoreTotal(sf)
 	if events[0].Total != expected {
 		t.Errorf("total: got %d, want %d", events[0].Total, expected)
 	}
@@ -210,7 +203,7 @@ func TestRestoreSessionConflict(t *testing.T) {
 	dir := t.TempDir()
 
 	createCalled := false
-	r1 := withCreateSessionFn(func(_, name, _ string) error {
+	r1 := withCreateSessionFn(func(_, name, _, _ string) error {
 		createCalled = true
 		return nil
 	})
@@ -227,9 +220,9 @@ func TestRestoreSessionConflict(t *testing.T) {
 	defer r6()
 	r7 := withSelectWindowFn(noopSelectWindow)
 	defer r7()
-	r8 := withSendPaneContentsFn(noopContents)
+	r8 := withSwitchClientFn(noopSwitch)
 	defer r8()
-	r9 := withSwitchClientFn(noopSwitch)
+	r9 := withDefaultCommandFn(noopDefaultCommand)
 	defer r9()
 
 	// pretend "conflict" session already exists
@@ -272,7 +265,7 @@ func TestRestoreSessionConflict(t *testing.T) {
 	}
 
 	// total equals what computeRestoreTotal predicts
-	expected := computeRestoreTotal(sf, false)
+	expected := computeRestoreTotal(sf)
 	if events[0].Total != expected {
 		t.Errorf("total: got %d, want %d", events[0].Total, expected)
 	}
@@ -317,7 +310,7 @@ func TestRestoreSessionCreationError(t *testing.T) {
 	dir := t.TempDir()
 
 	createErr := errors.New("new-session failed")
-	r1 := withCreateSessionFn(func(_, _, _ string) error { return createErr })
+	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return createErr })
 	defer r1()
 	r2 := withCreateWindowFn(noopWindow)
 	defer r2()
@@ -331,13 +324,13 @@ func TestRestoreSessionCreationError(t *testing.T) {
 	defer r6()
 	r7 := withSelectWindowFn(noopSelectWindow)
 	defer r7()
-	r8 := withSendPaneContentsFn(noopContents)
+	r8 := withSwitchClientFn(noopSwitch)
 	defer r8()
-	r9 := withSwitchClientFn(noopSwitch)
-	defer r9()
-	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
 		return tmux.SessionSnapshot{}, nil
 	})
+	defer r9()
+	r10 := withDefaultCommandFn(noopDefaultCommand)
 	defer r10()
 
 	sf := buildSaveFile(Session{
@@ -371,20 +364,28 @@ func TestRestoreSessionCreationError(t *testing.T) {
 // ── TestRestoreWithPaneArchive ───────────────────────────────────────────────
 
 // TestRestoreWithPaneArchive verifies that when a companion .panes.tar.gz
-// exists its contents are sent to the correct panes.
+// exists, startup commands are passed to creation functions instead of using
+// paste-buffer.
 func TestRestoreWithPaneArchive(t *testing.T) {
 	dir := t.TempDir()
 
-	var sentContents []string
-	var sentTargets []string
+	// track startup commands passed to creation functions
+	var sessionCommands []string
+	var splitCommands []string
 
-	r1 := withCreateSessionFn(noopSession)
+	r1 := withCreateSessionFn(func(_, _, _, command string) error {
+		sessionCommands = append(sessionCommands, command)
+		return nil
+	})
 	defer r1()
 	r2 := withCreateWindowFn(noopWindow)
 	defer r2()
 	r3 := withRenameWindowFn(noopRename)
 	defer r3()
-	r4 := withSplitPaneFn(noopSplit)
+	r4 := withSplitPaneFn(func(_, _, _, command string) error {
+		splitCommands = append(splitCommands, command)
+		return nil
+	})
 	defer r4()
 	r5 := withSelectLayoutTargetFn(noopLayout)
 	defer r5()
@@ -392,17 +393,13 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	defer r6()
 	r7 := withSelectWindowFn(noopSelectWindow)
 	defer r7()
-	r8 := withSendPaneContentsFn(func(_, target, contents string) error {
-		sentTargets = append(sentTargets, target)
-		sentContents = append(sentContents, contents)
-		return nil
-	})
+	r8 := withSwitchClientFn(noopSwitch)
 	defer r8()
-	r9 := withSwitchClientFn(noopSwitch)
-	defer r9()
-	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
 		return tmux.SessionSnapshot{}, nil
 	})
+	defer r9()
+	r10 := withDefaultCommandFn(func(_ string) string { return "/bin/bash" })
 	defer r10()
 
 	sf := buildSaveFile(Session{
@@ -437,28 +434,24 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
 	}
 
-	// verify both panes received their contents
-	if len(sentTargets) != 2 {
-		t.Fatalf("expected 2 sendPaneContents calls, got %d", len(sentTargets))
+	// verify session creation got a startup command (for pane 0)
+	if len(sessionCommands) != 1 {
+		t.Fatalf("expected 1 createSession call, got %d", len(sessionCommands))
 	}
-	found0, found1 := false, false
-	for i, tgt := range sentTargets {
-		if tgt == "dev:0.0" && sentContents[i] == "output for pane 0" {
-			found0 = true
-		}
-		if tgt == "dev:0.1" && sentContents[i] == "output for pane 1" {
-			found1 = true
-		}
-	}
-	if !found0 {
-		t.Error("did not receive contents for dev:0.0")
-	}
-	if !found1 {
-		t.Error("did not receive contents for dev:0.1")
+	if sessionCommands[0] == "" {
+		t.Error("expected non-empty startup command for session creation (pane 0)")
 	}
 
-	// total includes pane content steps
-	expected := computeRestoreTotal(sf, true)
+	// verify split got a startup command (for pane 1)
+	if len(splitCommands) != 1 {
+		t.Fatalf("expected 1 splitPane call, got %d", len(splitCommands))
+	}
+	if splitCommands[0] == "" {
+		t.Error("expected non-empty startup command for split (pane 1)")
+	}
+
+	// total should NOT include separate pane content send steps
+	expected := computeRestoreTotal(sf)
 	if events[0].Total != expected {
 		t.Errorf("total: got %d, want %d", events[0].Total, expected)
 	}
@@ -508,7 +501,7 @@ func TestRestoreStepCountMatchesTotal(t *testing.T) {
 		t.Errorf("final step %d != total %d", last.Step, last.Total)
 	}
 
-	expected := computeRestoreTotal(sf, false)
+	expected := computeRestoreTotal(sf)
 	if events[0].Total != expected {
 		t.Errorf("total mismatch: got %d, want %d", events[0].Total, expected)
 	}
@@ -531,5 +524,15 @@ func TestRestoreReadFileError(t *testing.T) {
 	}
 	if last.Err == nil {
 		t.Error("expected an error")
+	}
+}
+
+// ── TestPaneStartupCommand ───────────────────────────────────────────────────
+
+func TestPaneStartupCommand(t *testing.T) {
+	got := paneStartupCommand("/tmp/restore-123/dev:0.0", "/bin/bash")
+	want := `cat "/tmp/restore-123/dev:0.0"; exec /bin/bash`
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
 	}
 }
