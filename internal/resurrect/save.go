@@ -2,6 +2,7 @@ package resurrect
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
@@ -252,7 +253,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 			if err != nil {
 				return sendError(ch, "capturing pane %s: %w", target, err)
 			}
-			paneContents[target] = content
+			paneContents[target] = strings.TrimRight(content, "\n") + "\n"
 		}
 	}
 
