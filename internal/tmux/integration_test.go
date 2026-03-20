@@ -106,6 +106,16 @@ func TestFetchSnapshotsIntegration(t *testing.T) {
 	}
 }
 
+func nonEmptyLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		if strings.TrimSpace(line) != "" {
+			out = append(out, strings.TrimSpace(line))
+		}
+	}
+	return out
+}
+
 func waitForSession(t *testing.T, socket, session string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -197,6 +207,71 @@ func TestCurrentClientIDSkipsControlModeClients(t *testing.T) {
 // TestSwitchClientWithoutClientIDIntegration verifies that SwitchClient
 // works via control mode when no explicit clientID is available. In this
 // mode, switch-client targets the control-mode connection itself, which
+// TestGotmuxccConnectionDoesNotCreateSessionIntegration verifies that
+// establishing a gotmuxcc control-mode connection to an existing server
+// does NOT create an extra session. This is a regression test for a bug
+// where users ended up with a phantom numeric session after restore.
+func TestGotmuxccConnectionDoesNotCreateSessionIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	Shutdown()
+
+	// list sessions before connecting — should be exactly one (auto-created).
+	beforeOut, err := exec.Command("tmux", "-S", socket, "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		t.Fatalf("list-sessions before: %v", err)
+	}
+	before := nonEmptyLines(string(beforeOut))
+	t.Logf("sessions before gotmuxcc connect: %v", before)
+
+	// establish a gotmuxcc connection via newTmux.
+	client, err := newTmux(socket)
+	if err != nil {
+		t.Fatalf("newTmux: %v", err)
+	}
+	_ = client
+
+	// give the connection a moment to stabilise.
+	time.Sleep(500 * time.Millisecond)
+
+	// list sessions after connecting — should be unchanged.
+	afterOut, err := exec.Command("tmux", "-S", socket, "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		t.Fatalf("list-sessions after: %v", err)
+	}
+	after := nonEmptyLines(string(afterOut))
+	t.Logf("sessions after gotmuxcc connect: %v", after)
+
+	if len(after) != len(before) {
+		t.Errorf("gotmuxcc connection created extra session(s): before=%v after=%v", before, after)
+	}
+
+	// now create a named session — should result in exactly 2.
+	if err := NewSession(socket, "test-named"); err != nil {
+		t.Fatalf("NewSession: %v", err)
+	}
+	waitForSession(t, socket, "test-named")
+
+	finalOut, err := exec.Command("tmux", "-S", socket, "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		t.Fatalf("list-sessions final: %v", err)
+	}
+	final := nonEmptyLines(string(finalOut))
+	t.Logf("sessions after NewSession: %v", final)
+
+	expected := len(before) + 1
+	if len(final) != expected {
+		t.Errorf("expected %d sessions, got %d: %v", expected, len(final), final)
+	}
+
+	Shutdown()
+}
+
 // has no visible effect — but the command should not error.
 func TestSwitchClientWithoutClientIDIntegration(t *testing.T) {
 	testutil.RequireTmux(t)

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -112,6 +113,8 @@ func runInstallAndInitPlugins(cfg config.Config) error {
 
 // deferPluginInstall schedules a background tmux command that waits for
 // startup to complete, then opens the install TUI in a display-popup.
+// Uses a plain CLI call rather than gotmuxcc control-mode to avoid creating
+// phantom sessions during server startup.
 func deferPluginInstall(socketPath string) error {
 	binary, err := os.Executable()
 	if err != nil {
@@ -119,8 +122,11 @@ func deferPluginInstall(socketPath string) error {
 	}
 	cmd := fmt.Sprintf("%s deferred-install -socket %s",
 		shellQuote(binary), shellQuote(socketPath))
-	_, err = tmux.RunCommand(socketPath, "run-shell", "-b", cmd)
-	return err
+	args := []string{"run-shell", "-b", cmd}
+	if socketPath != "" {
+		args = append([]string{"-S", socketPath}, args...)
+	}
+	return exec.Command("tmux", args...).Run()
 }
 
 // runDeferredInstall is invoked via run-shell -b after the main

@@ -3,11 +3,10 @@ package plugin
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
-
-	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 // optionPair is an internal representation of a tmux option key-value pair.
@@ -16,41 +15,41 @@ type optionPair struct {
 	Value string
 }
 
-type tmuxClient interface {
-	Command(parts ...string) (string, error)
-	Close() error
-}
-
-var newTmuxClient = func(socketPath string) (tmuxClient, error) {
-	return gotmux.NewTmux(socketPath)
-}
+// configFilesFn queries tmux for the list of loaded config files.
+// Uses a plain CLI call rather than a control-mode connection to avoid
+// creating phantom sessions during server startup (gotmuxcc's control-mode
+// transport falls back to new-session when the server isn't fully ready).
+var configFilesFn = defaultConfigFilesFn
 
 // optionsFn fetches global tmux options. Swapped in tests.
 var optionsFn = defaultOptionsFn
 
-func defaultOptionsFn(socketPath string) ([]optionPair, error) {
-	client, err := newTmuxClient(socketPath)
-	if err != nil {
-		return nil, fmt.Errorf("connecting to tmux: %w", err)
+func defaultConfigFilesFn(socketPath string) (string, error) {
+	args := []string{"display-message", "-p", "#{config_files}"}
+	if socketPath != "" {
+		args = append([]string{"-S", socketPath}, args...)
 	}
-	defer client.Close()
-
-	// tmux global options are uniquely keyed — setting @plugin multiple times
-	// overwrites rather than appending. Read config file(s) directly instead,
-	// the same approach tpm uses.
-	raw, err := client.Command("display-message", "-p", "#{config_files}")
+	out, err := exec.Command("tmux", args...).Output()
 	if err != nil {
-		return nil, fmt.Errorf("display-message config_files: %w", err)
+		return "", fmt.Errorf("display-message config_files: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func defaultOptionsFn(socketPath string) ([]optionPair, error) {
+	raw, err := configFilesFn(socketPath)
+	if err != nil {
+		return nil, err
 	}
 	var allPairs []optionPair
-	for _, cfgPath := range strings.Split(strings.TrimSpace(raw), ",") {
+	for _, cfgPath := range strings.Split(raw, ",") {
 		cfgPath = strings.TrimSpace(cfgPath)
 		if cfgPath == "" {
 			continue
 		}
 		pairs, err := parseConfigFile(cfgPath)
 		if err != nil {
-			continue // skip unreadable files
+			continue
 		}
 		allPairs = append(allPairs, pairs...)
 	}
