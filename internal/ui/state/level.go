@@ -10,6 +10,7 @@ import (
 type Level struct {
 	ID             string
 	Title          string
+	Subtitle       string
 	Items          []menu.Item
 	Full           []menu.Item
 	Filter         string

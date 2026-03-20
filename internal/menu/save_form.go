@@ -38,6 +38,7 @@ func (f *SaveForm) Value() string     { return strings.TrimSpace(f.input.Value()
 func (f *SaveForm) InputView() string { return f.input.View() }
 func (f *SaveForm) Error() string     { return f.err }
 func (f *SaveForm) Title() string     { return "save as" }
+func (f *SaveForm) Subtitle() string  { return f.saveDir }
 func (f *SaveForm) Help() string      { return "press enter to save. esc to cancel." }
 func (f *SaveForm) SaveDir() string   { return f.saveDir }
 

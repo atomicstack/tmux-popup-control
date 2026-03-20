@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
@@ -190,6 +191,7 @@ func (m *Model) handleSaveForm(msg tea.Msg) (bool, tea.Cmd) {
 }
 
 func (m *Model) startSaveForm(prompt menu.SaveAsPrompt) {
+	m.loading = false
 	m.saveForm = menu.NewSaveForm(prompt)
 	m.mode = ModeSessionSaveForm
 }
@@ -201,7 +203,8 @@ func (m *Model) handleSaveAsPromptMsg(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) viewSaveForm() string {
-	lines := []string{m.saveForm.Title(), "", m.saveForm.InputView()}
+	subtitle := lipgloss.NewStyle().Faint(true).Render(m.saveForm.Subtitle())
+	lines := []string{m.saveForm.Title(), subtitle, "", m.saveForm.InputView()}
 	if err := m.saveForm.Error(); err != "" {
 		lines = append(lines, "", styles.Info.Render(err))
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
 )
 
@@ -410,6 +411,11 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	m.errMsg = ""
 	node, _ := m.registry.Find(update.id)
 	level := newLevel(update.id, update.title, update.items, node)
+	if update.id == "session:restore-from" {
+		if dir, err := resurrect.ResolveDir(m.socketPath); err == nil {
+			level.Subtitle = dir
+		}
+	}
 	if isTreeLevel(update.id) {
 		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
 		level.Data = menu.NewTreeState(allExpanded)

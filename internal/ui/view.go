@@ -121,6 +121,10 @@ func (m *Model) viewVertical(header string) string {
 	if header != "" {
 		lines = append(lines, styledLine{text: header, style: styles.Header})
 	}
+	if current := m.currentLevel(); current != nil && current.Subtitle != "" {
+		dimStyle := lipgloss.NewStyle().Faint(true)
+		lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
+	}
 	if current := m.currentLevel(); current != nil {
 		m.syncViewport(current)
 		start := 0
