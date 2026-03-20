@@ -131,6 +131,9 @@ type fakeClient struct {
 	commandCalls  [][]string
 	commandOutput string
 	commandErr    error
+
+	// NewSession tracking.
+	newSessionOptsCalls []*gotmux.SessionOptions
 }
 
 func (f *fakeClient) ListSessions() ([]*gotmux.Session, error) {
@@ -188,6 +191,7 @@ func (f *fakeClient) GetSessionByName(name string) (*gotmux.Session, error) {
 }
 
 func (f *fakeClient) NewSession(opts *gotmux.SessionOptions) (*gotmux.Session, error) {
+	f.newSessionOptsCalls = append(f.newSessionOptsCalls, opts)
 	if f.newErr != nil {
 		return nil, f.newErr
 	}
