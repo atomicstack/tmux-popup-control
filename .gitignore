@@ -10,9 +10,11 @@
 
 # Go package cache
 /pkg/
+.gocache
+.gomodcache
 
 # Dependency directories (remove the comment below if you want to ignore these)
-# vendor/ 
+vendor/ 
 
 # IDE files
 .idea/
