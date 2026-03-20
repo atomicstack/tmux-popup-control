@@ -126,12 +126,16 @@ func CategoryLoaders() map[string]Loader {
 // ActionHandlers maps submenu identifiers to their execution logic.
 func ActionHandlers() map[string]Action {
 	return map[string]Action{
-		"session:new":       SessionNewAction,
-		"session:switch":    SessionSwitchAction,
-		"session:rename":    SessionRenameAction,
-		"session:detach":    SessionDetachAction,
-		"session:kill":      SessionKillAction,
-		"session:tree":      SessionTreeAction,
+		"session:new":          SessionNewAction,
+		"session:switch":       SessionSwitchAction,
+		"session:rename":       SessionRenameAction,
+		"session:detach":       SessionDetachAction,
+		"session:kill":         SessionKillAction,
+		"session:tree":         SessionTreeAction,
+		"session:save":         SessionSaveAction,
+		"session:save-as":      SessionSaveAsAction,
+		"session:restore":      SessionRestoreAction,
+		"session:restore-from": SessionRestoreFromAction,
 		"window:switch":     WindowSwitchAction,
 		"window:link":       WindowLinkAction,
 		"window:move":       WindowMoveAction,
@@ -159,11 +163,12 @@ func ActionHandlers() map[string]Action {
 // ActionLoaders enumerates loaders for nested submenu actions.
 func ActionLoaders() map[string]Loader {
 	return map[string]Loader{
-		"session:switch":    loadSessionSwitchMenu,
-		"session:rename":    loadSessionRenameMenu,
-		"session:detach":    loadSessionDetachMenu,
-		"session:kill":      loadSessionKillMenu,
-		"session:tree":      loadSessionTreeMenu,
+		"session:switch":       loadSessionSwitchMenu,
+		"session:rename":       loadSessionRenameMenu,
+		"session:detach":       loadSessionDetachMenu,
+		"session:kill":         loadSessionKillMenu,
+		"session:tree":         loadSessionTreeMenu,
+		"session:restore-from": loadSessionRestoreFromMenu,
 		"window:switch":     loadWindowSwitchMenu,
 		"window:link":       loadWindowLinkMenu,
 		"window:move":       loadWindowMoveMenu,

@@ -3,8 +3,10 @@ package ui
 import (
 	"strings"
 
-	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 )
 
 func (m *Model) handlePaneForm(msg tea.Msg) (bool, tea.Cmd) {
@@ -149,6 +151,60 @@ func (m *Model) viewSessionFormWithHeader(header string) string {
 		lines = append(lines, "", style.Render(err))
 	}
 	lines = append(lines, "", m.sessionForm.Help())
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) handleSaveForm(msg tea.Msg) (bool, tea.Cmd) {
+	if m.saveForm == nil {
+		return false, nil
+	}
+	cmd, done, cancel := m.saveForm.Update(msg)
+	if cancel {
+		m.saveForm = nil
+		m.mode = ModeMenu
+		return true, cmd
+	}
+	if done {
+		name := m.saveForm.Value()
+		ctx := m.saveForm.Context()
+		saveDir := m.saveForm.SaveDir()
+		m.saveForm = nil
+		m.mode = ModeMenu
+		return true, func() tea.Msg {
+			return menu.ResurrectStart{
+				Operation: "save",
+				Name:      name,
+				Config: resurrect.Config{
+					SocketPath: ctx.SocketPath,
+					SaveDir:    saveDir,
+					Name:       name,
+				},
+			}
+		}
+	}
+	if cmd != nil {
+		return true, cmd
+	}
+	return true, nil
+}
+
+func (m *Model) startSaveForm(prompt menu.SaveAsPrompt) {
+	m.saveForm = menu.NewSaveForm(prompt)
+	m.mode = ModeSessionSaveForm
+}
+
+func (m *Model) handleSaveAsPromptMsg(msg tea.Msg) tea.Cmd {
+	prompt := msg.(menu.SaveAsPrompt)
+	m.startSaveForm(prompt)
+	return nil
+}
+
+func (m *Model) viewSaveForm() string {
+	lines := []string{m.saveForm.Title(), "", m.saveForm.InputView()}
+	if err := m.saveForm.Error(); err != "" {
+		lines = append(lines, "", styles.Info.Render(err))
+	}
+	lines = append(lines, "", m.saveForm.Help())
 	return strings.Join(lines, "\n")
 }
 

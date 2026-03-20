@@ -68,6 +68,7 @@ type Model struct {
 	sessionForm       *menu.SessionForm
 	windowForm        *menu.WindowRenameForm
 	paneForm          *menu.PaneRenameForm
+	saveForm          *menu.SaveForm
 	pendingWindowSwap  *menu.Item
 	pendingPaneSwap    *menu.Item
 	commandItemsCache  []menu.Item
@@ -218,7 +219,7 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 	case ModeResurrect:
 		return m.handleResurrectKey(msg)
 	case ModeSessionSaveForm:
-		return false, nil
+		return m.handleSaveForm(msg)
 	default:
 		return false, nil
 	}
@@ -246,9 +247,10 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(menu.PluginInstallStart{}):    m.handlePluginInstallStartMsg,
 		reflect.TypeOf(menu.PluginUpdateStart{}):     m.handlePluginUpdateStartMsg,
 		reflect.TypeOf(pluginInstallDoneMsg{}):       m.handlePluginInstallDoneMsg,
-		reflect.TypeOf(ResurrectStart{}):             m.handleResurrectStartMsg,
+		reflect.TypeOf(menu.ResurrectStart{}):        m.handleResurrectStartMsg,
 		reflect.TypeOf(resurrectProgressMsg{}):       m.handleResurrectProgressMsg,
 		reflect.TypeOf(resurrectTickMsg{}):           m.handleResurrectTickMsg,
+		reflect.TypeOf(menu.SaveAsPrompt{}):          m.handleSaveAsPromptMsg,
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 )
 
@@ -24,14 +25,6 @@ type logEntry struct {
 	id      string
 }
 
-// ResurrectStart triggers mode transition from a menu action.
-type ResurrectStart struct {
-	Operation string // "save" or "restore"
-	Name      string // snapshot name (save-as only)
-	SaveFile  string // path to restore from
-	Config    resurrect.Config
-}
-
 type resurrectProgressMsg struct {
 	event resurrect.ProgressEvent
 }
@@ -39,7 +32,7 @@ type resurrectProgressMsg struct {
 type resurrectTickMsg struct{}
 
 func (m *Model) handleResurrectStartMsg(msg tea.Msg) tea.Cmd {
-	start := msg.(ResurrectStart)
+	start := msg.(menu.ResurrectStart)
 	var ch <-chan resurrect.ProgressEvent
 	if start.Operation == "restore" {
 		ch = resurrect.Restore(start.Config, start.SaveFile)

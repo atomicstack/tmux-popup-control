@@ -9,8 +9,23 @@ import (
 
 	"github.com/atomicstack/tmux-popup-control/internal/format/table"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
+	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
+
+// ResurrectStart triggers a save or restore operation from a menu action.
+type ResurrectStart struct {
+	Operation string // "save" or "restore"
+	Name      string // snapshot name (save-as only)
+	SaveFile  string // path to restore from
+	Config    resurrect.Config
+}
+
+// SaveAsPrompt requests interactive input for naming a snapshot.
+type SaveAsPrompt struct {
+	Context Context
+	SaveDir string
+}
 
 func loadSessionMenu(Context) ([]Item, error) {
 	items := []string{
@@ -22,6 +37,10 @@ func loadSessionMenu(Context) ([]Item, error) {
 		"switch",
 		"tree",
 		// ^^^ do NOT reorder these! ^^^
+		"save",
+		"save-as",
+		"restore",
+		"restore-from",
 	}
 	return menuItemsFromIDs(items), nil
 }
@@ -332,6 +351,91 @@ func (f *SessionForm) validateName(name string) (string, bool) {
 		}
 		return "", false
 	}
+}
+
+func SessionSaveAction(ctx Context, item Item) tea.Cmd {
+	return func() tea.Msg {
+		dir, err := resurrect.ResolveDir(ctx.SocketPath)
+		if err != nil {
+			return ActionResult{Err: fmt.Errorf("resolving save dir: %w", err)}
+		}
+		return ResurrectStart{
+			Operation: "save",
+			Config: resurrect.Config{
+				SocketPath: ctx.SocketPath,
+				SaveDir:    dir,
+			},
+		}
+	}
+}
+
+func SessionSaveAsAction(ctx Context, item Item) tea.Cmd {
+	return func() tea.Msg {
+		dir, err := resurrect.ResolveDir(ctx.SocketPath)
+		if err != nil {
+			return ActionResult{Err: fmt.Errorf("resolving save dir: %w", err)}
+		}
+		return SaveAsPrompt{Context: ctx, SaveDir: dir}
+	}
+}
+
+func SessionRestoreAction(ctx Context, item Item) tea.Cmd {
+	return func() tea.Msg {
+		dir, err := resurrect.ResolveDir(ctx.SocketPath)
+		if err != nil {
+			return ActionResult{Err: fmt.Errorf("resolving save dir: %w", err)}
+		}
+		path, err := resurrect.LatestSave(dir)
+		if err != nil {
+			return ActionResult{Err: err}
+		}
+		return ResurrectStart{
+			Operation: "restore",
+			SaveFile:  path,
+			Config: resurrect.Config{
+				SocketPath: ctx.SocketPath,
+				SaveDir:    dir,
+			},
+		}
+	}
+}
+
+func SessionRestoreFromAction(ctx Context, item Item) tea.Cmd {
+	return func() tea.Msg {
+		dir, err := resurrect.ResolveDir(ctx.SocketPath)
+		if err != nil {
+			return ActionResult{Err: fmt.Errorf("resolving save dir: %w", err)}
+		}
+		return ResurrectStart{
+			Operation: "restore",
+			SaveFile:  item.ID,
+			Config: resurrect.Config{
+				SocketPath: ctx.SocketPath,
+				SaveDir:    dir,
+			},
+		}
+	}
+}
+
+func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
+	dir, err := resurrect.ResolveDir(ctx.SocketPath)
+	if err != nil {
+		return nil, nil // empty list, no error shown
+	}
+	entries, err := resurrect.ListSaves(dir)
+	if err != nil {
+		return nil, nil
+	}
+	items := make([]Item, 0, len(entries))
+	for _, e := range entries {
+		label := e.Timestamp.Format("2006-01-02 15:04:05")
+		if e.Name != "" {
+			label += " [" + e.Name + "]"
+		}
+		label += fmt.Sprintf(" (%d session(s))", e.SessionCount)
+		items = append(items, Item{ID: e.Path, Label: label})
+	}
+	return items, nil
 }
 
 func loadSessionTreeMenu(ctx Context) ([]Item, error) {

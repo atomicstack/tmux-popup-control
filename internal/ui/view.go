@@ -100,7 +100,9 @@ func (m *Model) View() tea.View {
 		content = m.resurrectView()
 		return m.wrapView(content)
 	case ModeSessionSaveForm:
-		content = "save as..." // placeholder
+		if m.saveForm != nil {
+			content = m.viewSaveForm()
+		}
 		return m.wrapView(content)
 	}
 	if m.hasSidePreview() {
