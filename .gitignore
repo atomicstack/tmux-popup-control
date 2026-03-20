@@ -30,5 +30,6 @@
 # Worktrees
 .worktrees/
 
-# Release artifacts
+# build/release artifacts
 dist/
+tmux-popup-control
