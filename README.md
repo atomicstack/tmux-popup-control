@@ -11,6 +11,10 @@ persistent control-mode connection via
 ## Features
 
 ### Session management
+- **Save** sessions — auto-timestamped or named snapshots of all sessions,
+  windows, panes, layouts, and optionally pane contents
+- **Restore** sessions — from the most recent save or a picked snapshot,
+  with progress UI and conflict handling (skips existing sessions)
 - **Switch** between sessions with live pane-capture preview
 - **New** session creation via inline form
 - **Rename** sessions via inline form
@@ -102,11 +106,15 @@ make release         # cross-compiles + creates GitHub release via gh
 | `--trace` / `TMUX_POPUP_CONTROL_TRACE` | enable verbose JSON trace logging |
 | `TMUX_POPUP_CONTROL_CLIENT` | explicit client ID override (env only) |
 | `TMUX_POPUP_CONTROL_SESSION` | explicit session name override (env only) |
+| `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` / `@tmux-popup-control-session-storage-dir` | override save/restore storage directory (env only / tmux option) |
+| `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` / `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save (env only / tmux option) |
 
 ### CLI subcommands
 
 | Subcommand | Purpose |
 |---|---|
+| `save-sessions [--name NAME]` | save all sessions to a snapshot; opens a progress popup |
+| `restore-sessions [--from NAME]` | restore sessions from a snapshot; opens a progress popup |
 | `install-and-init-plugins` | sources installed plugins at tmux startup; opens a deferred install popup for any missing plugins |
 | `deferred-install` | internal helper invoked via `run-shell -b`; waits for tmux startup, then opens the install UI in a `display-popup` |
 | `--version` | prints the version string and exits |
@@ -138,6 +146,7 @@ internal/backend/         polls tmux state via goroutines
 internal/state/           thread-safe in-memory stores (sessions, windows, panes)
 internal/tmux/            tmux operations via gotmuxcc control-mode + exec fallback
 internal/menu/            menu tree definitions, loaders, action handlers
+internal/resurrect/       save/restore orchestration, storage, pane archives
 internal/ui/              Bubble Tea model, split across focused files
 internal/ui/state/        per-level items, cursor, filter, selection, viewport
 internal/format/table/    columnar table formatting with alignment
