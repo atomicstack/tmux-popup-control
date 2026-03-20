@@ -26,13 +26,16 @@ Four new items under the existing `session` category:
 - `session:save-as` handler enters `ModeSessionSaveForm` (single text input
   for the name, reusing the existing form pattern) → on submit sends
   `ResurrectStart{Operation: "save", Name: "..."}` → `ModeResurrect`.
-- `session:restore` handler resolves the `last` symlink, loads JSON, sends
-  `ResurrectStart{Operation: "restore", SaveFile: path}` → `ModeResurrect`.
-- `session:restore-from` action loader scans the save directory and returns a
-  list of saves as menu items → user selects → handler sends
-  `ResurrectStart{Operation: "restore", SaveFile: path}` → `ModeResurrect`.
-  If the save directory does not exist or is empty, the loader returns no
-  items and the menu shows the standard empty-list placeholder.
+- `session:restore` handler resolves the `last` symlink via
+  `resurrect.LatestSave()`. If no auto-save exists (symlink missing), the
+  handler returns `menu.ActionResult{Err: ...}` with a message like "no saved
+  session found" — the standard error display handles this.
+- `session:restore-from` action loader calls
+  `resurrect.ListSaves(resurrect.ResolveDir(ctx.SocketPath))` to scan the
+  save directory and return save entries as menu items. The loader calls
+  `ResolveDir` directly using the socket path from `menu.Context`. If the
+  save directory does not exist or is empty, the loader returns no items and
+  the menu shows the standard empty-list placeholder.
 
 ## CLI subcommands
 
@@ -325,7 +328,11 @@ Error lines use the existing `styles.Error` (red).
 
 ### Key handling in ModeResurrect
 
-- While running: all keys ignored.
+`ModeResurrect` is added as a case in `handleActiveForm` to consume all key
+events (mirroring `ModePluginInstall`). This prevents key presses from falling
+through to `handleKeyMsg` which would otherwise navigate the menu stack.
+
+- While running: all keys consumed and ignored.
 - On error: any key dismisses.
 - On done: auto-dismiss via tick; keys also dismiss early.
 
@@ -339,11 +346,12 @@ submit, escape to cancel. Validation checks that the name does not collide
 with an existing save file in the save directory (distinct from the existing
 `ModeSessionForm` which validates against tmux session names).
 
-**Named snapshot collision:** If a save file with the chosen name already
-exists, the form shows an inline info notice (e.g. "snapshot 'foo' already
-exists — enter to overwrite") but does not block submission. This allows
-intentional updates to named snapshots while making accidental overwrites
-unlikely.
+**Named snapshot collision:** The collision check runs only on form submission
+(not per-keystroke) to avoid filesystem I/O on every character. If a save file
+with the chosen name already exists, the form shows an inline info notice
+(e.g. "snapshot 'foo' already exists — enter to overwrite") and stays open,
+requiring a second enter to confirm. This allows intentional updates to named
+snapshots while making accidental overwrites unlikely.
 
 ## Configuration
 
@@ -403,10 +411,12 @@ func LatestSave(dir string) (string, error)
 
 `Save()` and `Restore()` return a read-only channel **immediately** with no
 blocking work on the call path. All discovery (fetching sessions/windows/panes)
-and I/O runs inside the spawned goroutine. The first `ProgressEvent` sent on
-the channel includes the computed `Total` after discovery completes. The UI
-consumes events via Bubble Tea commands — one command per event, each returning
-a `tea.Cmd` that reads the next event.
+and I/O runs inside the spawned goroutine. The first `ProgressEvent` sent on the channel is a discovery event
+(`Step: 0, Total: N, Message: "discovering sessions..."`) that communicates
+the computed total. Until this first event arrives, the UI renders the log
+area with a "discovering..." message and a dimmed empty progress bar (no
+fraction displayed). The UI consumes events via Bubble Tea commands — one
+command per event, each returning a `tea.Cmd` that reads the next event.
 
 **Backend poller interaction:** The `backend.Watcher` continues polling during
 save/restore. The gotmuxcc router serialises concurrent commands on the shared
@@ -438,9 +448,12 @@ interface or as `internal/tmux` public functions:
   `SelectLayout` function has no target parameter and applies to the
   control-mode session's active window, which is unsuitable for batch restore.
 - `CapturePaneContents(socketPath, target string) (string, error)` — wraps
-  `client.CapturePane(target)` for bulk capture with an explicit target. The
-  existing preview-oriented capture functions are not suitable for this use
-  case.
+  `client.CapturePane(target, opts)` for bulk capture with an explicit target.
+  Uses `CaptureOptions{PreserveTrailingSpace: true}` with no escape sequences
+  and no start-line limit — captures the full scrollback as plain text. The
+  existing preview-oriented capture functions use styled output with
+  `EscTxtNBgAttr: true` and limited history, which is unsuitable for
+  save/restore.
 
 All of these use `client.Command()` (the generic gotmuxcc command interface)
 rather than introducing new gotmuxcc API surface. They follow the existing
