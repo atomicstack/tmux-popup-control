@@ -527,6 +527,77 @@ func TestRestoreReadFileError(t *testing.T) {
 	}
 }
 
+// ── TestRestoreSwitchesClientWithID ──────────────────────────────────────────
+
+// TestRestoreSwitchesClientWithID verifies that the restore passes the
+// configured ClientID to switchClientFn so the terminal client (not the
+// control-mode client) is switched.
+func TestRestoreSwitchesClientWithID(t *testing.T) {
+	dir := t.TempDir()
+
+	var switchSocket, switchClient, switchTarget string
+	r1 := withCreateSessionFn(noopSession)
+	defer r1()
+	r2 := withCreateWindowFn(noopWindow)
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(noopLayout)
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(func(socket, clientID, target string) error {
+		switchSocket = socket
+		switchClient = clientID
+		switchTarget = target
+		return nil
+	})
+	defer r8()
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{}, nil
+	})
+	defer r9()
+	r10 := withDefaultCommandFn(noopDefaultCommand)
+	defer r10()
+
+	sf := buildSaveFile(Session{
+		Name: "dev",
+		Windows: []Window{
+			{Index: 0, Name: "main", Layout: "tiled", Active: true,
+				Panes: []Pane{{Index: 0, WorkingDir: "/", Active: true}}},
+		},
+	})
+	sf.ClientSession = "dev"
+	path := writeSaveFile(t, dir, "switchtest", sf)
+
+	cfg := Config{
+		SocketPath: "/tmp/test.sock",
+		SaveDir:    dir,
+		ClientID:   "/dev/ttys004",
+	}
+	ch := Restore(cfg, path)
+	events := collectRestoreEvents(ch)
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+
+	if switchSocket != "/tmp/test.sock" {
+		t.Errorf("switch socket: got %q, want %q", switchSocket, "/tmp/test.sock")
+	}
+	if switchClient != "/dev/ttys004" {
+		t.Errorf("switch clientID: got %q, want %q", switchClient, "/dev/ttys004")
+	}
+	if switchTarget != "dev" {
+		t.Errorf("switch target: got %q, want %q", switchTarget, "dev")
+	}
+}
+
 // ── TestPaneStartupCommand ───────────────────────────────────────────────────
 
 func TestPaneStartupCommand(t *testing.T) {

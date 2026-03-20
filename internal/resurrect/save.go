@@ -33,9 +33,8 @@ var queryWindowOptionsFn = func(socket string) (map[string]bool, error) {
 }
 
 // clientInfoFn returns the current client's session and last-session.
-// The real implementation would call DisplayMessage; it is wired in later.
-var clientInfoFn = func(socket string) (clientSession, clientLastSession string) {
-	return "", ""
+var clientInfoFn = func(socket, clientID string) (clientSession, clientLastSession string) {
+	return tmux.ClientSessionInfo(socket, clientID)
 }
 
 // with* helpers replace the package-level vars for the duration of a test and
@@ -71,7 +70,7 @@ func withQueryWindowOptionsFn(fn func(string) (map[string]bool, error)) func() {
 	return func() { queryWindowOptionsFn = orig }
 }
 
-func withClientInfoFn(fn func(string) (string, string)) func() {
+func withClientInfoFn(fn func(string, string) (string, string)) func() {
 	orig := clientInfoFn
 	clientInfoFn = fn
 	return func() { clientInfoFn = orig }
@@ -165,7 +164,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 	}
 
 	// client info
-	clientSess, clientLastSess := clientInfoFn(cfg.SocketPath)
+	clientSess, clientLastSess := clientInfoFn(cfg.SocketPath, cfg.ClientID)
 
 	step := 0
 	now := time.Now()

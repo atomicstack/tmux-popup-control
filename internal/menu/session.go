@@ -365,6 +365,7 @@ func SessionSaveAction(ctx Context, item Item) tea.Cmd {
 				SocketPath:          ctx.SocketPath,
 				SaveDir:             dir,
 				CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
+				ClientID:            ctx.ClientID,
 			},
 		}
 	}
@@ -397,6 +398,7 @@ func SessionRestoreAction(ctx Context, item Item) tea.Cmd {
 				SocketPath:          ctx.SocketPath,
 				SaveDir:             dir,
 				CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
+				ClientID:            ctx.ClientID,
 			},
 		}
 	}
@@ -415,6 +417,7 @@ func SessionRestoreFromAction(ctx Context, item Item) tea.Cmd {
 				SocketPath:          ctx.SocketPath,
 				SaveDir:             dir,
 				CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
+				ClientID:            ctx.ClientID,
 			},
 		}
 	}

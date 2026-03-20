@@ -1251,6 +1251,45 @@ func TestIsValidClientName(t *testing.T) {
 	}
 }
 
+func TestClientSessionInfoFindsClient(t *testing.T) {
+	fake := &fakeClient{
+		clients: []*gotmux.Client{
+			{Name: "/dev/ttys000", Session: "work", LastSession: "dev"},
+			{Name: "/dev/ttys001", Session: "dev", LastSession: ""},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	sess, last := ClientSessionInfo("/tmp/test.sock", "/dev/ttys000")
+	if sess != "work" {
+		t.Errorf("session: got %q, want %q", sess, "work")
+	}
+	if last != "dev" {
+		t.Errorf("last session: got %q, want %q", last, "dev")
+	}
+}
+
+func TestClientSessionInfoNoMatch(t *testing.T) {
+	fake := &fakeClient{
+		clients: []*gotmux.Client{
+			{Name: "/dev/ttys000", Session: "work"},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	sess, last := ClientSessionInfo("/tmp/test.sock", "/dev/ttys999")
+	if sess != "" || last != "" {
+		t.Errorf("expected empty strings, got session=%q last=%q", sess, last)
+	}
+}
+
+func TestClientSessionInfoEmptyID(t *testing.T) {
+	sess, last := ClientSessionInfo("/tmp/test.sock", "")
+	if sess != "" || last != "" {
+		t.Errorf("expected empty strings for empty clientID, got session=%q last=%q", sess, last)
+	}
+}
+
 func TestListCommands(t *testing.T) {
 	expected := "attach-session (attach)\nbind-key (bind)"
 	fake := &fakeClient{commandOutput: expected}

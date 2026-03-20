@@ -417,7 +417,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		Kind:    "info",
 	}
 	if sf.ClientSession != "" {
-		if err := switchClientFn(cfg.SocketPath, "", sf.ClientSession); err != nil {
+		if err := switchClientFn(cfg.SocketPath, cfg.ClientID, sf.ClientSession); err != nil {
 			return sendError(ch, "switching client to session %s: %w", sf.ClientSession, err)
 		}
 	}

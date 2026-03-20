@@ -10,6 +10,7 @@ type Config struct {
 	SaveDir             string // resolved by caller via ResolveDir()
 	CapturePaneContents bool
 	Name                string // empty for auto-timestamped
+	ClientID            string // terminal client name for switch-client
 }
 
 // SaveFile is the top-level JSON structure written to disk.

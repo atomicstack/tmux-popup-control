@@ -49,7 +49,7 @@ func Run(cfg Config) error {
 	defer watcher.Stop()
 	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu, cfg.MenuArgs, clientID, strings.TrimSpace(cfg.SessionName))
 	if cfg.ResurrectOp != "" {
-		model.SetResurrectInit(buildResurrectStart(cfg, socketPath))
+		model.SetResurrectInit(buildResurrectStart(cfg, socketPath, clientID))
 	}
 	program := tea.NewProgram(model)
 	_, err = program.Run()
@@ -59,11 +59,12 @@ func Run(cfg Config) error {
 	return err
 }
 
-func buildResurrectStart(cfg Config, socketPath string) menu.ResurrectStart {
+func buildResurrectStart(cfg Config, socketPath, clientID string) menu.ResurrectStart {
 	rcfg := resurrect.Config{
 		SocketPath:          socketPath,
 		CapturePaneContents: cfg.RestorePaneContents || resurrect.ResolvePaneContents(socketPath),
 		Name:                cfg.ResurrectName,
+		ClientID:            clientID,
 	}
 	// resolve save dir
 	if cfg.SessionStorageDir != "" {

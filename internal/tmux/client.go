@@ -100,6 +100,31 @@ func FindTerminalClient(socketPath string) (string, error) {
 	return "", fmt.Errorf("no terminal client found")
 }
 
+// ClientSessionInfo looks up a specific client by name and returns its current
+// session and last-session. Returns empty strings if the client is not found.
+func ClientSessionInfo(socketPath, clientID string) (session, lastSession string) {
+	if clientID == "" {
+		return "", ""
+	}
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return "", ""
+	}
+	clients, err := client.ListClients()
+	if err != nil {
+		return "", ""
+	}
+	for _, c := range clients {
+		if c == nil {
+			continue
+		}
+		if strings.TrimSpace(c.Name) == clientID {
+			return strings.TrimSpace(c.Session), strings.TrimSpace(c.LastSession)
+		}
+	}
+	return "", ""
+}
+
 // isValidClientName checks that name looks like a real tmux client
 // identifier. Client names are either device paths (/dev/ttys004) or
 // internal names (client-67503). This guards against passing garbage

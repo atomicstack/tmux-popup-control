@@ -96,7 +96,7 @@ func TestSave(t *testing.T) {
 		return map[string]bool{}, nil
 	})
 	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string) (clientSession, clientLastSession string) {
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
 		return "alpha", ""
 	})
 	defer restoreClientInfo()
@@ -207,7 +207,7 @@ func TestSaveNoSessions(t *testing.T) {
 		return map[string]bool{}, nil
 	})
 	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string) (clientSession, clientLastSession string) {
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
 		return "", ""
 	})
 	defer restoreClientInfo()
@@ -259,7 +259,7 @@ func TestSaveNoPaneContents(t *testing.T) {
 		return map[string]bool{}, nil
 	})
 	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string) (clientSession, clientLastSession string) {
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
 		return "main", ""
 	})
 	defer restoreClientInfo()
@@ -328,7 +328,7 @@ func TestSaveNamedSnapshot(t *testing.T) {
 		return map[string]bool{}, nil
 	})
 	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string) (clientSession, clientLastSession string) {
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
 		return "work", ""
 	})
 	defer restoreClientInfo()
@@ -385,7 +385,7 @@ func TestSaveCaptureError(t *testing.T) {
 		return map[string]bool{}, nil
 	})
 	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string) (clientSession, clientLastSession string) {
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
 		return "dev", ""
 	})
 	defer restoreClientInfo()
@@ -448,7 +448,7 @@ func TestSaveTimestamp(t *testing.T) {
 		return map[string]bool{}, nil
 	})
 	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string) (clientSession, clientLastSession string) {
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
 		return "ts", ""
 	})
 	defer restoreClientInfo()

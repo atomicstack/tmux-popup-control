@@ -180,6 +180,7 @@ func (m *Model) handleSaveForm(msg tea.Msg) (bool, tea.Cmd) {
 					SaveDir:             saveDir,
 					Name:                name,
 					CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
+					ClientID:            ctx.ClientID,
 				},
 			}
 		}
