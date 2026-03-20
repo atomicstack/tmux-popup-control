@@ -153,13 +153,17 @@ type tmuxClient interface {
 	MoveWindowToSession(source, targetSession string) error
 	SwapWindows(first, second string) error
 	SelectWindow(target string) error
+	SelectLayout(target string, layout string) error
+	SplitWindow(target string, op *gotmux.SplitWindowOptions) error
+	// Option queries (control-mode).
+	GlobalOption(key string) (string, error)
 	// Display and custom-format queries (control-mode).
 	DisplayMessage(target, format string) (string, error)
 	ListSessionsFormat(format string) ([]string, error)
 	ListWindowsFormat(target, filter, format string) ([]string, error)
 	ListPanesFormat(target, filter, format string) ([]string, error)
 	// Raw command for operations that have no explicit target
-	// (e.g. select-layout, resize-pane without a pane ID,
+	// (e.g. resize-pane without a pane ID,
 	// kill-pane without a Tmux-level method).
 	Command(parts ...string) (string, error)
 }

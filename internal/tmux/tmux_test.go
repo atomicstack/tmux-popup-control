@@ -107,16 +107,21 @@ type fakeClient struct {
 	capturePaneFn   func(target string, op *gotmux.CaptureOptions) (string, error)
 
 	// Window operations.
-	unlinkWindowCalls []string
-	unlinkWindowErr   error
-	linkWindowCalls   int
-	linkWindowErr     error
-	moveWindowCalls   int
-	moveWindowErr     error
-	swapWindowsCalls  int
-	swapWindowsErr    error
-	selectWindowCalls []string
-	selectWindowErr   error
+	unlinkWindowCalls    []string
+	unlinkWindowErr      error
+	linkWindowCalls      int
+	linkWindowErr        error
+	moveWindowCalls      int
+	moveWindowErr        error
+	swapWindowsCalls     int
+	swapWindowsErr       error
+	selectWindowCalls    []string
+	selectWindowErr      error
+	selectLayoutCalls    [][]string
+	selectLayoutErr      error
+	splitWindowCalls     []struct{ target string; opts *gotmux.SplitWindowOptions }
+	splitWindowErr       error
+	globalOptionFn       func(key string) (string, error)
 
 	// Display and format queries.
 	displayMessageFn        func(target, format string) (string, error)
@@ -270,6 +275,23 @@ func (f *fakeClient) SwapWindows(first, second string) error {
 func (f *fakeClient) SelectWindow(target string) error {
 	f.selectWindowCalls = append(f.selectWindowCalls, target)
 	return f.selectWindowErr
+}
+
+func (f *fakeClient) SelectLayout(target string, layout string) error {
+	f.selectLayoutCalls = append(f.selectLayoutCalls, []string{target, layout})
+	return f.selectLayoutErr
+}
+
+func (f *fakeClient) SplitWindow(target string, op *gotmux.SplitWindowOptions) error {
+	f.splitWindowCalls = append(f.splitWindowCalls, struct{ target string; opts *gotmux.SplitWindowOptions }{target, op})
+	return f.splitWindowErr
+}
+
+func (f *fakeClient) GlobalOption(key string) (string, error) {
+	if f.globalOptionFn != nil {
+		return f.globalOptionFn(key)
+	}
+	return "", nil
 }
 
 // Display and format queries.

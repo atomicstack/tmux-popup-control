@@ -3,8 +3,6 @@ package tmux
 import (
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"testing"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -16,7 +14,7 @@ func TestCreateSessionSuccess(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	if err := CreateSession("", "mysession", "/tmp/work"); err != nil {
+	if err := CreateSession("", "mysession", "/tmp/work", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(fake.newSessionOptsCalls) != 1 {
@@ -32,6 +30,23 @@ func TestCreateSessionSuccess(t *testing.T) {
 	if opts.StartDirectory != "/tmp/work" {
 		t.Errorf("expected dir %q, got %q", "/tmp/work", opts.StartDirectory)
 	}
+	if opts.ShellCommand != "" {
+		t.Errorf("expected empty ShellCommand, got %q", opts.ShellCommand)
+	}
+}
+
+func TestCreateSessionWithCommand(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	cmd := "cat /tmp/pane.txt; exec bash"
+	if err := CreateSession("", "mysession", "/tmp", cmd); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	opts := fake.newSessionOptsCalls[0]
+	if opts.ShellCommand != cmd {
+		t.Errorf("expected ShellCommand %q, got %q", cmd, opts.ShellCommand)
+	}
 }
 
 func TestCreateSessionError(t *testing.T) {
@@ -39,7 +54,7 @@ func TestCreateSessionError(t *testing.T) {
 	fake := &fakeClient{newErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	err := CreateSession("", "fail", "/tmp")
+	err := CreateSession("", "fail", "/tmp", "")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -48,7 +63,7 @@ func TestCreateSessionError(t *testing.T) {
 func TestCreateSessionClientError(t *testing.T) {
 	wantErr := errors.New("connect failed")
 	withStubTmux(t, func(string) (tmuxClient, error) { return nil, wantErr })
-	err := CreateSession("", "name", "/dir")
+	err := CreateSession("", "name", "/dir", "")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -60,16 +75,31 @@ func TestCreateWindowSuccess(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	if err := CreateWindow("", "main", 2, "editor", "/home/user"); err != nil {
+	if err := CreateWindow("", "main", 2, "editor", "/home/user", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(fake.commandCalls) != 1 {
 		t.Fatalf("expected 1 command call, got %d", len(fake.commandCalls))
 	}
-	got := strings.Join(fake.commandCalls[0], " ")
-	want := "new-window -t main:2 -n editor -c /home/user -d"
+	got := fmt.Sprintf("%v", fake.commandCalls[0])
+	want := "[new-window -t main:2 -n editor -c /home/user -d]"
 	if got != want {
-		t.Errorf("expected %q, got %q", want, got)
+		t.Errorf("expected %s, got %s", want, got)
+	}
+}
+
+func TestCreateWindowWithCommand(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	cmd := "cat /tmp/pane.txt; exec bash"
+	if err := CreateWindow("", "main", 2, "editor", "/home/user", cmd); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	args := fake.commandCalls[0]
+	last := args[len(args)-1]
+	if last != cmd {
+		t.Errorf("expected last arg %q, got %q", cmd, last)
 	}
 }
 
@@ -78,7 +108,7 @@ func TestCreateWindowError(t *testing.T) {
 	fake := &fakeClient{commandErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	err := CreateWindow("", "main", 0, "w", "/")
+	err := CreateWindow("", "main", 0, "w", "/", "")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -87,7 +117,7 @@ func TestCreateWindowError(t *testing.T) {
 func TestCreateWindowClientError(t *testing.T) {
 	wantErr := errors.New("connect failed")
 	withStubTmux(t, func(string) (tmuxClient, error) { return nil, wantErr })
-	err := CreateWindow("", "s", 1, "w", "/")
+	err := CreateWindow("", "s", 1, "w", "/", "")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -99,25 +129,50 @@ func TestSplitPaneSuccess(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	if err := SplitPane("", "main:1.0", "/var/log"); err != nil {
+	if err := SplitPane("", "main:1.0", "/var/log", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(fake.commandCalls) != 1 {
-		t.Fatalf("expected 1 command call, got %d", len(fake.commandCalls))
+	if len(fake.splitWindowCalls) != 1 {
+		t.Fatalf("expected 1 SplitWindow call, got %d", len(fake.splitWindowCalls))
 	}
-	got := strings.Join(fake.commandCalls[0], " ")
-	want := "split-window -t main:1.0 -c /var/log -d"
-	if got != want {
-		t.Errorf("expected %q, got %q", want, got)
+	call := fake.splitWindowCalls[0]
+	if call.target != "main:1.0" {
+		t.Errorf("expected target %q, got %q", "main:1.0", call.target)
+	}
+	if call.opts == nil {
+		t.Fatal("expected non-nil options")
+	}
+	if call.opts.StartDirectory != "/var/log" {
+		t.Errorf("expected dir %q, got %q", "/var/log", call.opts.StartDirectory)
+	}
+	if !call.opts.Detached {
+		t.Error("expected Detached=true")
+	}
+	if call.opts.ShellCommand != "" {
+		t.Errorf("expected empty ShellCommand, got %q", call.opts.ShellCommand)
+	}
+}
+
+func TestSplitPaneWithCommand(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	cmd := "cat /tmp/pane.txt; exec bash"
+	if err := SplitPane("", "main:1.0", "/var/log", cmd); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	call := fake.splitWindowCalls[0]
+	if call.opts.ShellCommand != cmd {
+		t.Errorf("expected ShellCommand %q, got %q", cmd, call.opts.ShellCommand)
 	}
 }
 
 func TestSplitPaneError(t *testing.T) {
 	wantErr := errors.New("split-window failed")
-	fake := &fakeClient{commandErr: wantErr}
+	fake := &fakeClient{splitWindowErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	err := SplitPane("", "main:1.0", "/tmp")
+	err := SplitPane("", "main:1.0", "/tmp", "")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -126,7 +181,7 @@ func TestSplitPaneError(t *testing.T) {
 func TestSplitPaneClientError(t *testing.T) {
 	wantErr := errors.New("connect failed")
 	withStubTmux(t, func(string) (tmuxClient, error) { return nil, wantErr })
-	err := SplitPane("", "t", "/")
+	err := SplitPane("", "t", "/", "")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -141,19 +196,18 @@ func TestSelectLayoutTargetSuccess(t *testing.T) {
 	if err := SelectLayoutTarget("", "work:3", "tiled"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(fake.commandCalls) != 1 {
-		t.Fatalf("expected 1 command call, got %d", len(fake.commandCalls))
+	if len(fake.selectLayoutCalls) != 1 {
+		t.Fatalf("expected 1 SelectLayout call, got %d", len(fake.selectLayoutCalls))
 	}
-	got := strings.Join(fake.commandCalls[0], " ")
-	want := "select-layout -t work:3 tiled"
-	if got != want {
-		t.Errorf("expected %q, got %q", want, got)
+	call := fake.selectLayoutCalls[0]
+	if call[0] != "work:3" || call[1] != "tiled" {
+		t.Errorf("expected [work:3 tiled], got %v", call)
 	}
 }
 
 func TestSelectLayoutTargetError(t *testing.T) {
 	wantErr := errors.New("select-layout failed")
-	fake := &fakeClient{commandErr: wantErr}
+	fake := &fakeClient{selectLayoutErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
 	err := SelectLayoutTarget("", "main:1", "even-horizontal")
@@ -180,19 +234,17 @@ func TestSelectPaneRestoreSuccess(t *testing.T) {
 	if err := SelectPane("", "work:1.0"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(fake.commandCalls) != 1 {
-		t.Fatalf("expected 1 command call, got %d", len(fake.commandCalls))
+	if len(fake.selectPaneCalls) != 1 {
+		t.Fatalf("expected 1 SelectPane call, got %d", len(fake.selectPaneCalls))
 	}
-	got := strings.Join(fake.commandCalls[0], " ")
-	want := "select-pane -t work:1.0"
-	if got != want {
-		t.Errorf("expected %q, got %q", want, got)
+	if fake.selectPaneCalls[0] != "work:1.0" {
+		t.Errorf("expected target %q, got %q", "work:1.0", fake.selectPaneCalls[0])
 	}
 }
 
 func TestSelectPaneRestoreError(t *testing.T) {
 	wantErr := errors.New("select-pane failed")
-	fake := &fakeClient{commandErr: wantErr}
+	fake := &fakeClient{selectPaneErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
 	err := SelectPane("", "main:0.0")
@@ -210,66 +262,6 @@ func TestSelectPaneRestoreClientError(t *testing.T) {
 	}
 }
 
-// --- SendPaneContents ---
-
-func TestSendPaneContentsSuccess(t *testing.T) {
-	fake := &fakeClient{}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-
-	if err := SendPaneContents("", "main:0.0", "hello world"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(fake.commandCalls) != 2 {
-		t.Fatalf("expected 2 command calls, got %d: %v", len(fake.commandCalls), fake.commandCalls)
-	}
-
-	// first call: load-buffer <tmpfile>
-	if len(fake.commandCalls[0]) < 2 || fake.commandCalls[0][0] != "load-buffer" {
-		t.Errorf("expected first command to be load-buffer, got %v", fake.commandCalls[0])
-	}
-	tmpPath := fake.commandCalls[0][1]
-
-	// second call: paste-buffer -t <target> -d
-	got := strings.Join(fake.commandCalls[1], " ")
-	want := "paste-buffer -t main:0.0 -d"
-	if got != want {
-		t.Errorf("expected %q, got %q", want, got)
-	}
-
-	// verify temp file was removed
-	if _, err := os.Stat(tmpPath); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("temp file %q was not cleaned up", tmpPath)
-	}
-}
-
-func TestSendPaneContentsCleanupOnLoadBufferError(t *testing.T) {
-	wantErr := errors.New("load-buffer failed")
-	fake := &fakeClient{commandErr: wantErr}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-
-	err := SendPaneContents("", "main:0.0", "data")
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("expected %v, got %v", wantErr, err)
-	}
-
-	// temp file should be cleaned up even on error
-	if len(fake.commandCalls) >= 1 && fake.commandCalls[0][0] == "load-buffer" {
-		tmpPath := fake.commandCalls[0][1]
-		if _, statErr := os.Stat(tmpPath); !errors.Is(statErr, os.ErrNotExist) {
-			t.Errorf("temp file %q was not cleaned up after load-buffer error", tmpPath)
-		}
-	}
-}
-
-func TestSendPaneContentsClientError(t *testing.T) {
-	wantErr := errors.New("connect failed")
-	withStubTmux(t, func(string) (tmuxClient, error) { return nil, wantErr })
-	err := SendPaneContents("", "t", "x")
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("expected %v, got %v", wantErr, err)
-	}
-}
-
 // --- CapturePaneContents ---
 
 func TestCapturePaneContentsSuccess(t *testing.T) {
@@ -281,6 +273,9 @@ func TestCapturePaneContentsSuccess(t *testing.T) {
 			}
 			if op == nil || !op.PreserveTrailing {
 				return "", fmt.Errorf("expected PreserveTrailing=true, got %+v", op)
+			}
+			if !op.EscTxtNBgAttr {
+				return "", fmt.Errorf("expected EscTxtNBgAttr=true, got %+v", op)
 			}
 			if op.StartLine != "-" {
 				return "", fmt.Errorf("expected StartLine='-', got %q", op.StartLine)
@@ -320,5 +315,79 @@ func TestCapturePaneContentsClientError(t *testing.T) {
 	_, err := CapturePaneContents("", "t")
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
+	}
+}
+
+// --- ShowOption ---
+
+func TestShowOptionSuccess(t *testing.T) {
+	fake := &fakeClient{
+		globalOptionFn: func(key string) (string, error) {
+			if key == "@my-option" {
+				return "  myvalue  ", nil
+			}
+			return "", nil
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	got := ShowOption("", "@my-option")
+	if got != "myvalue" {
+		t.Errorf("expected %q, got %q", "myvalue", got)
+	}
+}
+
+func TestShowOptionError(t *testing.T) {
+	fake := &fakeClient{
+		globalOptionFn: func(string) (string, error) {
+			return "", errors.New("option error")
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	got := ShowOption("", "@missing")
+	if got != "" {
+		t.Errorf("expected empty, got %q", got)
+	}
+}
+
+// --- DefaultCommand ---
+
+func TestDefaultCommandFromTmux(t *testing.T) {
+	fake := &fakeClient{
+		globalOptionFn: func(key string) (string, error) {
+			if key == "default-command" {
+				return "/usr/local/bin/fish", nil
+			}
+			return "", nil
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	got := DefaultCommand("")
+	if got != "/usr/local/bin/fish" {
+		t.Errorf("expected /usr/local/bin/fish, got %q", got)
+	}
+}
+
+func TestDefaultCommandFallsBackToShell(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	t.Setenv("SHELL", "/bin/zsh")
+	got := DefaultCommand("")
+	if got != "/bin/zsh" {
+		t.Errorf("expected /bin/zsh, got %q", got)
+	}
+}
+
+func TestDefaultCommandFallsBackToBinSh(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	t.Setenv("SHELL", "")
+	got := DefaultCommand("")
+	if got != "/bin/sh" {
+		t.Errorf("expected /bin/sh, got %q", got)
 	}
 }
