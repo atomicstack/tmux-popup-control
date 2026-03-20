@@ -12,10 +12,10 @@ import (
 
 // SaveForm handles the "save as" text input for naming a snapshot.
 type SaveForm struct {
-	input           textinput.Model
-	saveDir         string
-	ctx             Context
-	err             string
+	input            textinput.Model
+	saveDir          string
+	ctx              Context
+	err              string
 	confirmOverwrite bool
 }
 

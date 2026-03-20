@@ -28,21 +28,21 @@ type SaveAsPrompt struct {
 }
 
 func loadSessionMenu(Context) ([]Item, error) {
-	items := []string{
-		// vvv do NOT reorder these! vvv
+	items := []Item{
+		{ID: "save", Label: "save"},
+		{ID: "save-as", Label: "save-as"},
+		{ID: "restore", Label: "restore"},
+		{ID: "restore-from", Label: "restore-from"},
+	}
+	items = append(items, menuItemsFromIDs([]string{
 		"kill",
 		"detach",
 		"rename",
 		"new",
 		"switch",
 		"tree",
-		// ^^^ do NOT reorder these! ^^^
-		"save",
-		"save-as",
-		"restore",
-		"restore-from",
-	}
-	return menuItemsFromIDs(items), nil
+	})...)
+	return items, nil
 }
 
 func loadSessionSwitchMenu(ctx Context) ([]Item, error) {
@@ -218,16 +218,16 @@ func NewSessionForm(prompt SessionPrompt) *SessionForm {
 	return form
 }
 
-func (f *SessionForm) Context() Context    { return f.ctx }
-func (f *SessionForm) Value() string       { return strings.TrimSpace(f.input.Value()) }
-func (f *SessionForm) InputView() string   { return f.input.View() }
-func (f *SessionForm) Error() string       { return f.err }
+func (f *SessionForm) Context() Context     { return f.ctx }
+func (f *SessionForm) Value() string        { return strings.TrimSpace(f.input.Value()) }
+func (f *SessionForm) InputView() string    { return f.input.View() }
+func (f *SessionForm) Error() string        { return f.err }
 func (f *SessionForm) ErrorIsWarning() bool { return f.errWarning }
-func (f *SessionForm) Action() string      { return f.action }
-func (f *SessionForm) Target() string      { return f.target }
-func (f *SessionForm) Title() string       { return f.title }
-func (f *SessionForm) Help() string        { return f.help }
-func (f *SessionForm) IsRename() bool      { return f.mode == sessionFormModeRename }
+func (f *SessionForm) Action() string       { return f.action }
+func (f *SessionForm) Target() string       { return f.target }
+func (f *SessionForm) Title() string        { return f.title }
+func (f *SessionForm) Help() string         { return f.help }
+func (f *SessionForm) IsRename() bool       { return f.mode == sessionFormModeRename }
 
 func (f *SessionForm) ActionID() string {
 	if f.action != "" {
@@ -362,8 +362,9 @@ func SessionSaveAction(ctx Context, item Item) tea.Cmd {
 		return ResurrectStart{
 			Operation: "save",
 			Config: resurrect.Config{
-				SocketPath: ctx.SocketPath,
-				SaveDir:    dir,
+				SocketPath:          ctx.SocketPath,
+				SaveDir:             dir,
+				CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
 			},
 		}
 	}
@@ -393,8 +394,9 @@ func SessionRestoreAction(ctx Context, item Item) tea.Cmd {
 			Operation: "restore",
 			SaveFile:  path,
 			Config: resurrect.Config{
-				SocketPath: ctx.SocketPath,
-				SaveDir:    dir,
+				SocketPath:          ctx.SocketPath,
+				SaveDir:             dir,
+				CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
 			},
 		}
 	}
@@ -410,8 +412,9 @@ func SessionRestoreFromAction(ctx Context, item Item) tea.Cmd {
 			Operation: "restore",
 			SaveFile:  item.ID,
 			Config: resurrect.Config{
-				SocketPath: ctx.SocketPath,
-				SaveDir:    dir,
+				SocketPath:          ctx.SocketPath,
+				SaveDir:             dir,
+				CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
 			},
 		}
 	}

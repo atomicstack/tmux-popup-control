@@ -24,7 +24,7 @@ const (
 type pluginConfirmPhase int
 
 const (
-	pluginConfirmPhaseAsking   pluginConfirmPhase = iota
+	pluginConfirmPhaseAsking pluginConfirmPhase = iota
 	pluginConfirmPhaseRemoving
 	pluginConfirmPhaseDone
 )

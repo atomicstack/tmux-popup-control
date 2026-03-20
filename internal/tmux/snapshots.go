@@ -171,6 +171,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 			Index:     line.paneIndex,
 			Title:     pane.Title,
 			Command:   pane.CurrentCommand,
+			Path:      pane.CurrentPath,
 			Width:     pane.Width,
 			Height:    pane.Height,
 			Active:    pane.Active,

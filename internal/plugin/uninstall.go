@@ -21,4 +21,3 @@ func Uninstall(pluginDir string, plugins []Plugin) error {
 	}
 	return nil
 }
-

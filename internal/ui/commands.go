@@ -1,10 +1,10 @@
 package ui
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	tea "charm.land/bubbletea/v2"
 )
 
 func (m *Model) handleActionResultMsg(msg tea.Msg) tea.Cmd {

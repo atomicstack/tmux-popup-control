@@ -28,6 +28,7 @@ type Pane struct {
 	Index     int
 	Title     string
 	Command   string
+	Path      string
 	Width     int
 	Height    int
 	Active    bool

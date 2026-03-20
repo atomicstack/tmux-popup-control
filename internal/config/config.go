@@ -33,17 +33,19 @@ type Features struct {
 }
 
 const (
-	envSocketPath = "TMUX_POPUP_CONTROL_SOCKET"
-	envWidth      = "TMUX_POPUP_CONTROL_WIDTH"
-	envHeight     = "TMUX_POPUP_CONTROL_HEIGHT"
-	envShowFooter = "TMUX_POPUP_CONTROL_FOOTER"
-	envVerbose    = "TMUX_POPUP_CONTROL_VERBOSE"
-	envTrace      = "TMUX_POPUP_CONTROL_TRACE"
-	envLogFile    = "TMUX_POPUP_CONTROL_LOG_FILE"
-	envRootMenu   = "TMUX_POPUP_CONTROL_ROOT_MENU"
-	envMenuArgs   = "TMUX_POPUP_CONTROL_MENU_ARGS"
-	envClient     = "TMUX_POPUP_CONTROL_CLIENT"
-	envSession    = "TMUX_POPUP_CONTROL_SESSION"
+	envSocketPath          = "TMUX_POPUP_CONTROL_SOCKET"
+	envWidth               = "TMUX_POPUP_CONTROL_WIDTH"
+	envHeight              = "TMUX_POPUP_CONTROL_HEIGHT"
+	envShowFooter          = "TMUX_POPUP_CONTROL_FOOTER"
+	envVerbose             = "TMUX_POPUP_CONTROL_VERBOSE"
+	envTrace               = "TMUX_POPUP_CONTROL_TRACE"
+	envLogFile             = "TMUX_POPUP_CONTROL_LOG_FILE"
+	envRootMenu            = "TMUX_POPUP_CONTROL_ROOT_MENU"
+	envMenuArgs            = "TMUX_POPUP_CONTROL_MENU_ARGS"
+	envClient              = "TMUX_POPUP_CONTROL_CLIENT"
+	envSession             = "TMUX_POPUP_CONTROL_SESSION"
+	envSessionStorageDir   = "TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR"
+	envRestorePaneContents = "TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS"
 )
 
 // Load parses configuration from CLI arguments and environment variables.
@@ -86,15 +88,17 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 
 	cfg := Config{
 		App: app.Config{
-			SocketPath: *socket,
-			Width:      *width,
-			Height:     *height,
-			ShowFooter: *footer,
-			Verbose:    *verbose,
-			RootMenu:    strings.TrimSpace(*rootMenu),
-			MenuArgs:    strings.TrimSpace(*menuArgs),
-			ClientID:    envOrDefault(env, envClient, ""),
-			SessionName: envOrDefault(env, envSession, ""),
+			SocketPath:          *socket,
+			Width:               *width,
+			Height:              *height,
+			ShowFooter:          *footer,
+			Verbose:             *verbose,
+			RootMenu:            strings.TrimSpace(*rootMenu),
+			MenuArgs:            strings.TrimSpace(*menuArgs),
+			ClientID:            envOrDefault(env, envClient, ""),
+			SessionName:         envOrDefault(env, envSession, ""),
+			SessionStorageDir:   envOrDefault(env, envSessionStorageDir, ""),
+			RestorePaneContents: envOrBool(env, envRestorePaneContents, false),
 		},
 		Logging: Logging{
 			FilePath: *logFile,
@@ -111,8 +115,8 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			"trace":    strconv.FormatBool(*trace),
 			"verbose":  strconv.FormatBool(*verbose),
 			"logFile":  *logFile,
-			"rootMenu":  strings.TrimSpace(*rootMenu),
-			"menuArgs":  strings.TrimSpace(*menuArgs),
+			"rootMenu": strings.TrimSpace(*rootMenu),
+			"menuArgs": strings.TrimSpace(*menuArgs),
 		},
 		Args: append([]string(nil), args...),
 	}

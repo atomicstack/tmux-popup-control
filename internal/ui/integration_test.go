@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
-	tea "charm.land/bubbletea/v2"
 )
 
 func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {

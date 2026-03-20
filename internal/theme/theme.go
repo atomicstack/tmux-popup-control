@@ -4,28 +4,28 @@ import "charm.land/lipgloss/v2"
 
 // Styles describes reusable Lip Gloss styles shared across the UI.
 type Styles struct {
-	Loading                *lipgloss.Style
-	Item                   *lipgloss.Style
-	ItemIndicator          *lipgloss.Style
-	SelectedItemIndicator  *lipgloss.Style
-	SelectedItem           *lipgloss.Style
-	Error             *lipgloss.Style
-	Warning           *lipgloss.Style
-	Info              *lipgloss.Style
-	Header            *lipgloss.Style
-	Footer            *lipgloss.Style
-	Filter            *lipgloss.Style
-	FilterPrompt      *lipgloss.Style
-	FilterPlaceholder *lipgloss.Style
-	Cursor            *lipgloss.Style
-	PreviewTitle      *lipgloss.Style
-	PreviewBody       *lipgloss.Style
-	PreviewError      *lipgloss.Style
-	Checkbox          *lipgloss.Style
-	CheckboxChecked   *lipgloss.Style
-	CheckboxAll       *lipgloss.Style
-	ProgressFilled    *lipgloss.Style
-	ProgressEmpty     *lipgloss.Style
+	Loading               *lipgloss.Style
+	Item                  *lipgloss.Style
+	ItemIndicator         *lipgloss.Style
+	SelectedItemIndicator *lipgloss.Style
+	SelectedItem          *lipgloss.Style
+	Error                 *lipgloss.Style
+	Warning               *lipgloss.Style
+	Info                  *lipgloss.Style
+	Header                *lipgloss.Style
+	Footer                *lipgloss.Style
+	Filter                *lipgloss.Style
+	FilterPrompt          *lipgloss.Style
+	FilterPlaceholder     *lipgloss.Style
+	Cursor                *lipgloss.Style
+	PreviewTitle          *lipgloss.Style
+	PreviewBody           *lipgloss.Style
+	PreviewError          *lipgloss.Style
+	Checkbox              *lipgloss.Style
+	CheckboxChecked       *lipgloss.Style
+	CheckboxAll           *lipgloss.Style
+	ProgressFilled        *lipgloss.Style
+	ProgressEmpty         *lipgloss.Style
 }
 
 var defaultStyles = Styles{

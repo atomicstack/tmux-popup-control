@@ -21,4 +21,3 @@ func TestUninstall_RemovesPluginDirs(t *testing.T) {
 		t.Error("plugin directory should have been removed")
 	}
 }
-

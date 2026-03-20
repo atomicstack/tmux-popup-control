@@ -82,9 +82,7 @@ func Save(cfg Config) <-chan ProgressEvent {
 	ch := make(chan ProgressEvent, 32)
 	go func() {
 		defer close(ch)
-		if err := runSave(cfg, ch); err != nil {
-			ch <- ProgressEvent{Kind: "error", Done: true, Err: err}
-		}
+		runSave(cfg, ch)
 	}()
 	return ch
 }
@@ -148,7 +146,10 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 	}
 
 	// group panes by session:windowIndex
-	type sessionWindow struct{ session string; windowIdx int }
+	type sessionWindow struct {
+		session   string
+		windowIdx int
+	}
 	panesByWindow := make(map[sessionWindow][]tmux.Pane)
 	for _, p := range paneSnap.Panes {
 		key := sessionWindow{session: p.Session, windowIdx: p.WindowIdx}
@@ -211,7 +212,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 			for _, p := range panesByWindow[key] {
 				savedPanes = append(savedPanes, Pane{
 					Index:      p.Index,
-					WorkingDir: p.PaneID, // filled with PaneID as key; real path is fetched during restore
+					WorkingDir: p.Path,
 					Title:      p.Title,
 					Command:    p.Command,
 					Width:      p.Width,

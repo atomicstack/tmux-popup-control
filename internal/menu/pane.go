@@ -14,13 +14,13 @@ import (
 )
 
 var (
-	switchPaneFn   = tmux.SwitchPane
-	killPanesFn    = tmux.KillPanes
-	movePaneFn     = tmux.MovePane
-	breakPaneFn    = tmux.BreakPane
-	swapPanesFn    = tmux.SwapPanes
+	switchPaneFn = tmux.SwitchPane
+	killPanesFn  = tmux.KillPanes
+	movePaneFn   = tmux.MovePane
+	breakPaneFn  = tmux.BreakPane
+	swapPanesFn  = tmux.SwapPanes
 	resizePaneFn = tmux.ResizePane
-	renamePaneFn   = tmux.RenamePane
+	renamePaneFn = tmux.RenamePane
 )
 
 func loadPaneMenu(Context) ([]Item, error) {

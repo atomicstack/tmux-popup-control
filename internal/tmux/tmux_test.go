@@ -75,16 +75,16 @@ func (s *stubSessionHandle) Kill() error {
 }
 
 type fakeClient struct {
-	sessions    []*gotmux.Session
-	sessionsErr error
-	windows     []*gotmux.Window
-	windowsErr  error
-	panes       []*gotmux.Pane
-	panesErr    error
-	clients     []*gotmux.Client
-	clientsErr  error
-	switchErr   error
-	switchCalls int
+	sessions       []*gotmux.Session
+	sessionsErr    error
+	windows        []*gotmux.Window
+	windowsErr     error
+	panes          []*gotmux.Pane
+	panesErr       error
+	clients        []*gotmux.Client
+	clientsErr     error
+	switchErr      error
+	switchCalls    int
 	lastSwitchOpts *gotmux.SwitchClientOptions
 	getSessions    map[string]*gotmux.Session
 	newErr         error
@@ -119,7 +119,7 @@ type fakeClient struct {
 	selectWindowErr   error
 
 	// Display and format queries.
-	displayMessageFn       func(target, format string) (string, error)
+	displayMessageFn        func(target, format string) (string, error)
 	listSessionsFormatLines []string
 	listSessionsFormatErr   error
 	listWindowsFormatLines  []string
@@ -1338,4 +1338,3 @@ func TestNewTmuxCachesConnection(t *testing.T) {
 		t.Fatalf("expected newTmux factory called once, got %d", callCount)
 	}
 }
-

@@ -256,6 +256,55 @@ func TestSavePath(t *testing.T) {
 	}
 }
 
+// TestResolvePaneContentsEnvVar: env var overrides tmux option.
+func TestResolvePaneContentsEnvVar(t *testing.T) {
+	restore := withTmuxOptionFn(func(socket, opt string) string {
+		return "off"
+	})
+	defer restore()
+
+	t.Setenv("TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS", "true")
+	if !ResolvePaneContents("dummy") {
+		t.Error("expected true when env var is 'true'")
+	}
+
+	t.Setenv("TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS", "false")
+	if ResolvePaneContents("dummy") {
+		t.Error("expected false when env var is 'false'")
+	}
+}
+
+// TestResolvePaneContentsTmuxOption: tmux option used when env var unset.
+func TestResolvePaneContentsTmuxOption(t *testing.T) {
+	t.Setenv("TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS", "")
+
+	restore := withTmuxOptionFn(func(socket, opt string) string {
+		if opt == "@tmux-popup-control-restore-pane-contents" {
+			return "on"
+		}
+		return ""
+	})
+	defer restore()
+
+	if !ResolvePaneContents("dummy") {
+		t.Error("expected true when tmux option is 'on'")
+	}
+}
+
+// TestResolvePaneContentsDefault: no env var or tmux option → false.
+func TestResolvePaneContentsDefault(t *testing.T) {
+	t.Setenv("TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS", "")
+
+	restore := withTmuxOptionFn(func(socket, opt string) string {
+		return ""
+	})
+	defer restore()
+
+	if ResolvePaneContents("dummy") {
+		t.Error("expected false by default")
+	}
+}
+
 // TestPaneArchivePath: .json → .panes.tar.gz
 func TestPaneArchivePath(t *testing.T) {
 	got := paneArchivePath("/data/snap.json")

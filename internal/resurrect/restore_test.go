@@ -36,15 +36,15 @@ func writeSaveFile(t *testing.T, dir string, name string, sf *SaveFile) string {
 }
 
 // stubNoOp returns a function that accepts any args and returns nil.
-func noopSession(_, _, _ string) error    { return nil }
+func noopSession(_, _, _ string) error                 { return nil }
 func noopWindow(_, _ string, _ int, _, _ string) error { return nil }
-func noopRename(_, _, _ string) error    { return nil }
-func noopSplit(_, _, _ string) error     { return nil }
-func noopLayout(_, _, _ string) error    { return nil }
-func noopPane(_, _ string) error         { return nil }
-func noopSelectWindow(_, _ string) error { return nil }
-func noopContents(_, _, _ string) error  { return nil }
-func noopSwitch(_, _, _ string) error    { return nil }
+func noopRename(_, _, _ string) error                  { return nil }
+func noopSplit(_, _, _ string) error                   { return nil }
+func noopLayout(_, _, _ string) error                  { return nil }
+func noopPane(_, _ string) error                       { return nil }
+func noopSelectWindow(_, _ string) error               { return nil }
+func noopContents(_, _, _ string) error                { return nil }
+func noopSwitch(_, _, _ string) error                  { return nil }
 
 // collectRestoreEvents drains the channel returned by Restore.
 func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
@@ -74,7 +74,18 @@ func installNoopRestoreFns(t *testing.T) func() {
 	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
 		return tmux.SessionSnapshot{}, nil
 	})
-	return func() { r1(); r2(); r3(); r4(); r5(); r6(); r7(); r8(); r9(); r10() }
+	return func() {
+		r1()
+		r2()
+		r3()
+		r4()
+		r5()
+		r6()
+		r7()
+		r8()
+		r9()
+		r10()
+	}
 }
 
 // ── TestRestoreHappyPath ────────────────────────────────────────────────────

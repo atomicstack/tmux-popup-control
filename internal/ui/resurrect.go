@@ -31,6 +31,12 @@ type resurrectProgressMsg struct {
 
 type resurrectTickMsg struct{}
 
+// SetResurrectInit configures the model to emit a ResurrectStart on Init,
+// entering the progress UI immediately. Used by the CLI subcommands.
+func (m *Model) SetResurrectInit(start menu.ResurrectStart) {
+	m.initCmd = func() tea.Msg { return start }
+}
+
 func (m *Model) handleResurrectStartMsg(msg tea.Msg) tea.Cmd {
 	start := msg.(menu.ResurrectStart)
 	var ch <-chan resurrect.ProgressEvent

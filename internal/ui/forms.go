@@ -175,9 +175,10 @@ func (m *Model) handleSaveForm(msg tea.Msg) (bool, tea.Cmd) {
 				Operation: "save",
 				Name:      name,
 				Config: resurrect.Config{
-					SocketPath: ctx.SocketPath,
-					SaveDir:    saveDir,
-					Name:       name,
+					SocketPath:          ctx.SocketPath,
+					SaveDir:             saveDir,
+					Name:                name,
+					CapturePaneContents: resurrect.ResolvePaneContents(ctx.SocketPath),
 				},
 			}
 		}

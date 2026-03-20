@@ -14,13 +14,20 @@ func (m *Model) resurrectView() string {
 		return ""
 	}
 
-	height := m.height
-	if height < 3 {
-		height = 3
+	const margin = 1
+
+	// inner dimensions after 1-cell margin on each side
+	innerWidth := m.width - 2*margin
+	if innerWidth < 10 {
+		innerWidth = 10
+	}
+	innerHeight := m.height - 2*margin
+	if innerHeight < 3 {
+		innerHeight = 3
 	}
 
 	// last row is the progress bar; everything above is the log
-	logHeight := height - 1
+	logHeight := innerHeight - 1
 	if logHeight < 1 {
 		logHeight = 1
 	}
@@ -46,9 +53,9 @@ func (m *Model) resurrectView() string {
 
 	// ── progress bar ────────────────────────────────────────────────────────
 
-	b.WriteString(m.buildResurrectProgressBar(s))
+	b.WriteString(m.buildResurrectProgressBar(s, innerWidth))
 
-	return b.String()
+	return lipgloss.NewStyle().Padding(margin).Render(b.String())
 }
 
 // buildResurrectLogLines returns styled log lines for the given entries.
@@ -89,13 +96,13 @@ func styledResurrectLine(e logEntry) string {
 }
 
 // buildResurrectProgressBar renders the gradient progress bar line.
-func (m *Model) buildResurrectProgressBar(s *resurrectState) string {
-	barWidth := 30
-	if m.width > 50 {
-		barWidth = m.width - 20
-	}
-	if barWidth > 60 {
-		barWidth = 60
+// availWidth is the usable width inside margins.
+func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) string {
+	// counter is " N/N" — reserve space for it
+	counterWidth := len(fmt.Sprintf(" %d/%d", s.step, s.total))
+	barWidth := availWidth - counterWidth
+	if barWidth < 10 {
+		barWidth = 10
 	}
 
 	filledWidth := 0

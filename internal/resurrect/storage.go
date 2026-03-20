@@ -9,12 +9,13 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-// tmuxOptionFn queries a tmux option value. Injectable for tests;
-// real implementation is wired in Task 14.
+// tmuxOptionFn queries a tmux option value. Injectable for tests.
 var tmuxOptionFn = func(socket, opt string) string {
-	return ""
+	return tmux.ShowOption(socket, opt)
 }
 
 // withTmuxOptionFn replaces tmuxOptionFn for the duration of a test and
@@ -172,6 +173,31 @@ func ListSaves(dir string) ([]SaveEntry, error) {
 		return entries[i].Timestamp.After(entries[j].Timestamp)
 	})
 	return entries, nil
+}
+
+// ResolvePaneContents reports whether pane content capture is enabled.
+// Lookup chain:
+//  1. TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS env var
+//  2. @tmux-popup-control-restore-pane-contents tmux option
+//  3. false (default)
+func ResolvePaneContents(socketPath string) bool {
+	if v := os.Getenv("TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS"); v != "" {
+		return parseBool(v)
+	}
+	if v := tmuxOptionFn(socketPath, "@tmux-popup-control-restore-pane-contents"); v != "" {
+		return parseBool(v)
+	}
+	return false
+}
+
+// parseBool returns true for common truthy values.
+func parseBool(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // SaveFileExists reports whether a named snapshot file exists in dir.

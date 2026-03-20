@@ -3,8 +3,8 @@ package ui
 import (
 	"testing"
 
-	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
 )
 
 func TestHandleEscapeKeyFromRootQuits(t *testing.T) {

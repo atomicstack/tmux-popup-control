@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
@@ -102,4 +103,18 @@ func CapturePaneContents(socketPath, target string) (string, error) {
 		PreserveTrailing: true,
 		StartLine:        "-",
 	})
+}
+
+// ShowOption queries a tmux server option value. Returns an empty string if
+// the option is not set or an error occurs.
+func ShowOption(socketPath, option string) string {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return ""
+	}
+	val, err := client.Command("show-option", "-gqv", option)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(val)
 }

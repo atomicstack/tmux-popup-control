@@ -3,6 +3,7 @@ package resurrect
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
@@ -347,7 +348,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 							Message: fmt.Sprintf("sending pane contents for %s", paneTarget),
 							Kind:    "pane",
 						}
-						contentPath := fmt.Sprintf("%s/%s", tempDir, paneKey)
+						contentPath := filepath.Join(tempDir, paneKey)
 						contents, readErr := os.ReadFile(contentPath)
 						if readErr != nil {
 							// missing content file is non-fatal: skip this pane

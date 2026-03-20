@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -40,6 +41,22 @@ func main() {
 	logging.SetTraceEnabled(runtimeCfg.Logging.Trace)
 
 	traceStartup(runtimeCfg)
+
+	if len(os.Args) > 1 && os.Args[1] == "save-sessions" {
+		if err := runSaveSessions(runtimeCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "save-sessions: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "restore-sessions" {
+		if err := runRestoreSessions(runtimeCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "restore-sessions: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	if len(os.Args) > 1 && os.Args[1] == "install-and-init-plugins" {
 		if err := runInstallAndInitPlugins(runtimeCfg); err != nil {
@@ -248,4 +265,84 @@ func collectTTYDetails() ttyDetails {
 		results = append(results, entry)
 	}
 	return ttyDetails{Detected: detected, Probes: results}
+}
+
+// runSaveSessions handles the "save-sessions" subcommand.
+// Without --resurrect-popup it launches a display-popup; with it, it enters
+// the progress UI directly.
+func runSaveSessions(cfg config.Config) error {
+	fs := flag.NewFlagSet("save-sessions", flag.ContinueOnError)
+	name := fs.String("name", os.Getenv("TMUX_POPUP_CONTROL_RESURRECT_NAME"), "snapshot name")
+	popup := fs.Bool("resurrect-popup", false, "run inside popup (internal)")
+	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return err
+	}
+
+	if *popup {
+		cfg.App.SocketPath = *socket
+		cfg.App.ResurrectOp = "save"
+		cfg.App.ResurrectName = *name
+		return app.Run(cfg.App)
+	}
+
+	// outer invocation: launch popup
+	socketPath, err := tmux.ResolveSocketPath(*socket)
+	if err != nil {
+		return fmt.Errorf("resolving socket: %w", err)
+	}
+	clientName, err := tmux.FindTerminalClient(socketPath)
+	if err != nil {
+		return fmt.Errorf("finding terminal client: %w", err)
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable: %w", err)
+	}
+	popupCmd := fmt.Sprintf("%s save-sessions --resurrect-popup -socket %s",
+		shellQuote(binary), shellQuote(socketPath))
+	if *name != "" {
+		popupCmd += fmt.Sprintf(" -name %s", shellQuote(*name))
+	}
+	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
+	return err
+}
+
+// runRestoreSessions handles the "restore-sessions" subcommand.
+func runRestoreSessions(cfg config.Config) error {
+	fs := flag.NewFlagSet("restore-sessions", flag.ContinueOnError)
+	from := fs.String("from", os.Getenv("TMUX_POPUP_CONTROL_RESURRECT_FROM"), "save file name or path")
+	popup := fs.Bool("resurrect-popup", false, "run inside popup (internal)")
+	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return err
+	}
+
+	if *popup {
+		cfg.App.SocketPath = *socket
+		cfg.App.ResurrectOp = "restore"
+		cfg.App.ResurrectFrom = *from
+		return app.Run(cfg.App)
+	}
+
+	// outer invocation: launch popup
+	socketPath, err := tmux.ResolveSocketPath(*socket)
+	if err != nil {
+		return fmt.Errorf("resolving socket: %w", err)
+	}
+	clientName, err := tmux.FindTerminalClient(socketPath)
+	if err != nil {
+		return fmt.Errorf("finding terminal client: %w", err)
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable: %w", err)
+	}
+	popupCmd := fmt.Sprintf("%s restore-sessions --resurrect-popup -socket %s",
+		shellQuote(binary), shellQuote(socketPath))
+	if *from != "" {
+		popupCmd += fmt.Sprintf(" -from %s", shellQuote(*from))
+	}
+	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
+	return err
 }

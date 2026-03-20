@@ -47,6 +47,7 @@ func makePanes(sessionName string, windowIndices ...int) tmux.PaneSnapshot {
 			WindowIdx: wIdx,
 			Index:     0,
 			Command:   "bash",
+			Path:      "/home/user",
 			Width:     80,
 			Height:    24,
 			Active:    wIdx == 0,

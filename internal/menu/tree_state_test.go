@@ -322,9 +322,9 @@ func TestFilterItemsMultiWordPaneContext(t *testing.T) {
 
 func TestTreeWindowLabel(t *testing.T) {
 	tests := []struct {
-		name    string
-		entry   WindowEntry
-		want    string
+		name  string
+		entry WindowEntry
+		want  string
 	}{
 		{
 			name:  "strips session prefix",
