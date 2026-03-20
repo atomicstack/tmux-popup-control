@@ -134,22 +134,22 @@ func TestSave(t *testing.T) {
 		t.Errorf("last event should have no error, got: %v", last.Err)
 	}
 
-	// verify session events exist
+	// verify session events (1 per session)
 	sessionEvents := filterByKind(events, "session")
 	if len(sessionEvents) != 2 {
 		t.Errorf("session events: got %d, want 2", len(sessionEvents))
 	}
 
-	// verify window events exist
+	// verify window events (1 batch per session with windows = 2)
 	windowEvents := filterByKind(events, "window")
-	if len(windowEvents) != 4 {
-		t.Errorf("window events: got %d, want 4", len(windowEvents))
+	if len(windowEvents) != 2 {
+		t.Errorf("window events: got %d, want 2", len(windowEvents))
 	}
 
-	// verify pane events exist (contents enabled)
+	// verify pane events (1 batch per session with panes = 2, contents enabled)
 	paneEvents := filterByKind(events, "pane")
-	if len(paneEvents) != 4 {
-		t.Errorf("pane events: got %d, want 4", len(paneEvents))
+	if len(paneEvents) != 2 {
+		t.Errorf("pane events: got %d, want 2", len(paneEvents))
 	}
 
 	// verify the save file was written

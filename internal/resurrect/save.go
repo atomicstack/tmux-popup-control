@@ -113,8 +113,27 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 		return sendError(ch, "fetching panes: %w", err)
 	}
 
-	// compute total work units
 	nSessions := len(sessionSnap.Sessions)
+
+	// group windows by session
+	windowsBySession := make(map[string][]tmux.Window, nSessions)
+	for _, w := range windowSnap.Windows {
+		windowsBySession[w.Session] = append(windowsBySession[w.Session], w)
+	}
+
+	// group panes by session, then by window
+	type sessionWindow struct {
+		session   string
+		windowIdx int
+	}
+	panesByWindow := make(map[sessionWindow][]tmux.Pane)
+	panesBySession := make(map[string][]tmux.Pane, nSessions)
+	for _, p := range paneSnap.Panes {
+		key := sessionWindow{session: p.Session, windowIdx: p.WindowIdx}
+		panesByWindow[key] = append(panesByWindow[key], p)
+		panesBySession[p.Session] = append(panesBySession[p.Session], p)
+	}
+
 	nWindows := len(windowSnap.Windows)
 	nPanes := len(paneSnap.Panes)
 
@@ -137,29 +156,11 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 		Kind:    "info",
 	}
 
-	// ── Phase 2: build session tree ──────────────────────────────────────────
-
-	// group windows by session
-	windowsBySession := make(map[string][]tmux.Window, nSessions)
-	for _, w := range windowSnap.Windows {
-		windowsBySession[w.Session] = append(windowsBySession[w.Session], w)
-	}
-
-	// group panes by session:windowIndex
-	type sessionWindow struct {
-		session   string
-		windowIdx int
-	}
-	panesByWindow := make(map[sessionWindow][]tmux.Pane)
-	for _, p := range paneSnap.Panes {
-		key := sessionWindow{session: p.Session, windowIdx: p.WindowIdx}
-		panesByWindow[key] = append(panesByWindow[key], p)
-	}
+	// ── Phase 2: build session tree (depth-first) ───────────────────────────
 
 	// optionally query window options
 	autoRenameMap, err := queryWindowOptionsFn(cfg.SocketPath)
 	if err != nil {
-		// non-fatal: continue without automatic-rename info
 		autoRenameMap = map[string]bool{}
 	}
 
@@ -176,87 +177,94 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 	saveFile.ClientSession = clientSess
 	saveFile.ClientLastSession = clientLastSess
 
+	paneContents := map[string]string{}
+
 	for _, s := range sessionSnap.Sessions {
 		step++
 		ch <- ProgressEvent{
 			Step:    step,
 			Total:   total,
-			Message: fmt.Sprintf("saving session %s", s.Name),
+			Message: fmt.Sprintf("saving session %s...", s.Name),
 			Kind:    "session",
 			ID:      s.Name,
 		}
 
-		created := parseCreated(s)
-
 		sess := Session{
 			Name:     s.Name,
-			Created:  created,
+			Created:  parseCreated(s),
 			Attached: s.Attached,
 		}
 
-		for _, w := range windowsBySession[s.Name] {
-			step++
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("saving window %s:%d", s.Name, w.Index),
-				Kind:    "window",
-				ID:      w.ID,
-			}
+		// ── windows for this session ────────────────────────────────
+		wins := windowsBySession[s.Name]
+		if len(wins) > 0 {
+			var winIDs []string
+			for _, w := range wins {
+				winIDs = append(winIDs, fmt.Sprintf("%s:%d", s.Name, w.Index))
 
-			autoRename := autoRenameMap[w.InternalID]
-
-			// build panes for this window
-			key := sessionWindow{session: s.Name, windowIdx: w.Index}
-			var savedPanes []Pane
-			for _, p := range panesByWindow[key] {
-				savedPanes = append(savedPanes, Pane{
-					Index:      p.Index,
-					WorkingDir: p.Path,
-					Title:      p.Title,
-					Command:    p.Command,
-					Width:      p.Width,
-					Height:     p.Height,
-					Active:     p.Active,
+				autoRename := autoRenameMap[w.InternalID]
+				key := sessionWindow{session: s.Name, windowIdx: w.Index}
+				var savedPanes []Pane
+				for _, p := range panesByWindow[key] {
+					savedPanes = append(savedPanes, Pane{
+						Index:      p.Index,
+						WorkingDir: p.Path,
+						Title:      p.Title,
+						Command:    p.Command,
+						Width:      p.Width,
+						Height:     p.Height,
+						Active:     p.Active,
+					})
+				}
+				sess.Windows = append(sess.Windows, Window{
+					Index:           w.Index,
+					Name:            w.Name,
+					Layout:          w.Layout,
+					Active:          w.Active,
+					AutomaticRename: autoRename,
+					Panes:           savedPanes,
 				})
 			}
 
-			sess.Windows = append(sess.Windows, Window{
-				Index:           w.Index,
-				Name:            w.Name,
-				Layout:          w.Layout,
-				Active:          w.Active,
-				AutomaticRename: autoRename,
-				Panes:           savedPanes,
-			})
+			step += len(wins)
+			ch <- ProgressEvent{
+				Step:    step,
+				Total:   total,
+				Message: fmt.Sprintf("saving windows for session %s: %s", s.Name, strings.Join(winIDs, " ")),
+				Kind:    "window",
+				ID:      s.Name,
+			}
+		}
+
+		// ── capture panes for this session ──────────────────────────
+		if cfg.CapturePaneContents {
+			panes := panesBySession[s.Name]
+			if len(panes) > 0 {
+				var paneIDs []string
+				for _, p := range panes {
+					paneIDs = append(paneIDs, p.ID)
+					content, err := capturePaneContentsFn(cfg.SocketPath, p.ID)
+					if err != nil {
+						return sendError(ch, "capturing pane %s: %w", p.ID, err)
+					}
+					paneContents[p.ID] = strings.TrimRight(content, "\n") + "\n"
+				}
+
+				step += len(panes)
+				ch <- ProgressEvent{
+					Step:    step,
+					Total:   total,
+					Message: fmt.Sprintf("capturing panes for session %s: %s", s.Name, strings.Join(paneIDs, " ")),
+					Kind:    "pane",
+					ID:      s.Name,
+				}
+			}
 		}
 
 		saveFile.Sessions = append(saveFile.Sessions, sess)
 	}
 
-	// ── Phase 3: capture pane contents ──────────────────────────────────────
-
-	paneContents := map[string]string{}
-	if cfg.CapturePaneContents {
-		for _, p := range paneSnap.Panes {
-			step++
-			target := p.ID
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("capturing pane %s", target),
-				Kind:    "pane",
-				ID:      target,
-			}
-			content, err := capturePaneContentsFn(cfg.SocketPath, target)
-			if err != nil {
-				return sendError(ch, "capturing pane %s: %w", target, err)
-			}
-			paneContents[target] = strings.TrimRight(content, "\n") + "\n"
-		}
-	}
-
-	// ── Phase 4: write JSON ──────────────────────────────────────────────────
+	// ── Phase 3: write JSON ─────────────────────────────────────────────────
 
 	jsonPath := savePath(cfg.SaveDir, cfg.Name)
 	step++
@@ -270,7 +278,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 		return sendError(ch, "writing save file: %w", err)
 	}
 
-	// ── Phase 5: write pane archive ──────────────────────────────────────────
+	// ── Phase 4: write pane archive ─────────────────────────────────────────
 
 	if cfg.CapturePaneContents {
 		archivePath := paneArchivePath(jsonPath)
@@ -286,7 +294,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 		}
 	}
 
-	// ── Phase 6: update last symlink ─────────────────────────────────────────
+	// ── Phase 5: update last symlink ────────────────────────────────────────
 
 	if cfg.Name == "" {
 		step++
@@ -301,7 +309,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 		}
 	}
 
-	// ── Done ─────────────────────────────────────────────────────────────────
+	// ── Done ────────────────────────────────────────────────────────────────
 
 	ch <- ProgressEvent{
 		Step:    total,
