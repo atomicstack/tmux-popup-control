@@ -132,10 +132,10 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	var bar strings.Builder
 	for i := 0; i < filledWidth; i++ {
 		var r, g, bv uint8
-		if filledWidth <= 1 {
+		if barWidth <= 1 {
 			r, g, bv = startColor.r, startColor.g, startColor.b
 		} else {
-			t := float64(i) / float64(filledWidth-1)
+			t := float64(i) / float64(barWidth-1)
 			r = uint8(float64(startColor.r) + t*float64(int(endColor.r)-int(startColor.r)))
 			g = uint8(float64(startColor.g) + t*float64(int(endColor.g)-int(startColor.g)))
 			bv = uint8(float64(startColor.b) + t*float64(int(endColor.b)-int(startColor.b)))
