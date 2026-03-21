@@ -291,6 +291,58 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 		afterSessions, dstAlphaWins, dstBetaWins, dstAlpha1Panes)
 }
 
+// TestSessionOptionRoundTripIntegration verifies that a session option set
+// via control mode can be immediately read back via display-message. This
+// isolates the marker read-back path from the full restore machinery.
+func TestSessionOptionRoundTripIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir) })
+
+	session := "tmux-popup-control-test"
+	optionKey := "@tmux-popup-control-test-marker"
+
+	// verify option is initially unset
+	val := tmux.SessionOption(socket, session, optionKey)
+	if val != "" {
+		t.Fatalf("option should be empty initially, got %q", val)
+	}
+
+	// set the option
+	if err := tmux.SetSessionOption(socket, session, optionKey, "1"); err != nil {
+		t.Fatalf("SetSessionOption: %v", err)
+	}
+
+	// read it back immediately
+	val = tmux.SessionOption(socket, session, optionKey)
+	t.Logf("SessionOption returned %q after set", val)
+	if val != "1" {
+		t.Errorf("expected %q, got %q", "1", val)
+	}
+
+	// close and reopen the connection, read again
+	tmux.Shutdown()
+
+	val = tmux.SessionOption(socket, session, optionKey)
+	t.Logf("SessionOption returned %q after reconnect", val)
+	if val != "1" {
+		t.Errorf("expected %q after reconnect, got %q", "1", val)
+	}
+
+	// also verify via raw tmux CLI as ground truth
+	out, err := tmuxCmd(socket, "display-message", "-t", session+":", "-p", "#{"+optionKey+"}").Output()
+	if err != nil {
+		t.Fatalf("tmux display-message: %v", err)
+	}
+	cliVal := strings.TrimSpace(string(out))
+	t.Logf("raw tmux CLI returned %q", cliVal)
+	if cliVal != "1" {
+		t.Errorf("raw CLI: expected %q, got %q", "1", cliVal)
+	}
+}
+
 // countWindows returns the number of windows in a session.
 func countWindows(t *testing.T, socket, session string) int {
 	t.Helper()
@@ -381,7 +433,7 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 		t.Errorf("expected 3 windows after first restore, got %d", windowsAfterFirst)
 	}
 
-	// second restore — should be idempotent (no new windows)
+	// second restore (new connection) — should be idempotent
 	ch2 := Restore(restoreCfg, savedPath)
 	for ev := range ch2 {
 		t.Logf("restore 2: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
@@ -396,9 +448,27 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 	t.Logf("windows after second restore: %d", windowsAfterSecond)
 
 	if windowsAfterSecond != windowsAfterFirst {
-		t.Errorf("idempotency violation: %d windows after first restore, %d after second (expected equal)",
+		t.Errorf("idempotency violation (new conn): %d windows after first restore, %d after second (expected equal)",
 			windowsAfterFirst, windowsAfterSecond)
 	}
+
+	// third restore (same connection, no Shutdown) — tests same-connection idempotency
+	ch3 := Restore(restoreCfg, savedPath)
+	for ev := range ch3 {
+		t.Logf("restore 3 (same conn): [%d/%d] %s", ev.Step, ev.Total, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("restore 3 error: %v", ev.Err)
+		}
+	}
+
+	windowsAfterThird := countWindows(t, socket2, "work")
+	t.Logf("windows after third restore (same conn): %d", windowsAfterThird)
+
+	if windowsAfterThird != windowsAfterFirst {
+		t.Errorf("idempotency violation (same conn): %d windows after first restore, %d after third (expected equal)",
+			windowsAfterFirst, windowsAfterThird)
+	}
+	tmux.Shutdown()
 }
 
 // TestRestoreWithUserConfigIntegration repeats the restore half of the

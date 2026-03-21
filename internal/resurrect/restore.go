@@ -435,9 +435,10 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			Kind:    "info",
 		}
 
-		// mark merged sessions so re-running the same restore is idempotent
-		if merge {
-			_ = setSessionOptionFn(cfg.SocketPath, sess.Name, restoreMarkerKey(sess.Name), "1")
+		// mark restored sessions so re-running the same restore is idempotent
+		markerKey := restoreMarkerKey(sess.Name)
+		if err := setSessionOptionFn(cfg.SocketPath, sess.Name, markerKey, "1"); err != nil {
+			return sendError(ch, "setting restore marker for session %s: %w", sess.Name, err)
 		}
 	}
 

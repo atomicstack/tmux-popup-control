@@ -58,6 +58,24 @@ func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
 	return events
 }
 
+// withStatefulSessionOptionFns installs paired session option stubs that share
+// state — values set via setSessionOptionFn are returned by sessionOptionFn.
+// Optionally, pre-populate the map to simulate pre-existing markers.
+func withStatefulSessionOptionFns(initial map[string]string) (func(), func()) {
+	store := make(map[string]string)
+	for k, v := range initial {
+		store[k] = v
+	}
+	r1 := withSessionOptionFn(func(_, _, option string) string {
+		return store[option]
+	})
+	r2 := withSetSessionOptionFn(func(_, _, option, value string) error {
+		store[option] = value
+		return nil
+	})
+	return r1, r2
+}
+
 // installNoopRestoreFns installs all no-op injectable functions for restore and
 // returns a cleanup function that restores the originals.
 func installNoopRestoreFns(t *testing.T) func() {
@@ -77,8 +95,7 @@ func installNoopRestoreFns(t *testing.T) func() {
 	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
 		return map[int]bool{}, nil
 	})
-	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
-	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
+	r12, r13 := withStatefulSessionOptionFns(nil)
 	return func() {
 		r1()
 		r2()
@@ -249,9 +266,8 @@ func TestRestoreSessionMerge(t *testing.T) {
 		return map[int]bool{0: true}, nil
 	})
 	defer r11()
-	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
-	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
 	defer r13()
 
 	sf := buildSaveFile(Session{
@@ -427,6 +443,13 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	defer r9()
 	r10 := withDefaultCommandFn(func(_ string) string { return "/bin/bash" })
 	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{}, nil
+	})
+	defer r11()
+	r12, r13 := withStatefulSessionOptionFns(nil)
+	defer r12()
+	defer r13()
 
 	sf := buildSaveFile(Session{
 		Name: "dev",
@@ -589,6 +612,13 @@ func TestRestoreSwitchesClientWithID(t *testing.T) {
 	defer r9()
 	r10 := withDefaultCommandFn(noopDefaultCommand)
 	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{}, nil
+	})
+	defer r11()
+	r12, r13 := withStatefulSessionOptionFns(nil)
+	defer r12()
+	defer r13()
 
 	sf := buildSaveFile(Session{
 		Name: "dev",
@@ -670,9 +700,8 @@ func TestRestoreMergeIndexRemapping(t *testing.T) {
 		return map[int]bool{0: true, 1: true}, nil
 	})
 	defer r11()
-	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
-	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
 	defer r13()
 
 	sf := buildSaveFile(Session{
@@ -767,9 +796,8 @@ func TestRestoreMergeWithPaneArchive(t *testing.T) {
 		return map[int]bool{0: true}, nil
 	})
 	defer r11()
-	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
-	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
 	defer r13()
 
 	sf := buildSaveFile(Session{
@@ -871,9 +899,9 @@ func TestRestoreMergeIdempotent(t *testing.T) {
 	defer r11()
 
 	// simulate that the marker was already set from a prior restore
-	r12 := withSessionOptionFn(func(_, _, _ string) string { return "1" })
+	markerKey := restoreMarkerKey("work")
+	r12, r13 := withStatefulSessionOptionFns(map[string]string{markerKey: "1"})
 	defer r12()
-	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
 	defer r13()
 
 	sf := buildSaveFile(Session{
@@ -953,10 +981,14 @@ func TestRestoreMergeSetsMarker(t *testing.T) {
 	})
 	defer r11()
 
-	// no marker yet
-	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	// no marker yet — use stateful stubs but also record calls
+	store := make(map[string]string)
+	r12 := withSessionOptionFn(func(_, _, option string) string {
+		return store[option]
+	})
 	defer r12()
 	r13 := withSetSessionOptionFn(func(_, session, option, value string) error {
+		store[option] = value
 		setOptions = append(setOptions, struct{ session, option, value string }{session, option, value})
 		return nil
 	})
@@ -993,15 +1025,14 @@ func TestRestoreMergeSetsMarker(t *testing.T) {
 	}
 }
 
-// ── TestRestoreNewSessionNoMarkerCheck ───────────────────────────────────────
+// ── TestRestoreNewSessionSetsMarker ──────────────────────────────────────────
 
-// TestRestoreNewSessionNoMarkerCheck verifies that creating a brand-new session
-// does not check or set the idempotency marker.
-func TestRestoreNewSessionNoMarkerCheck(t *testing.T) {
+// TestRestoreNewSessionSetsMarker verifies that creating a brand-new session
+// still sets the idempotency marker so a second restore doesn't duplicate it.
+func TestRestoreNewSessionSetsMarker(t *testing.T) {
 	dir := t.TempDir()
 
-	sessionOptionCalled := false
-	setSessionOptionCalled := false
+	var setOptions []struct{ session, option, value string }
 
 	r1 := withCreateSessionFn(noopSession)
 	defer r1()
@@ -1029,13 +1060,15 @@ func TestRestoreNewSessionNoMarkerCheck(t *testing.T) {
 		return map[int]bool{}, nil
 	})
 	defer r11()
-	r12 := withSessionOptionFn(func(_, _, _ string) string {
-		sessionOptionCalled = true
-		return ""
+	// no marker check for new sessions (merge=false), but set IS called
+	store := make(map[string]string)
+	r12 := withSessionOptionFn(func(_, _, option string) string {
+		return store[option]
 	})
 	defer r12()
-	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error {
-		setSessionOptionCalled = true
+	r13 := withSetSessionOptionFn(func(_, session, option, value string) error {
+		store[option] = value
+		setOptions = append(setOptions, struct{ session, option, value string }{session, option, value})
 		return nil
 	})
 	defer r13()
@@ -1058,11 +1091,12 @@ func TestRestoreNewSessionNoMarkerCheck(t *testing.T) {
 		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
 	}
 
-	if sessionOptionCalled {
-		t.Error("sessionOptionFn should not be called for a new session")
+	if len(setOptions) != 1 {
+		t.Fatalf("expected 1 set-option call, got %d", len(setOptions))
 	}
-	if setSessionOptionCalled {
-		t.Error("setSessionOptionFn should not be called for a new session")
+	wantKey := "@tmux-popup-control-session-restored-fresh"
+	if setOptions[0].option != wantKey {
+		t.Errorf("marker key: got %q, want %q", setOptions[0].option, wantKey)
 	}
 }
 
