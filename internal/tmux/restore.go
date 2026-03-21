@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -73,6 +74,31 @@ func SelectPane(socketPath, target string) error {
 	return client.SelectPane(target)
 }
 
+// WindowIndices returns the set of occupied window indices for the given session.
+func WindowIndices(socketPath, sessionName string) (map[int]bool, error) {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return nil, err
+	}
+	out, err := client.Command("list-windows", "-t", sessionName, "-F", "#{window_index}")
+	if err != nil {
+		return nil, err
+	}
+	indices := make(map[int]bool)
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		idx, err := strconv.Atoi(line)
+		if err != nil {
+			continue
+		}
+		indices[idx] = true
+	}
+	return indices, nil
+}
+
 // CapturePaneContents captures the full scrollback of the target pane,
 // preserving trailing whitespace and ANSI escape sequences (colours, bold, etc.).
 func CapturePaneContents(socketPath, target string) (string, error) {
@@ -85,6 +111,32 @@ func CapturePaneContents(socketPath, target string) (string, error) {
 		PreserveTrailing: true,
 		StartLine:        "-",
 	})
+}
+
+// SessionOption queries a session-level option. Returns empty string if unset.
+// Uses display-message with format syntax rather than show-option, because
+// show-option -qv doesn't reliably return values through control mode.
+func SessionOption(socketPath, session, option string) string {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return ""
+	}
+	format := "#{" + option + "}"
+	out, err := client.Command("display-message", "-t", session+":", "-p", format)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// SetSessionOption sets a session-level option.
+func SetSessionOption(socketPath, session, option, value string) error {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	_, err = client.Command("set-option", "-t", session, option, value)
+	return err
 }
 
 // ShowOption queries a tmux server-level (global) option value. Returns an
