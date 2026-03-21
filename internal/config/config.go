@@ -21,11 +21,13 @@ type Config struct {
 	Features Features
 	Flags    map[string]string
 	Args     []string
+	Command  []string
 }
 
 type Logging struct {
-	FilePath string
-	Trace    bool
+	FilePath      string
+	Trace         bool
+	DebugToSQLite bool
 }
 
 type Features struct {
@@ -65,6 +67,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	height := fs.Int("height", envOrInt(env, envHeight, 0), "desired viewport height in rows (0 uses terminal height)")
 	footer := fs.Bool("footer", envOrBool(env, envShowFooter, false), "enable footer hint row (disabled by default)")
 	trace := fs.Bool("trace", envOrBool(env, envTrace, false), "enable verbose JSON trace logging")
+	debugToSQLite := fs.Bool("debug-to-sqlite", false, "write structured debug events and spans to a sqlite database next to the binary")
 	verbose := fs.Bool("verbose", envOrBool(env, envVerbose, false), "print success messages for actions")
 	logFile := fs.String("log-file", envOrDefault(env, envLogFile, ""), "path to the log file")
 	rootMenu := fs.String("root-menu", envOrDefault(env, envRootMenu, ""), "open directly into the specified menu path")
@@ -101,24 +104,27 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			RestorePaneContents: envOrBool(env, envRestorePaneContents, false),
 		},
 		Logging: Logging{
-			FilePath: *logFile,
-			Trace:    *trace,
+			FilePath:      *logFile,
+			Trace:         *trace,
+			DebugToSQLite: *debugToSQLite,
 		},
 		Features: Features{
 			Verbose: *verbose,
 		},
 		Flags: map[string]string{
-			"socket":   *socket,
-			"width":    strconv.Itoa(*width),
-			"height":   strconv.Itoa(*height),
-			"footer":   strconv.FormatBool(*footer),
-			"trace":    strconv.FormatBool(*trace),
-			"verbose":  strconv.FormatBool(*verbose),
-			"logFile":  *logFile,
-			"rootMenu": strings.TrimSpace(*rootMenu),
-			"menuArgs": strings.TrimSpace(*menuArgs),
+			"socket":        *socket,
+			"width":         strconv.Itoa(*width),
+			"height":        strconv.Itoa(*height),
+			"footer":        strconv.FormatBool(*footer),
+			"trace":         strconv.FormatBool(*trace),
+			"debugToSQLite": strconv.FormatBool(*debugToSQLite),
+			"verbose":       strconv.FormatBool(*verbose),
+			"logFile":       *logFile,
+			"rootMenu":      strings.TrimSpace(*rootMenu),
+			"menuArgs":      strings.TrimSpace(*menuArgs),
 		},
-		Args: append([]string(nil), args...),
+		Args:    append([]string(nil), args...),
+		Command: append([]string(nil), fs.Args()...),
 	}
 
 	return cfg, nil

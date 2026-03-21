@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/atomicstack/tmux-popup-control/internal/app"
@@ -30,8 +31,9 @@ func TestStartupTracePayloadIncludesFlags(t *testing.T) {
 			Verbose:    true,
 		},
 		Logging: config.Logging{
-			FilePath: "trace.log",
-			Trace:    true,
+			FilePath:      "trace.log",
+			Trace:         true,
+			DebugToSQLite: true,
 		},
 		Flags: map[string]string{
 			"socket":  "socket-path",
@@ -70,6 +72,9 @@ func TestStartupTracePayloadIncludesFlags(t *testing.T) {
 	if flagsValue["logFile"] != "trace.log" {
 		t.Fatalf("expected log file trace.log, got %v", flagsValue["logFile"])
 	}
+	if flagsValue["debugToSQLite"] != true {
+		t.Fatalf("expected debugToSQLite flag true, got %v", flagsValue["debugToSQLite"])
+	}
 
 	if _, ok := payload["tty"].(ttyDetails); !ok {
 		t.Fatalf("expected tty details in payload")
@@ -78,5 +83,18 @@ func TestStartupTracePayloadIncludesFlags(t *testing.T) {
 		t.Fatalf("expected config in payload")
 	} else if cfgValue.App != cfg.App {
 		t.Fatalf("expected app config %#v, got %#v", cfg.App, cfgValue.App)
+	}
+}
+
+func TestSubcommandHelpersUseParsedCommandArgs(t *testing.T) {
+	cfg := config.Config{
+		Command: []string{"install-and-init-plugins", "--foo", "bar"},
+	}
+	if got := subcommand(cfg); got != "install-and-init-plugins" {
+		t.Fatalf("expected install-and-init-plugins, got %q", got)
+	}
+	wantArgs := []string{"--foo", "bar"}
+	if got := subcommandArgs(cfg); !reflect.DeepEqual(got, wantArgs) {
+		t.Fatalf("expected %#v, got %#v", wantArgs, got)
 	}
 }

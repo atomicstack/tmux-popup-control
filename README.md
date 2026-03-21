@@ -106,6 +106,7 @@ make release         # cross-compiles + creates GitHub release via gh
 | `--verbose` / `TMUX_POPUP_CONTROL_VERBOSE` | print success messages for actions |
 | `--log-file` / `TMUX_POPUP_CONTROL_LOG_FILE` | log file path |
 | `--trace` / `TMUX_POPUP_CONTROL_TRACE` | enable verbose JSON trace logging |
+| `--debug-to-sqlite` | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |
 | `TMUX_POPUP_CONTROL_CLIENT` | explicit client ID override (env only) |
 | `TMUX_POPUP_CONTROL_SESSION` | explicit session name override (env only) |
 | `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` / `@tmux-popup-control-session-storage-dir` | override save/restore storage directory; supports `$HOME` and other env vars (env only / tmux option) |
@@ -154,7 +155,7 @@ internal/ui/state/        per-level items, cursor, filter, selection, viewport
 internal/format/table/    columnar table formatting with alignment
 internal/plugin/          plugin management (discover, install, update, uninstall, source)
 internal/theme/           lipgloss styles
-internal/logging/         structured JSON log file + trace events
+internal/logging/         structured JSON log file, trace events, and SQLite debug sink
 internal/testutil/        integration test helpers
 ```
 

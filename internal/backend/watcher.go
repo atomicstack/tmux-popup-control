@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
@@ -34,6 +35,19 @@ type Watcher struct {
 
 	events chan Event
 	wg     sync.WaitGroup
+}
+
+func (k Kind) String() string {
+	switch k {
+	case KindSessions:
+		return "sessions"
+	case KindWindows:
+		return "windows"
+	case KindPanes:
+		return "panes"
+	default:
+		return "unknown"
+	}
 }
 
 // NewWatcher creates a backend watcher that polls tmux every interval.
@@ -107,7 +121,18 @@ func (w *Watcher) poll(kind Kind, fetch func(context.Context) (interface{}, erro
 	defer w.wg.Done()
 
 	emit := func() bool {
+		span := logging.StartSpan("backend", "poll", logging.SpanOptions{
+			Target: kind.String(),
+			Attrs: map[string]interface{}{
+				"socket_path": w.socketPath,
+				"interval_ms": w.interval.Milliseconds(),
+			},
+		})
 		data, err := fetch(w.ctx)
+		if count := watcherItemCount(data); count >= 0 {
+			span.AddAttr("item_count", count)
+		}
+		span.End(err)
 		evt := Event{Kind: kind, Data: data, Err: err}
 		select {
 		case <-w.ctx.Done():
@@ -133,5 +158,18 @@ func (w *Watcher) poll(kind Kind, fetch func(context.Context) (interface{}, erro
 				return
 			}
 		}
+	}
+}
+
+func watcherItemCount(data interface{}) int {
+	switch value := data.(type) {
+	case tmux.SessionSnapshot:
+		return len(value.Sessions)
+	case tmux.WindowSnapshot:
+		return len(value.Windows)
+	case tmux.PaneSnapshot:
+		return len(value.Panes)
+	default:
+		return -1
 	}
 }

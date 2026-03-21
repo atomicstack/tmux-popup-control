@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/data/dispatcher"
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/state"
 	"github.com/atomicstack/tmux-popup-control/internal/theme"
@@ -40,6 +41,29 @@ var defaultRootTitle = filepath.Base(os.Args[0])
 var styles = theme.Default()
 
 var headerSegmentCleaner = strings.NewReplacer("_", " ", "-", " ")
+
+func (m Mode) String() string {
+	switch m {
+	case ModeMenu:
+		return "menu"
+	case ModePaneForm:
+		return "pane_form"
+	case ModeWindowForm:
+		return "window_form"
+	case ModeSessionForm:
+		return "session_form"
+	case ModePluginConfirm:
+		return "plugin_confirm"
+	case ModePluginInstall:
+		return "plugin_install"
+	case ModeResurrect:
+		return "resurrect"
+	case ModeSessionSaveForm:
+		return "session_save_form"
+	default:
+		return "unknown"
+	}
+}
 
 type msgHandler func(tea.Msg) tea.Cmd
 
@@ -183,6 +207,20 @@ func (m *Model) Init() tea.Cmd {
 // Update responds to Bubble Tea messages.
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	msgType := "<nil>"
+	if t := reflect.TypeOf(msg); t != nil {
+		msgType = t.String()
+	}
+	span := logging.StartSpan("ui", "update", logging.SpanOptions{
+		Target: msgType,
+		Attrs: map[string]interface{}{
+			"mode":        m.mode.String(),
+			"stack_depth": len(m.stack),
+			"loading":     m.loading,
+		},
+	})
+	defer span.End(nil)
+
 	cmds := make([]tea.Cmd, 0, 4)
 	if cmd := m.updateFilterCursorModel(msg); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -191,6 +229,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		span.AddAttr("cmd_count", len(cmds))
 		return m, m.finishUpdate(cmds)
 	}
 
@@ -198,9 +237,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := handler(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		span.AddAttr("cmd_count", len(cmds))
 		return m, m.finishUpdate(cmds)
 	}
 
+	span.AddAttr("cmd_count", len(cmds))
 	return m, m.finishUpdate(cmds)
 }
 

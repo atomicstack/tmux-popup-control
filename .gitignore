@@ -22,6 +22,9 @@ vendor/
 
 # Logs
 *.log
+*.debug.sqlite3
+*.debug.sqlite3-shm
+*.debug.sqlite3-wal
 
 # Test binary, build with `go test -c`
 *.test

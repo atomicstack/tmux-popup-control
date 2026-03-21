@@ -39,7 +39,15 @@ type commandPreloadMsg struct {
 // preloadCommandList fires an async command to fetch the command list.
 func preloadCommandList(socketPath string, loader menu.Loader) tea.Cmd {
 	return func() tea.Msg {
+		span := logging.StartSpan("ui", "load.command_menu", logging.SpanOptions{
+			Target: "command",
+			Attrs: map[string]interface{}{
+				"socket_path": socketPath,
+			},
+		})
 		items, err := loader(menu.Context{SocketPath: socketPath})
+		span.AddAttr("item_count", len(items))
+		span.End(err)
 		return commandPreloadMsg{items: items, err: err}
 	}
 }
@@ -59,10 +67,19 @@ func (m *Model) handleCommandPreloadMsg(msg tea.Msg) tea.Cmd {
 
 func (m *Model) loadMenuCmd(id, title string, loader menu.Loader) tea.Cmd {
 	return func() tea.Msg {
+		span := logging.StartSpan("ui", "load.menu", logging.SpanOptions{
+			Target: id,
+			Attrs: map[string]interface{}{
+				"title":       title,
+				"socket_path": m.socketPath,
+			},
+		})
 		items, err := loader(m.menuContext())
 		if err != nil {
 			logging.Error(err)
 		}
+		span.AddAttr("item_count", len(items))
+		span.End(err)
 		return categoryLoadedMsg{id: id, title: title, items: items, err: err}
 	}
 }

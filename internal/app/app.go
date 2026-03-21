@@ -3,15 +3,18 @@ package app
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	"github.com/atomicstack/tmux-popup-control/internal/ui"
+	"github.com/charmbracelet/colorprofile"
 )
 
 // Config describes user-provided application options.
@@ -51,12 +54,48 @@ func Run(cfg Config) error {
 	if cfg.ResurrectOp != "" {
 		model.SetResurrectInit(buildResurrectStart(cfg, socketPath, clientID))
 	}
-	program := tea.NewProgram(model)
+	program := tea.NewProgram(model, programOptions()...)
+	span := logging.StartSpan("app", "run", logging.SpanOptions{
+		Target: cfg.RootMenu,
+		Attrs: map[string]interface{}{
+			"socket_path":   socketPath,
+			"client_id":     clientID,
+			"resurrect_op":  cfg.ResurrectOp,
+			"show_footer":   cfg.ShowFooter,
+			"restore_panes": cfg.RestorePaneContents,
+		},
+	})
 	_, err = program.Run()
+	span.End(err)
 	if errors.Is(err, tea.ErrProgramKilled) {
 		return nil
 	}
 	return err
+}
+
+func programOptions() []tea.ProgramOption {
+	options := make([]tea.ProgramOption, 0, 1)
+	if profile, ok := colorProfileOverride(); ok {
+		options = append(options, tea.WithColorProfile(profile))
+	}
+	return options
+}
+
+func colorProfileOverride() (colorprofile.Profile, bool) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_COLOR_PROFILE"))) {
+	case "":
+		return colorprofile.Profile(0), false
+	case "truecolor", "true-color", "24bit", "24-bit":
+		return colorprofile.TrueColor, true
+	case "ansi256", "ansi-256", "256", "256color", "256-color":
+		return colorprofile.ANSI256, true
+	case "ansi":
+		return colorprofile.ANSI, true
+	case "ascii":
+		return colorprofile.ASCII, true
+	default:
+		return colorprofile.Profile(0), false
+	}
 }
 
 func buildResurrectStart(cfg Config, socketPath, clientID string) menu.ResurrectStart {

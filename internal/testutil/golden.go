@@ -77,6 +77,7 @@ func launchBinary(t *testing.T, bin, socket, session, rootMenu string) (pane, ex
 		"POPUP_BIN=" + shellQuote(bin) + "\n" +
 		"POPUP_SOCKET=" + shellQuote(socket) + "\n" +
 		"POPUP_EXIT=" + shellQuote(exitFile) + "\n" +
+		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=ansi256\n" +
 		rootLine +
 		"\"$POPUP_BIN\" -socket \"$POPUP_SOCKET\" -width 80 -height 24 2>/dev/null\n" +
 		"printf '%s' $? > \"$POPUP_EXIT\"\n" +

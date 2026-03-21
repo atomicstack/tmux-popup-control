@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -71,7 +72,20 @@ func (m *Model) wrapView(content string) tea.View {
 }
 
 // View implements tea.Model.
-func (m *Model) View() tea.View {
+func (m *Model) View() (view tea.View) {
+	span := logging.StartSpan("ui", "view", logging.SpanOptions{
+		Attrs: map[string]interface{}{
+			"mode":        m.mode.String(),
+			"stack_depth": len(m.stack),
+			"width":       m.width,
+			"height":      m.height,
+		},
+	})
+	defer func() {
+		span.AddAttr("content_len", len(view.Content))
+		span.End(nil)
+	}()
+
 	header := m.menuHeader()
 	var content string
 	switch m.mode {

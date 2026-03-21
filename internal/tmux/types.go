@@ -105,13 +105,17 @@ var (
 		if err != nil {
 			return nil, err
 		}
-		cachedClient = c
+		cachedClient = newTracedTmuxClient(socketPath, c)
 		cachedSocket = socketPath
-		return c, nil
+		return cachedClient, nil
 	}
 
 	runExecCommand = func(name string, args ...string) commander {
-		return realCommander{cmd: exec.Command(name, args...)}
+		return tracedCommander{
+			name: name,
+			args: append([]string(nil), args...),
+			cmd:  realCommander{cmd: exec.Command(name, args...)},
+		}
 	}
 
 	newWindowHandle = func(w *gotmux.Window) windowHandle {

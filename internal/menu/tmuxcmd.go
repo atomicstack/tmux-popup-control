@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 )
 
 func tmuxArgs(socket string, extra ...string) []string {
@@ -26,7 +28,16 @@ func tmuxCmd(socket string, extra ...string) *exec.Cmd {
 }
 
 func runTmuxCommand(socket string, extra ...string) error {
-	return tmuxCmd(socket, extra...).Run()
+	span := logging.StartSpan("menu", "tmux.exec", logging.SpanOptions{
+		Target: strings.Join(extra, " "),
+		Attrs: map[string]interface{}{
+			"socket_path": socket,
+			"argv":        extra,
+		},
+	})
+	err := tmuxCmd(socket, extra...).Run()
+	span.End(err)
+	return err
 }
 
 func socketDir(socket string) string {

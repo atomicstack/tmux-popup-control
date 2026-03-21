@@ -24,62 +24,99 @@ import (
 var Version = "dev"
 
 func main() {
+	os.Exit(run())
+}
+
+func run() (exitCode int) {
 	ensureZeroExitOnHangup()
+	var exitStatus = "ok"
+	var exitErr error
+	defer func() {
+		logging.Close(logging.RunResult{
+			ExitCode:   exitCode,
+			ExitStatus: exitStatus,
+			Error:      exitErr,
+		})
+	}()
+
 	runtimeCfg, err := config.Load()
 	if errors.Is(err, config.ErrVersionRequested) {
 		fmt.Println(Version)
-		os.Exit(0)
+		return 0
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
-		os.Exit(2)
+		exitStatus = "config_error"
+		exitErr = err
+		return 2
 	}
 	if err := config.Validate(runtimeCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
-		os.Exit(2)
+		exitStatus = "config_error"
+		exitErr = err
+		return 2
 	}
 	logging.Configure(runtimeCfg.Logging.FilePath)
 	logging.SetTraceEnabled(runtimeCfg.Logging.Trace)
+	if runtimeCfg.Logging.DebugToSQLite {
+		if err := logging.EnableSQLiteDebug(buildSQLiteRunInfo(runtimeCfg)); err != nil {
+			fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
+			exitStatus = "sqlite_debug_error"
+			exitErr = err
+			return 2
+		}
+	}
 
 	traceStartup(runtimeCfg)
 
-	if len(os.Args) > 1 && os.Args[1] == "save-sessions" {
+	if subcommand(runtimeCfg) == "save-sessions" {
 		if err := runSaveSessions(runtimeCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "save-sessions: %v\n", err)
-			os.Exit(1)
+			exitStatus = "error"
+			exitErr = err
+			return 1
 		}
-		os.Exit(0)
+		return 0
 	}
 
-	if len(os.Args) > 1 && os.Args[1] == "restore-sessions" {
+	if subcommand(runtimeCfg) == "restore-sessions" {
 		if err := runRestoreSessions(runtimeCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "restore-sessions: %v\n", err)
-			os.Exit(1)
+			exitStatus = "error"
+			exitErr = err
+			return 1
 		}
-		os.Exit(0)
+		return 0
 	}
 
-	if len(os.Args) > 1 && os.Args[1] == "install-and-init-plugins" {
+	if subcommand(runtimeCfg) == "install-and-init-plugins" {
 		if err := runInstallAndInitPlugins(runtimeCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitStatus = "error"
+			exitErr = err
+			return 1
 		}
-		os.Exit(0)
+		return 0
 	}
 
-	if len(os.Args) > 1 && os.Args[1] == "deferred-install" {
+	if subcommand(runtimeCfg) == "deferred-install" {
 		if err := runDeferredInstall(runtimeCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitStatus = "error"
+			exitErr = err
+			return 1
 		}
-		os.Exit(0)
+		return 0
 	}
 
 	if err := app.Run(runtimeCfg.App); err != nil {
 		logging.Error(err)
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		exitStatus = "error"
+		exitErr = err
+		return 1
 	}
+	return 0
 }
 
 func runInstallAndInitPlugins(cfg config.Config) error {
@@ -184,6 +221,10 @@ func ensureZeroExitOnHangup() {
 	signal.Notify(ch, syscall.SIGHUP)
 	go func() {
 		for range ch {
+			logging.Close(logging.RunResult{
+				ExitCode:   0,
+				ExitStatus: "sighup",
+			})
 			os.Exit(0)
 		}
 	}()
@@ -201,6 +242,7 @@ func startupTracePayload(cfg config.Config) map[string]interface{} {
 	}
 	flags["trace"] = cfg.Logging.Trace
 	flags["logFile"] = cfg.Logging.FilePath
+	flags["debugToSQLite"] = cfg.Logging.DebugToSQLite
 	payload := map[string]interface{}{
 		"argv":   cfg.Args,
 		"flags":  flags,
@@ -218,6 +260,51 @@ func startupTracePayload(cfg config.Config) map[string]interface{} {
 	}
 	payload["tty"] = collectTTYDetails()
 	return payload
+}
+
+func buildSQLiteRunInfo(cfg config.Config) logging.SQLiteRunInfo {
+	info := logging.SQLiteRunInfo{
+		Version:     Version,
+		Args:        append([]string(nil), cfg.Args...),
+		Flags:       cloneStringMap(cfg.Flags),
+		SocketPath:  cfg.App.SocketPath,
+		RootMenu:    cfg.App.RootMenu,
+		MenuArgs:    cfg.App.MenuArgs,
+		ClientID:    cfg.App.ClientID,
+		SessionName: cfg.App.SessionName,
+	}
+	if exe, err := os.Executable(); err == nil {
+		info.ExecutablePath = exe
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		info.CWD = cwd
+	}
+	return info
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func subcommand(cfg config.Config) string {
+	if len(cfg.Command) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Command[0])
+}
+
+func subcommandArgs(cfg config.Config) []string {
+	if len(cfg.Command) <= 1 {
+		return nil
+	}
+	return append([]string(nil), cfg.Command[1:]...)
 }
 
 type ttyDetails struct {
@@ -281,7 +368,7 @@ func runSaveSessions(cfg config.Config) error {
 	name := fs.String("name", os.Getenv("TMUX_POPUP_CONTROL_RESURRECT_NAME"), "snapshot name")
 	popup := fs.Bool("resurrect-popup", false, "run inside popup (internal)")
 	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
-	if err := fs.Parse(os.Args[2:]); err != nil {
+	if err := fs.Parse(subcommandArgs(cfg)); err != nil {
 		return err
 	}
 
@@ -320,7 +407,7 @@ func runRestoreSessions(cfg config.Config) error {
 	from := fs.String("from", os.Getenv("TMUX_POPUP_CONTROL_RESURRECT_FROM"), "save file name or path")
 	popup := fs.Bool("resurrect-popup", false, "run inside popup (internal)")
 	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
-	if err := fs.Parse(os.Args[2:]); err != nil {
+	if err := fs.Parse(subcommandArgs(cfg)); err != nil {
 		return err
 	}
 

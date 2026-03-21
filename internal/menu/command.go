@@ -5,11 +5,20 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 )
 
 // listCommandsFn fetches the tmux command list. Swappable for tests.
 var listCommandsFn = func(socket string) (string, error) {
+	span := logging.StartSpan("menu", "tmux.list_commands", logging.SpanOptions{
+		Target: "list-commands",
+		Attrs: map[string]interface{}{
+			"socket_path": socket,
+		},
+	})
 	out, err := tmuxCmd(socket, "list-commands").Output()
+	span.AddAttr("output_bytes", len(out))
+	span.End(err)
 	if err != nil {
 		return "", err
 	}
@@ -41,23 +50,36 @@ func loadCommandMenu(ctx Context) ([]Item, error) {
 // already contain a "-t" flag.
 func RunCommand(socketPath, command, defaultTarget string) tea.Cmd {
 	return func() tea.Msg {
+		span := logging.StartSpan("menu", "tmux.run_command", logging.SpanOptions{
+			Target: command,
+			Attrs: map[string]interface{}{
+				"socket_path":    socketPath,
+				"default_target": defaultTarget,
+			},
+		})
 		args := strings.Fields(command)
 		if len(args) == 0 {
-			return ActionResult{Err: fmt.Errorf("empty command")}
+			err := fmt.Errorf("empty command")
+			span.End(err)
+			return ActionResult{Err: err}
 		}
 		if defaultTarget != "" && !hasFlag(args, "-t") {
 			args = append(args[:1], append([]string{"-t", defaultTarget}, args[1:]...)...)
 		}
 		cmd := tmuxCmd(socketPath, args...)
 		out, err := cmd.CombinedOutput()
+		span.AddAttr("argv", args)
+		span.AddAttr("output_bytes", len(out))
 		if err != nil {
 			detail := strings.TrimSpace(string(out))
 			ran := "tmux " + strings.Join(args, " ")
+			span.End(err)
 			if detail != "" {
 				return ActionResult{Err: fmt.Errorf("%s: %s", ran, detail)}
 			}
 			return ActionResult{Err: fmt.Errorf("%s: %w", ran, err)}
 		}
+		span.End(nil)
 		return ActionResult{Info: fmt.Sprintf("Ran: %s", command)}
 	}
 }
