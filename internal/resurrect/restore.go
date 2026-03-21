@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
@@ -49,6 +50,24 @@ var existingSessionsFn = func(socketPath string) (tmux.SessionSnapshot, error) {
 
 var defaultCommandFn = func(socketPath string) string {
 	return tmux.DefaultCommand(socketPath)
+}
+
+var existingWindowIndicesFn = func(socketPath, sessionName string) (map[int]bool, error) {
+	return tmux.WindowIndices(socketPath, sessionName)
+}
+
+var sessionOptionFn = func(socketPath, session, option string) string {
+	return tmux.SessionOption(socketPath, session, option)
+}
+
+var setSessionOptionFn = func(socketPath, session, option, value string) error {
+	return tmux.SetSessionOption(socketPath, session, option, value)
+}
+
+// restoreMarkerKey returns the tmux session option name used to record that
+// a saved session has already been merged into an existing session.
+func restoreMarkerKey(sessionName string) string {
+	return "@tmux-popup-control-session-restored-" + sessionName
 }
 
 // with* helpers replace the package-level vars for the duration of a test and
@@ -112,6 +131,24 @@ func withDefaultCommandFn(fn func(string) string) func() {
 	orig := defaultCommandFn
 	defaultCommandFn = fn
 	return func() { defaultCommandFn = orig }
+}
+
+func withExistingWindowIndicesFn(fn func(string, string) (map[int]bool, error)) func() {
+	orig := existingWindowIndicesFn
+	existingWindowIndicesFn = fn
+	return func() { existingWindowIndicesFn = orig }
+}
+
+func withSessionOptionFn(fn func(string, string, string) string) func() {
+	orig := sessionOptionFn
+	sessionOptionFn = fn
+	return func() { sessionOptionFn = orig }
+}
+
+func withSetSessionOptionFn(fn func(string, string, string, string) error) func() {
+	orig := setSessionOptionFn
+	setSessionOptionFn = fn
+	return func() { setSessionOptionFn = orig }
 }
 
 // Restore orchestrates a full session restore and emits ProgressEvents on the
@@ -202,24 +239,72 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		Kind:    "info",
 	}
 
-	// ── Phase 2: restore ─────────────────────────────────────────────────────
+	// ── Phase 2: restore (depth-first, grouped messages) ────────────────────
 
 	step := 0
 
 	for _, sess := range sf.Sessions {
-		conflict := existingNames[sess.Name]
+		merge := existingNames[sess.Name]
 
-		if conflict {
+		// ── session creation or merge header ────────────────────────
+
+		// indexMap translates saved window indices to actual target indices.
+		// For new sessions, indices are used as-is. For merges, saved
+		// windows are appended after the highest existing index.
+		indexMap := make(map[int]int, len(sess.Windows))
+
+		if merge {
+			// idempotency: skip if this slot was already merged
+			markerKey := restoreMarkerKey(sess.Name)
+			if sessionOptionFn(cfg.SocketPath, sess.Name, markerKey) != "" {
+				sessSteps := 2 + 3*len(sess.Windows)
+				for _, win := range sess.Windows {
+					for _, pane := range win.Panes {
+						if pane.Index != 0 {
+							sessSteps++
+						}
+					}
+				}
+				step += sessSteps
+				ch <- ProgressEvent{
+					Step:    step,
+					Total:   total,
+					Message: fmt.Sprintf("skipping session %s (already restored)", sess.Name),
+					Kind:    "info",
+					ID:      sess.Name,
+				}
+				continue
+			}
+
+			existingIndices, err := existingWindowIndicesFn(cfg.SocketPath, sess.Name)
+			if err != nil {
+				return sendError(ch, "listing windows for session %s: %w", sess.Name, err)
+			}
+			maxIdx := -1
+			for idx := range existingIndices {
+				if idx > maxIdx {
+					maxIdx = idx
+				}
+			}
+			nextIdx := maxIdx + 1
+			for _, win := range sess.Windows {
+				indexMap[win.Index] = nextIdx
+				nextIdx++
+			}
+
 			step++
 			ch <- ProgressEvent{
 				Step:    step,
 				Total:   total,
-				Message: fmt.Sprintf("skipping session %s (already exists)", sess.Name),
-				Kind:    "info",
+				Message: fmt.Sprintf("merging into session %s...", sess.Name),
+				Kind:    "session",
 				ID:      sess.Name,
 			}
 		} else {
-			// determine starting directory from first pane of first window
+			for _, win := range sess.Windows {
+				indexMap[win.Index] = win.Index
+			}
+
 			startDir := ""
 			startCmd := ""
 			if len(sess.Windows) > 0 && len(sess.Windows[0].Panes) > 0 {
@@ -232,7 +317,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			ch <- ProgressEvent{
 				Step:    step,
 				Total:   total,
-				Message: fmt.Sprintf("creating session %s", sess.Name),
+				Message: fmt.Sprintf("restoring session %s...", sess.Name),
 				Kind:    "session",
 				ID:      sess.Name,
 			}
@@ -241,114 +326,81 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			}
 		}
 
-		for _, win := range sess.Windows {
-			winTarget := fmt.Sprintf("%s:%d", sess.Name, win.Index)
+		// ── windows (grouped) ───────────────────────────────────────
 
-			if conflict {
-				step++
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("skipping window %s (session conflict)", winTarget),
-					Kind:    "info",
-					ID:      winTarget,
-				}
-			} else if win.Index == 0 {
-				// first window is auto-created by tmux; rename it
-				step++
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("renaming window %s to %s", winTarget, win.Name),
-					Kind:    "window",
-					ID:      winTarget,
-				}
+		var winIDs []string
+		for _, win := range sess.Windows {
+			targetIdx := indexMap[win.Index]
+			winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
+			winIDs = append(winIDs, winTarget)
+
+			if !merge && win.Index == 0 {
+				// first window of a new session is auto-created; rename it
 				if err := renameWindowFn(cfg.SocketPath, winTarget, win.Name); err != nil {
 					return sendError(ch, "renaming window %s: %w", winTarget, err)
 				}
 			} else {
-				// create additional windows — use first pane's dir and startup command
 				winDir := ""
 				winCmd := ""
 				if len(win.Panes) > 0 {
 					winDir = win.Panes[0].WorkingDir
 					winCmd = lookupPaneCmd(sess.Name, win.Index, win.Panes[0].Index)
 				}
-
-				step++
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("creating window %s %s", winTarget, win.Name),
-					Kind:    "window",
-					ID:      winTarget,
-				}
-				if err := createWindowFn(cfg.SocketPath, sess.Name, win.Index, win.Name, winDir, winCmd); err != nil {
+				if err := createWindowFn(cfg.SocketPath, sess.Name, targetIdx, win.Name, winDir, winCmd); err != nil {
 					return sendError(ch, "creating window %s: %w", winTarget, err)
 				}
 			}
+		}
+		if len(winIDs) > 0 {
+			step += len(winIDs)
+			ch <- ProgressEvent{
+				Step:    step,
+				Total:   total,
+				Message: fmt.Sprintf("restoring windows for session %s: %s", sess.Name, strings.Join(winIDs, " ")),
+				Kind:    "window",
+			}
+		}
 
-			// create panes (skip first — auto-created)
+		// ── pane splits (grouped) ───────────────────────────────────
+
+		var paneIDs []string
+		for _, win := range sess.Windows {
+			targetIdx := indexMap[win.Index]
 			for _, pane := range win.Panes {
 				if pane.Index == 0 {
-					continue // auto-created, skip split
+					continue
 				}
-				paneTarget := fmt.Sprintf("%s:%d", sess.Name, win.Index)
-
-				if conflict {
-					step++
-					ch <- ProgressEvent{
-						Step:    step,
-						Total:   total,
-						Message: fmt.Sprintf("skipping pane %s.%d (session conflict)", paneTarget, pane.Index),
-						Kind:    "info",
-					}
-				} else {
-					paneCmd := lookupPaneCmd(sess.Name, win.Index, pane.Index)
-
-					step++
-					ch <- ProgressEvent{
-						Step:    step,
-						Total:   total,
-						Message: fmt.Sprintf("splitting pane %s.%d", paneTarget, pane.Index),
-						Kind:    "pane",
-					}
-					if err := splitPaneFn(cfg.SocketPath, paneTarget, pane.WorkingDir, paneCmd); err != nil {
-						return sendError(ch, "splitting pane %s.%d: %w", paneTarget, pane.Index, err)
-					}
+				paneTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
+				paneCmd := lookupPaneCmd(sess.Name, win.Index, pane.Index)
+				if err := splitPaneFn(cfg.SocketPath, paneTarget, pane.WorkingDir, paneCmd); err != nil {
+					return sendError(ch, "splitting pane %s.%d: %w", paneTarget, pane.Index, err)
 				}
+				paneIDs = append(paneIDs, fmt.Sprintf("%s.%d", paneTarget, pane.Index))
+			}
+		}
+		if len(paneIDs) > 0 {
+			step += len(paneIDs)
+			ch <- ProgressEvent{
+				Step:    step,
+				Total:   total,
+				Message: fmt.Sprintf("splitting panes for session %s: %s", sess.Name, strings.Join(paneIDs, " ")),
+				Kind:    "pane",
 			}
 		}
 
-		// apply layouts
+		// ── finalize: layouts, active panes, active window ──────────
+
 		for _, win := range sess.Windows {
-			winTarget := fmt.Sprintf("%s:%d", sess.Name, win.Index)
+			targetIdx := indexMap[win.Index]
+			winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
 			step++
-			if conflict {
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("skipping layout for %s (session conflict)", winTarget),
-					Kind:    "info",
-				}
-			} else {
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("applying layout for %s", winTarget),
-					Kind:    "info",
-				}
-				if err := selectLayoutTargetFn(cfg.SocketPath, winTarget, win.Layout); err != nil {
-					return sendError(ch, "applying layout for %s: %w", winTarget, err)
-				}
+			if err := selectLayoutTargetFn(cfg.SocketPath, winTarget, win.Layout); err != nil {
+				return sendError(ch, "applying layout for %s: %w", winTarget, err)
 			}
 		}
 
-		// select active pane per window
 		for _, win := range sess.Windows {
-			winTarget := fmt.Sprintf("%s:%d", sess.Name, win.Index)
-			step++
-
+			targetIdx := indexMap[win.Index]
 			activePaneIdx := 0
 			for _, pane := range win.Panes {
 				if pane.Active {
@@ -356,29 +408,13 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 					break
 				}
 			}
-			paneTarget := fmt.Sprintf("%s:%d.%d", sess.Name, win.Index, activePaneIdx)
-
-			if conflict {
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("skipping active pane for %s (session conflict)", winTarget),
-					Kind:    "info",
-				}
-			} else {
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("selecting active pane %s", paneTarget),
-					Kind:    "info",
-				}
-				if err := selectPaneFn(cfg.SocketPath, paneTarget); err != nil {
-					return sendError(ch, "selecting active pane %s: %w", paneTarget, err)
-				}
+			paneTarget := fmt.Sprintf("%s:%d.%d", sess.Name, targetIdx, activePaneIdx)
+			step++
+			if err := selectPaneFn(cfg.SocketPath, paneTarget); err != nil {
+				return sendError(ch, "selecting active pane %s: %w", paneTarget, err)
 			}
 		}
 
-		// select active window
 		activeWindowIdx := 0
 		for _, win := range sess.Windows {
 			if win.Active {
@@ -386,25 +422,22 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				break
 			}
 		}
-		activeWindowTarget := fmt.Sprintf("%s:%d", sess.Name, activeWindowIdx)
+		activeWindowTarget := fmt.Sprintf("%s:%d", sess.Name, indexMap[activeWindowIdx])
 		step++
-		if conflict {
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("skipping active window for %s (session conflict)", sess.Name),
-				Kind:    "info",
-			}
-		} else {
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("selecting active window %s", activeWindowTarget),
-				Kind:    "info",
-			}
-			if err := selectWindowFn(cfg.SocketPath, activeWindowTarget); err != nil {
-				return sendError(ch, "selecting active window %s: %w", activeWindowTarget, err)
-			}
+		if err := selectWindowFn(cfg.SocketPath, activeWindowTarget); err != nil {
+			return sendError(ch, "selecting active window %s: %w", activeWindowTarget, err)
+		}
+
+		ch <- ProgressEvent{
+			Step:    step,
+			Total:   total,
+			Message: fmt.Sprintf("finalizing session %s...", sess.Name),
+			Kind:    "info",
+		}
+
+		// mark merged sessions so re-running the same restore is idempotent
+		if merge {
+			_ = setSessionOptionFn(cfg.SocketPath, sess.Name, restoreMarkerKey(sess.Name), "1")
 		}
 	}
 
