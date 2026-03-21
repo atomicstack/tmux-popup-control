@@ -75,7 +75,9 @@ func buildResurrectLogLines(entries []logEntry, total int) []string {
 	return lines
 }
 
-// styledResurrectLine applies hierarchical purple colouring based on entry kind.
+// styledResurrectLine applies hierarchical blue colouring based on entry kind.
+// session uses colour 33 (#0087ff), window and pane use progressively
+// desaturated variants of the same hue.
 func styledResurrectLine(e logEntry) string {
 	switch e.kind {
 	case "error":
@@ -84,11 +86,11 @@ func styledResurrectLine(e logEntry) string {
 		}
 		return e.message
 	case "session":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#b388ff")).Render(e.message)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#0087ff")).Render(e.message)
 	case "window":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#ce93d8")).Render(e.message)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#3d8fe0")).Render(e.message)
 	case "pane":
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#e1bee7")).Render(e.message)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#5c9bd5")).Render(e.message)
 	default:
 		// "info" and anything else — no special colouring
 		return e.message
@@ -114,17 +116,17 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	}
 	emptyWidth := barWidth - filledWidth
 
-	// gradient colours
-	// save:    white #ffffff → purple #7c4dff
-	// restore: purple #7c4dff → white #ffffff
+	// gradient colours (colour 33 = #0087ff)
+	// save:    white #ffffff → blue #0087ff
+	// restore: blue #0087ff → white #ffffff
 	type rgb struct{ r, g, b uint8 }
 	var startColor, endColor rgb
 	if s.operation == "restore" {
-		startColor = rgb{0x7c, 0x4d, 0xff}
+		startColor = rgb{0x00, 0x87, 0xff}
 		endColor = rgb{0xff, 0xff, 0xff}
 	} else {
 		startColor = rgb{0xff, 0xff, 0xff}
-		endColor = rgb{0x7c, 0x4d, 0xff}
+		endColor = rgb{0x00, 0x87, 0xff}
 	}
 
 	var bar strings.Builder
@@ -151,8 +153,8 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	}
 	bar.WriteString(emptyStyle.Render(strings.Repeat("░", emptyWidth)))
 
-	// counter: step in #7c4dff, "/" dim, total in #777777
-	stepStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#7c4dff")).Render(fmt.Sprintf("%d", s.step))
+	// counter: step in #0087ff, "/" dim, total in #777777
+	stepStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#0087ff")).Render(fmt.Sprintf("%d", s.step))
 	sep := lipgloss.NewStyle().Faint(true).Render("/")
 	totalStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#777777")).Render(fmt.Sprintf("%d", s.total))
 	counter := " " + stepStr + sep + totalStr
