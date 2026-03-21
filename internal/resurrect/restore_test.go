@@ -74,6 +74,11 @@ func installNoopRestoreFns(t *testing.T) func() {
 		return tmux.SessionSnapshot{}, nil
 	})
 	r10 := withDefaultCommandFn(noopDefaultCommand)
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{}, nil
+	})
+	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
 	return func() {
 		r1()
 		r2()
@@ -85,6 +90,9 @@ func installNoopRestoreFns(t *testing.T) func() {
 		r8()
 		r9()
 		r10()
+		r11()
+		r12()
+		r13()
 	}
 }
 
@@ -195,20 +203,25 @@ func TestRestoreNoPaneArchive(t *testing.T) {
 	}
 }
 
-// ── TestRestoreSessionConflict ───────────────────────────────────────────────
+// ── TestRestoreSessionMerge ──────────────────────────────────────────────────
 
-// TestRestoreSessionConflict verifies that when a session with the same name
-// already exists it is skipped and the progress total remains accurate.
-func TestRestoreSessionConflict(t *testing.T) {
+// TestRestoreSessionMerge verifies that when a session already exists, windows
+// are merged into it (appended after the highest existing index) rather than
+// the session being skipped.
+func TestRestoreSessionMerge(t *testing.T) {
 	dir := t.TempDir()
 
-	createCalled := false
-	r1 := withCreateSessionFn(func(_, name, _, _ string) error {
-		createCalled = true
+	createSessionCalled := false
+	var createdWindowIndices []int
+	r1 := withCreateSessionFn(func(_, _, _, _ string) error {
+		createSessionCalled = true
 		return nil
 	})
 	defer r1()
-	r2 := withCreateWindowFn(noopWindow)
+	r2 := withCreateWindowFn(func(_, _ string, index int, _, _, _ string) error {
+		createdWindowIndices = append(createdWindowIndices, index)
+		return nil
+	})
 	defer r2()
 	r3 := withRenameWindowFn(noopRename)
 	defer r3()
@@ -225,30 +238,46 @@ func TestRestoreSessionConflict(t *testing.T) {
 	r9 := withDefaultCommandFn(noopDefaultCommand)
 	defer r9()
 
-	// pretend "conflict" session already exists
+	// pretend "existing" session already exists with window at index 0
 	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
 		return tmux.SessionSnapshot{
-			Sessions: []tmux.Session{{Name: "conflict"}},
+			Sessions: []tmux.Session{{Name: "existing"}},
 		}, nil
 	})
 	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{0: true}, nil
+	})
+	defer r11()
+	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	defer r12()
+	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
+	defer r13()
 
 	sf := buildSaveFile(Session{
-		Name: "conflict",
+		Name: "existing",
 		Windows: []Window{
 			{Index: 0, Name: "main", Layout: "tiled", Active: true,
 				Panes: []Pane{{Index: 0, WorkingDir: "/", Active: true}}},
 		},
 	})
-	path := writeSaveFile(t, dir, "conflict", sf)
+	path := writeSaveFile(t, dir, "merge", sf)
 
 	cfg := Config{SaveDir: dir}
 	ch := Restore(cfg, path)
 	events := collectRestoreEvents(ch)
 
-	// createSession must NOT have been called
-	if createCalled {
-		t.Error("createSessionFn should not be called for conflicting session")
+	// session must NOT be created (it already exists)
+	if createSessionCalled {
+		t.Error("createSessionFn should not be called for existing session")
+	}
+
+	// window must be created at remapped index 1 (after existing 0)
+	if len(createdWindowIndices) != 1 {
+		t.Fatalf("expected 1 createWindow call, got %d", len(createdWindowIndices))
+	}
+	if createdWindowIndices[0] != 1 {
+		t.Errorf("expected window created at index 1, got %d", createdWindowIndices[0])
 	}
 
 	last := events[len(events)-1]
@@ -258,13 +287,10 @@ func TestRestoreSessionConflict(t *testing.T) {
 	if last.Err != nil {
 		t.Errorf("unexpected error: %v", last.Err)
 	}
-
-	// step count must still reach total
 	if last.Step != last.Total {
 		t.Errorf("done: Step=%d Total=%d; want equal", last.Step, last.Total)
 	}
 
-	// total equals what computeRestoreTotal predicts
 	expected := computeRestoreTotal(sf)
 	if events[0].Total != expected {
 		t.Errorf("total: got %d, want %d", events[0].Total, expected)
@@ -595,6 +621,448 @@ func TestRestoreSwitchesClientWithID(t *testing.T) {
 	}
 	if switchTarget != "dev" {
 		t.Errorf("switch target: got %q, want %q", switchTarget, "dev")
+	}
+}
+
+// ── TestRestoreMergeIndexRemapping ───────────────────────────────────────────
+
+// TestRestoreMergeIndexRemapping verifies that when merging into a session with
+// existing windows at indices 0 and 1, saved windows (originally 0,1,2) are
+// remapped to indices 2,3,4.
+func TestRestoreMergeIndexRemapping(t *testing.T) {
+	dir := t.TempDir()
+
+	createSessionCalled := false
+	var createdWindows []struct{ session string; index int; name string }
+	r1 := withCreateSessionFn(func(_, _, _, _ string) error {
+		createSessionCalled = true
+		return nil
+	})
+	defer r1()
+	r2 := withCreateWindowFn(func(_, session string, index int, name, _, _ string) error {
+		createdWindows = append(createdWindows, struct{ session string; index int; name string }{session, index, name})
+		return nil
+	})
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(noopLayout)
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(noopSwitch)
+	defer r8()
+	r9 := withDefaultCommandFn(noopDefaultCommand)
+	defer r9()
+
+	// existing session has windows at indices 0 and 1
+	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{
+			Sessions: []tmux.Session{{Name: "work"}},
+		}, nil
+	})
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{0: true, 1: true}, nil
+	})
+	defer r11()
+	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	defer r12()
+	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
+	defer r13()
+
+	sf := buildSaveFile(Session{
+		Name: "work",
+		Windows: []Window{
+			{Index: 0, Name: "editor", Layout: "tiled", Active: true,
+				Panes: []Pane{{Index: 0, WorkingDir: "/code", Active: true}}},
+			{Index: 1, Name: "server", Layout: "even-horizontal",
+				Panes: []Pane{{Index: 0, WorkingDir: "/srv", Active: true}}},
+			{Index: 2, Name: "logs", Layout: "tiled",
+				Panes: []Pane{{Index: 0, WorkingDir: "/var/log", Active: true}}},
+		},
+	})
+	path := writeSaveFile(t, dir, "remap", sf)
+
+	cfg := Config{SaveDir: dir}
+	ch := Restore(cfg, path)
+	events := collectRestoreEvents(ch)
+
+	if createSessionCalled {
+		t.Error("createSessionFn should not be called for existing session")
+	}
+
+	// all 3 windows should be created at remapped indices 2, 3, 4
+	if len(createdWindows) != 3 {
+		t.Fatalf("expected 3 createWindow calls, got %d", len(createdWindows))
+	}
+	wantIndices := []int{2, 3, 4}
+	wantNames := []string{"editor", "server", "logs"}
+	for i, cw := range createdWindows {
+		if cw.index != wantIndices[i] {
+			t.Errorf("window %d: index got %d, want %d", i, cw.index, wantIndices[i])
+		}
+		if cw.name != wantNames[i] {
+			t.Errorf("window %d: name got %q, want %q", i, cw.name, wantNames[i])
+		}
+	}
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+	if last.Step != last.Total {
+		t.Errorf("done: Step=%d Total=%d; want equal", last.Step, last.Total)
+	}
+}
+
+// ── TestRestoreMergeWithPaneArchive ─────────────────────────────────────────
+
+// TestRestoreMergeWithPaneArchive verifies that pane content startup commands
+// use the original (saved) indices to locate archive files, while windows are
+// created at remapped indices.
+func TestRestoreMergeWithPaneArchive(t *testing.T) {
+	dir := t.TempDir()
+
+	var windowCmds []struct{ index int; cmd string }
+	var splitCmds []struct{ target string; cmd string }
+
+	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return nil })
+	defer r1()
+	r2 := withCreateWindowFn(func(_, _ string, index int, _, _, cmd string) error {
+		windowCmds = append(windowCmds, struct{ index int; cmd string }{index, cmd})
+		return nil
+	})
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(func(_, target, _, cmd string) error {
+		splitCmds = append(splitCmds, struct{ target string; cmd string }{target, cmd})
+		return nil
+	})
+	defer r4()
+	r5 := withSelectLayoutTargetFn(noopLayout)
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(noopSwitch)
+	defer r8()
+	r9 := withDefaultCommandFn(func(_ string) string { return "/bin/bash" })
+	defer r9()
+
+	// existing session with window 0
+	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{
+			Sessions: []tmux.Session{{Name: "dev"}},
+		}, nil
+	})
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{0: true}, nil
+	})
+	defer r11()
+	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	defer r12()
+	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
+	defer r13()
+
+	sf := buildSaveFile(Session{
+		Name: "dev",
+		Windows: []Window{
+			{Index: 0, Name: "main", Layout: "tiled", Active: true,
+				Panes: []Pane{
+					{Index: 0, WorkingDir: "/home", Active: true},
+					{Index: 1, WorkingDir: "/tmp"},
+				}},
+		},
+	})
+	sf.HasPaneContents = true
+	path := writeSaveFile(t, dir, "mergepane", sf)
+
+	// write companion archive keyed by ORIGINAL saved indices
+	archivePath := paneArchivePath(path)
+	paneContents := map[string]string{
+		"dev:0.0": "output for pane 0",
+		"dev:0.1": "output for pane 1",
+	}
+	if err := WritePaneArchive(archivePath, paneContents); err != nil {
+		t.Fatalf("WritePaneArchive: %v", err)
+	}
+
+	cfg := Config{SaveDir: dir}
+	ch := Restore(cfg, path)
+	events := collectRestoreEvents(ch)
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+
+	// window should be created at remapped index 1
+	if len(windowCmds) != 1 {
+		t.Fatalf("expected 1 createWindow call, got %d", len(windowCmds))
+	}
+	if windowCmds[0].index != 1 {
+		t.Errorf("window index: got %d, want 1", windowCmds[0].index)
+	}
+	// startup command should reference the original pane key (dev:0.0)
+	if windowCmds[0].cmd == "" {
+		t.Error("expected non-empty startup command for window creation (pane 0)")
+	}
+
+	// split should target the remapped window index
+	if len(splitCmds) != 1 {
+		t.Fatalf("expected 1 splitPane call, got %d", len(splitCmds))
+	}
+	if splitCmds[0].target != "dev:1" {
+		t.Errorf("split target: got %q, want %q", splitCmds[0].target, "dev:1")
+	}
+	if splitCmds[0].cmd == "" {
+		t.Error("expected non-empty startup command for split (pane 1)")
+	}
+}
+
+// ── TestRestoreMergeIdempotent ───────────────────────────────────────────────
+
+// TestRestoreMergeIdempotent verifies that re-running the same restore against
+// a session that was already merged skips the session instead of duplicating
+// windows.
+func TestRestoreMergeIdempotent(t *testing.T) {
+	dir := t.TempDir()
+
+	createWindowCalled := false
+	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return nil })
+	defer r1()
+	r2 := withCreateWindowFn(func(_, _ string, _ int, _, _, _ string) error {
+		createWindowCalled = true
+		return nil
+	})
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(noopLayout)
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(noopSwitch)
+	defer r8()
+	r9 := withDefaultCommandFn(noopDefaultCommand)
+	defer r9()
+
+	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{
+			Sessions: []tmux.Session{{Name: "work"}},
+		}, nil
+	})
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{0: true}, nil
+	})
+	defer r11()
+
+	// simulate that the marker was already set from a prior restore
+	r12 := withSessionOptionFn(func(_, _, _ string) string { return "1" })
+	defer r12()
+	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error { return nil })
+	defer r13()
+
+	sf := buildSaveFile(Session{
+		Name: "work",
+		Windows: []Window{
+			{Index: 0, Name: "editor", Layout: "tiled", Active: true,
+				Panes: []Pane{{Index: 0, WorkingDir: "/code", Active: true}}},
+		},
+	})
+	path := writeSaveFile(t, dir, "repeat", sf)
+
+	cfg := Config{SaveDir: dir}
+	ch := Restore(cfg, path)
+	events := collectRestoreEvents(ch)
+
+	// no windows should have been created
+	if createWindowCalled {
+		t.Error("createWindowFn should not be called when marker exists")
+	}
+
+	// should have a skip message
+	found := false
+	for _, ev := range events {
+		if ev.Kind == "info" && ev.ID == "work" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected a skip event for session 'work'")
+	}
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+	if last.Step != last.Total {
+		t.Errorf("done: Step=%d Total=%d; want equal", last.Step, last.Total)
+	}
+}
+
+// ── TestRestoreMergeSetsMarker ──────────────────────────────────────────────
+
+// TestRestoreMergeSetsMarker verifies that after a successful merge the
+// idempotency marker is set on the session.
+func TestRestoreMergeSetsMarker(t *testing.T) {
+	dir := t.TempDir()
+
+	var setOptions []struct{ session, option, value string }
+	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return nil })
+	defer r1()
+	r2 := withCreateWindowFn(noopWindow)
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(noopLayout)
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(noopSwitch)
+	defer r8()
+	r9 := withDefaultCommandFn(noopDefaultCommand)
+	defer r9()
+
+	r10 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{
+			Sessions: []tmux.Session{{Name: "dev"}},
+		}, nil
+	})
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{0: true}, nil
+	})
+	defer r11()
+
+	// no marker yet
+	r12 := withSessionOptionFn(func(_, _, _ string) string { return "" })
+	defer r12()
+	r13 := withSetSessionOptionFn(func(_, session, option, value string) error {
+		setOptions = append(setOptions, struct{ session, option, value string }{session, option, value})
+		return nil
+	})
+	defer r13()
+
+	sf := buildSaveFile(Session{
+		Name: "dev",
+		Windows: []Window{
+			{Index: 0, Name: "main", Layout: "tiled", Active: true,
+				Panes: []Pane{{Index: 0, WorkingDir: "/", Active: true}}},
+		},
+	})
+	path := writeSaveFile(t, dir, "marker", sf)
+
+	cfg := Config{SaveDir: dir}
+	ch := Restore(cfg, path)
+	events := collectRestoreEvents(ch)
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+
+	// verify marker was set
+	if len(setOptions) != 1 {
+		t.Fatalf("expected 1 set-option call, got %d", len(setOptions))
+	}
+	if setOptions[0].session != "dev" {
+		t.Errorf("marker session: got %q, want %q", setOptions[0].session, "dev")
+	}
+	wantKey := "@tmux-popup-control-session-restored-dev"
+	if setOptions[0].option != wantKey {
+		t.Errorf("marker key: got %q, want %q", setOptions[0].option, wantKey)
+	}
+}
+
+// ── TestRestoreNewSessionNoMarkerCheck ───────────────────────────────────────
+
+// TestRestoreNewSessionNoMarkerCheck verifies that creating a brand-new session
+// does not check or set the idempotency marker.
+func TestRestoreNewSessionNoMarkerCheck(t *testing.T) {
+	dir := t.TempDir()
+
+	sessionOptionCalled := false
+	setSessionOptionCalled := false
+
+	r1 := withCreateSessionFn(noopSession)
+	defer r1()
+	r2 := withCreateWindowFn(noopWindow)
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(noopLayout)
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(noopSwitch)
+	defer r8()
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{}, nil
+	})
+	defer r9()
+	r10 := withDefaultCommandFn(noopDefaultCommand)
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{}, nil
+	})
+	defer r11()
+	r12 := withSessionOptionFn(func(_, _, _ string) string {
+		sessionOptionCalled = true
+		return ""
+	})
+	defer r12()
+	r13 := withSetSessionOptionFn(func(_, _, _, _ string) error {
+		setSessionOptionCalled = true
+		return nil
+	})
+	defer r13()
+
+	sf := buildSaveFile(Session{
+		Name: "fresh",
+		Windows: []Window{
+			{Index: 0, Name: "main", Layout: "tiled", Active: true,
+				Panes: []Pane{{Index: 0, WorkingDir: "/", Active: true}}},
+		},
+	})
+	path := writeSaveFile(t, dir, "fresh", sf)
+
+	cfg := Config{SaveDir: dir}
+	ch := Restore(cfg, path)
+	events := collectRestoreEvents(ch)
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+
+	if sessionOptionCalled {
+		t.Error("sessionOptionFn should not be called for a new session")
+	}
+	if setSessionOptionCalled {
+		t.Error("setSessionOptionFn should not be called for a new session")
 	}
 }
 

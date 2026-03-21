@@ -291,6 +291,116 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 		afterSessions, dstAlphaWins, dstBetaWins, dstAlpha1Panes)
 }
 
+// countWindows returns the number of windows in a session.
+func countWindows(t *testing.T, socket, session string) int {
+	t.Helper()
+	out, err := tmuxCmd(socket, "list-windows", "-t", session, "-F", "#{window_index}").Output()
+	if err != nil {
+		t.Fatalf("list-windows %s: %v", session, err)
+	}
+	n := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// TestRestoreMergeIdempotentIntegration verifies that restoring the same save
+// file twice into a server where the session already exists does not create
+// duplicate windows on the second restore. This exercises the real
+// SessionOption/SetSessionOption code path through control mode.
+func TestRestoreMergeIdempotentIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+
+	// ── build a save file from a clean server ────────────────────────────
+
+	socket1, cleanup1, logDir1 := testutil.StartTmuxServer(t)
+	defer cleanup1()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
+
+	if err := tmuxCmd(socket1, "rename-session", "-t", "tmux-popup-control-test", "work").Run(); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if err := tmuxCmd(socket1, "rename-window", "-t", "work:0", "editor").Run(); err != nil {
+		t.Fatalf("rename window: %v", err)
+	}
+	if err := tmuxCmd(socket1, "new-window", "-t", "work", "-n", "server").Run(); err != nil {
+		t.Fatalf("new-window: %v", err)
+	}
+
+	saveDir := t.TempDir()
+	ch := Save(Config{
+		SocketPath: socket1,
+		SaveDir:    saveDir,
+		Name:       "idempotent",
+	})
+	for ev := range ch {
+		if ev.Err != nil {
+			t.Fatalf("save error: %v", ev.Err)
+		}
+	}
+	tmux.Shutdown()
+
+	entries, err := ListSaves(saveDir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no save file: %v", err)
+	}
+	savedPath := entries[0].Path
+
+	// ── restore into a server that already has session "work" ────────────
+
+	socket2, cleanup2, logDir2 := testutil.StartTmuxServer(t)
+	defer cleanup2()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
+
+	// create an existing "work" session with one window
+	if err := tmuxCmd(socket2, "new-session", "-d", "-s", "work", "-n", "existing", "-x", "80", "-y", "24").Run(); err != nil {
+		t.Fatalf("create work: %v", err)
+	}
+	waitSession(t, socket2, "work")
+
+	// first restore — should merge (append windows)
+	restoreCfg := Config{SocketPath: socket2, SaveDir: saveDir}
+	ch1 := Restore(restoreCfg, savedPath)
+	for ev := range ch1 {
+		t.Logf("restore 1: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("restore 1 error: %v", ev.Err)
+		}
+	}
+	tmux.Shutdown()
+	time.Sleep(200 * time.Millisecond)
+
+	windowsAfterFirst := countWindows(t, socket2, "work")
+	t.Logf("windows after first restore: %d", windowsAfterFirst)
+
+	// the saved session had 2 windows; existing had 1; merged total = 3
+	if windowsAfterFirst != 3 {
+		t.Errorf("expected 3 windows after first restore, got %d", windowsAfterFirst)
+	}
+
+	// second restore — should be idempotent (no new windows)
+	ch2 := Restore(restoreCfg, savedPath)
+	for ev := range ch2 {
+		t.Logf("restore 2: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("restore 2 error: %v", ev.Err)
+		}
+	}
+	tmux.Shutdown()
+	time.Sleep(200 * time.Millisecond)
+
+	windowsAfterSecond := countWindows(t, socket2, "work")
+	t.Logf("windows after second restore: %d", windowsAfterSecond)
+
+	if windowsAfterSecond != windowsAfterFirst {
+		t.Errorf("idempotency violation: %d windows after first restore, %d after second (expected equal)",
+			windowsAfterFirst, windowsAfterSecond)
+	}
+}
+
 // TestRestoreWithUserConfigIntegration repeats the restore half of the
 // round-trip test but boots the destination server with the user's real
 // ~/.tmux.conf (including plugins). This catches phantom-session bugs that
