@@ -16,7 +16,7 @@ control-mode connection via
 - **Save** sessions — auto-timestamped or named snapshots of all sessions,
   windows, panes, layouts, and optionally pane contents
 - **Restore** sessions — from the most recent save or a picked snapshot,
-  with progress UI and conflict handling (skips existing sessions)
+  with progress UI; merges windows into existing sessions idempotently
 - **Switch** between sessions with live pane-capture preview
 - **New** session creation via inline form
 - **Rename** sessions via inline form
