@@ -231,6 +231,14 @@ func (m *Model) handlePaneCaptureForm(msg tea.Msg) (bool, tea.Cmd) {
 	if m.paneCaptureForm == nil {
 		return false, nil
 	}
+	// Preview results arrive while the form is active; apply them here before
+	// the form's own Update can consume the message as raw textinput input.
+	if preview, ok := msg.(menu.PaneCapturePreviewMsg); ok {
+		if preview.Seq == m.paneCaptureForm.Seq() {
+			m.paneCaptureForm.SetPreview(preview.Path, preview.Err)
+		}
+		return true, nil
+	}
 	seqBefore := m.paneCaptureForm.Seq()
 	cmd, done, cancel := m.paneCaptureForm.Update(msg)
 	if cancel {
