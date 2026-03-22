@@ -1,6 +1,10 @@
 package ui
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+)
 
 // Harness drives the UI model programmatically for integration tests.
 type Harness struct {
@@ -26,7 +30,19 @@ func (h *Harness) Send(msg tea.Msg) {
 
 func (h *Harness) processCmd(cmd tea.Cmd) {
 	for cmd != nil {
-		msg := cmd()
+		// run cmd with a timeout to avoid hanging on timer-based
+		// commands (e.g. cursor blink ticks). the real tea.Program
+		// runs these in goroutines; the harness is synchronous so it
+		// must skip blocking cmds to avoid infinite loops.
+		ch := make(chan tea.Msg, 1)
+		go func() { ch <- cmd() }()
+
+		var msg tea.Msg
+		select {
+		case msg = <-ch:
+		case <-time.After(10 * time.Millisecond):
+			return
+		}
 		if msg == nil {
 			return
 		}
