@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -107,14 +108,16 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 		barWidth = 10
 	}
 
-	filledWidth := 0
+	// sub-cell precision: compute exact fill and fractional remainder
+	exactFilled := 0.0
 	if s.total > 0 {
-		filledWidth = barWidth * s.step / s.total
-		if filledWidth > barWidth {
-			filledWidth = barWidth
+		exactFilled = float64(barWidth) * float64(s.step) / float64(s.total)
+		if exactFilled > float64(barWidth) {
+			exactFilled = float64(barWidth)
 		}
 	}
-	emptyWidth := barWidth - filledWidth
+	wholeFilled := int(exactFilled)
+	frac := exactFilled - float64(wholeFilled)
 
 	// gradient colours (colour 33 = #0087ff)
 	// save:    white #ffffff → blue #0087ff
@@ -128,30 +131,44 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 		startColor = rgb{0xff, 0xff, 0xff}
 		endColor = rgb{0x00, 0x87, 0xff}
 	}
+	colorAt := func(i int) string {
+		if barWidth <= 1 {
+			return fmt.Sprintf("#%02x%02x%02x", startColor.r, startColor.g, startColor.b)
+		}
+		t := float64(i) / float64(barWidth-1)
+		r := uint8(float64(startColor.r) + t*float64(int(endColor.r)-int(startColor.r)))
+		g := uint8(float64(startColor.g) + t*float64(int(endColor.g)-int(startColor.g)))
+		bv := uint8(float64(startColor.b) + t*float64(int(endColor.b)-int(startColor.b)))
+		return fmt.Sprintf("#%02x%02x%02x", r, g, bv)
+	}
+
+	// background style for unfilled cells
+	var bgStyle lipgloss.Style
+	if styles.ProgressEmptyBg != nil {
+		bgStyle = *styles.ProgressEmptyBg
+	}
+
+	// 1/8th block characters for sub-cell edge
+	eighths := []string{" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
 
 	var bar strings.Builder
-	for i := 0; i < filledWidth; i++ {
-		var r, g, bv uint8
-		if barWidth <= 1 {
-			r, g, bv = startColor.r, startColor.g, startColor.b
-		} else {
-			t := float64(i) / float64(barWidth-1)
-			r = uint8(float64(startColor.r) + t*float64(int(endColor.r)-int(startColor.r)))
-			g = uint8(float64(startColor.g) + t*float64(int(endColor.g)-int(startColor.g)))
-			bv = uint8(float64(startColor.b) + t*float64(int(endColor.b)-int(startColor.b)))
+	for i := 0; i < wholeFilled; i++ {
+		bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(i))).Render("█"))
+	}
+	if wholeFilled < barWidth {
+		idx := int(math.Round(frac * 8))
+		if idx > 7 {
+			idx = 7
 		}
-		bar.WriteString(
-			lipgloss.NewStyle().
-				Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", r, g, bv))).
-				Render("█"),
-		)
+		if idx > 0 {
+			bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(wholeFilled))).Inherit(bgStyle).Render(eighths[idx]))
+		} else {
+			bar.WriteString(bgStyle.Render(" "))
+		}
+		if barWidth-wholeFilled-1 > 0 {
+			bar.WriteString(bgStyle.Render(strings.Repeat(" ", barWidth-wholeFilled-1)))
+		}
 	}
-
-	var emptyStyle lipgloss.Style
-	if styles.ProgressEmpty != nil {
-		emptyStyle = *styles.ProgressEmpty
-	}
-	bar.WriteString(emptyStyle.Render(strings.Repeat("░", emptyWidth)))
 
 	// counter: step in #0087ff, "/" dim, total in #777777
 	stepStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#0087ff")).Render(fmt.Sprintf("%d", s.step))

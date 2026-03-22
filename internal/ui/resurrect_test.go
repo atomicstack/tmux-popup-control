@@ -169,8 +169,9 @@ func TestResurrectViewContainsLogAndBar(t *testing.T) {
 	if !strings.Contains(view, "█") {
 		t.Fatalf("expected filled bar character in view, got:\n%s", view)
 	}
-	if !strings.Contains(view, "░") {
-		t.Fatalf("expected empty bar character in view, got:\n%s", view)
+	// empty region uses background-coloured spaces (#222222 = 34,34,34)
+	if !strings.Contains(view, "\x1b[48;2;34;34;34m") {
+		t.Fatalf("expected empty bar background in view, got:\n%s", view)
 	}
 }
 
@@ -279,7 +280,8 @@ func TestResurrectViewRestoreOperation(t *testing.T) {
 	if !strings.Contains(view, "█") {
 		t.Fatalf("expected filled bar character in restore view, got:\n%s", view)
 	}
-	if !strings.Contains(view, "░") {
-		t.Fatalf("expected empty bar character in restore view, got:\n%s", view)
+	// empty region uses background-coloured spaces (#222222 = 34,34,34)
+	if !strings.Contains(view, "\x1b[48;2;34;34;34m") {
+		t.Fatalf("expected empty bar background in restore view, got:\n%s", view)
 	}
 }

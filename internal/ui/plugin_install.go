@@ -2,8 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
@@ -230,16 +232,46 @@ func (m *Model) pluginInstallView() string {
 	if barWidth > 50 {
 		barWidth = 50
 	}
-	filled := 0
+	exactFilled := 0.0
 	if total > 0 {
-		filled = barWidth * done / total
+		exactFilled = float64(barWidth) * float64(done) / float64(total)
+		if exactFilled > float64(barWidth) {
+			exactFilled = float64(barWidth)
+		}
 	}
-	empty := barWidth - filled
-	bar := styles.ProgressFilled.Render(strings.Repeat("█", filled)) +
-		styles.ProgressEmpty.Render(strings.Repeat("░", empty))
+	wholeFilled := int(exactFilled)
+	frac := exactFilled - float64(wholeFilled)
+
+	var filledStyle lipgloss.Style
+	if styles.ProgressFilled != nil {
+		filledStyle = *styles.ProgressFilled
+	}
+	var bgStyle lipgloss.Style
+	if styles.ProgressEmptyBg != nil {
+		bgStyle = *styles.ProgressEmptyBg
+	}
+
+	eighths := []string{" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
+
+	var bar strings.Builder
+	bar.WriteString(filledStyle.Render(strings.Repeat("█", wholeFilled)))
+	if wholeFilled < barWidth {
+		idx := int(math.Round(frac * 8))
+		if idx > 7 {
+			idx = 7
+		}
+		if idx > 0 {
+			bar.WriteString(filledStyle.Inherit(bgStyle).Render(eighths[idx]))
+		} else {
+			bar.WriteString(bgStyle.Render(" "))
+		}
+		if barWidth-wholeFilled-1 > 0 {
+			bar.WriteString(bgStyle.Render(strings.Repeat(" ", barWidth-wholeFilled-1)))
+		}
+	}
 	counter := fmt.Sprintf(" %d/%d", done, total)
 	b.WriteString("  ")
-	b.WriteString(bar)
+	b.WriteString(bar.String())
 	b.WriteString(styles.Info.Render(counter))
 	b.WriteString("\n\n")
 
