@@ -94,6 +94,11 @@ func (m *Model) View() (view tea.View) {
 			content = m.viewPaneFormWithHeader(header)
 			return m.wrapView(content)
 		}
+	case ModePaneCaptureForm:
+		if m.paneCaptureForm != nil {
+			content = m.viewPaneCaptureForm(header)
+			return m.wrapView(content)
+		}
 	case ModeWindowForm:
 		if m.windowForm != nil {
 			content = m.viewWindowFormWithHeader(header)

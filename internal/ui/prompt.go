@@ -89,3 +89,29 @@ func (m *Model) handleSessionPromptMsg(msg tea.Msg) tea.Cmd {
 		return promptResult{}
 	})
 }
+
+func (m *Model) handlePaneCapturePromptMsg(msg tea.Msg) tea.Cmd {
+	prompt, ok := msg.(menu.PaneCapturePrompt)
+	if !ok {
+		return nil
+	}
+	return m.withPrompt(func() promptResult {
+		m.startPaneCaptureForm(prompt)
+		return promptResult{Cmd: m.paneCaptureForm.ExpandPreviewCmd()}
+	})
+}
+
+func (m *Model) handlePaneCapturePreviewMsg(msg tea.Msg) tea.Cmd {
+	preview, ok := msg.(menu.PaneCapturePreviewMsg)
+	if !ok {
+		return nil
+	}
+	if m.paneCaptureForm == nil {
+		return nil
+	}
+	if preview.Seq != m.paneCaptureForm.Seq() {
+		return nil // stale response
+	}
+	m.paneCaptureForm.SetPreview(preview.Path, preview.Err)
+	return nil
+}

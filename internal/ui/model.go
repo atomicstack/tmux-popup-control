@@ -32,6 +32,7 @@ const (
 	ModePluginInstall
 	ModeResurrect
 	ModeSessionSaveForm
+	ModePaneCaptureForm
 )
 
 const menuHeaderSeparator = "→"
@@ -60,6 +61,8 @@ func (m Mode) String() string {
 		return "resurrect"
 	case ModeSessionSaveForm:
 		return "session_save_form"
+	case ModePaneCaptureForm:
+		return "pane_capture_form"
 	default:
 		return "unknown"
 	}
@@ -93,6 +96,7 @@ type Model struct {
 	windowForm        *menu.WindowRenameForm
 	paneForm          *menu.PaneRenameForm
 	saveForm          *menu.SaveForm
+	paneCaptureForm   *menu.PaneCaptureForm
 	pendingWindowSwap *menu.Item
 	pendingPaneSwap   *menu.Item
 	commandItemsCache []menu.Item
@@ -261,6 +265,8 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 		return m.handleResurrectKey(msg)
 	case ModeSessionSaveForm:
 		return m.handleSaveForm(msg)
+	case ModePaneCaptureForm:
+		return m.handlePaneCaptureForm(msg)
 	default:
 		return false, nil
 	}
@@ -292,6 +298,8 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(resurrectProgressMsg{}):     m.handleResurrectProgressMsg,
 		reflect.TypeOf(resurrectTickMsg{}):         m.handleResurrectTickMsg,
 		reflect.TypeOf(menu.SaveAsPrompt{}):        m.handleSaveAsPromptMsg,
+		reflect.TypeOf(menu.PaneCapturePrompt{}):    m.handlePaneCapturePromptMsg,
+		reflect.TypeOf(menu.PaneCapturePreviewMsg{}): m.handlePaneCapturePreviewMsg,
 	}
 }
 

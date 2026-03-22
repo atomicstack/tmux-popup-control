@@ -226,3 +226,75 @@ func (m *Model) viewFormWithHeader(title, input, help, header string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+func (m *Model) handlePaneCaptureForm(msg tea.Msg) (bool, tea.Cmd) {
+	if m.paneCaptureForm == nil {
+		return false, nil
+	}
+	seqBefore := m.paneCaptureForm.Seq()
+	cmd, done, cancel := m.paneCaptureForm.Update(msg)
+	if cancel {
+		m.paneCaptureForm = nil
+		m.mode = ModeMenu
+		return true, cmd
+	}
+	if done {
+		ctx := m.paneCaptureForm.Context()
+		template := m.paneCaptureForm.Value()
+		escSeqs := m.paneCaptureForm.EscSeqs()
+		actionID := m.paneCaptureForm.ActionID()
+		pendingLabel := m.paneCaptureForm.PendingLabel()
+		m.paneCaptureForm = nil
+		m.mode = ModeMenu
+		m.loading = true
+		m.pendingID = actionID
+		m.pendingLabel = pendingLabel
+		return true, menu.PaneCaptureCommand(ctx, template, escSeqs)
+	}
+	// Only fire preview expansion when the input actually changed (seq advanced).
+	if m.paneCaptureForm.Seq() != seqBefore {
+		cmds := []tea.Cmd{}
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		cmds = append(cmds, m.paneCaptureForm.ExpandPreviewCmd())
+		return true, tea.Batch(cmds...)
+	}
+	return true, cmd
+}
+
+func (m *Model) startPaneCaptureForm(prompt menu.PaneCapturePrompt) {
+	m.paneCaptureForm = menu.NewPaneCaptureForm(prompt)
+	m.mode = ModePaneCaptureForm
+}
+
+func (m *Model) viewPaneCaptureForm(header string) string {
+	f := m.paneCaptureForm
+	lines := []string{}
+	if header != "" {
+		title := f.Title()
+		lines = append(lines, header+menuHeaderSeparator+title)
+	} else {
+		lines = append(lines, f.Title())
+	}
+	lines = append(lines, "", f.InputView(), "")
+
+	// Checkbox line.
+	checkboxLine := f.CheckboxView()
+	if f.EscSeqs() && styles.CheckboxChecked != nil {
+		checkboxLine = styles.CheckboxChecked.Render("■") + " capture escape sequences"
+	} else if styles.Checkbox != nil {
+		checkboxLine = styles.Checkbox.Render("□") + " capture escape sequences"
+	}
+	lines = append(lines, checkboxLine, "")
+
+	// Preview line.
+	if f.PreviewErr() != "" {
+		lines = append(lines, styles.Error.Render(f.PreviewErr()))
+	} else if f.Preview() != "" {
+		preview := lipgloss.NewStyle().Faint(true).Render(f.Preview())
+		lines = append(lines, preview)
+	}
+	lines = append(lines, "", f.Help())
+	return strings.Join(lines, "\n")
+}
