@@ -183,6 +183,7 @@ const (
 
 func NewSessionForm(prompt SessionPrompt) *SessionForm {
 	ti := textinput.New()
+	styleFormInput(&ti)
 	ti.Placeholder = "session-name"
 	ti.CharLimit = 64
 	ti.SetWidth(40)
@@ -229,6 +230,7 @@ func (f *SessionForm) Target() string       { return f.target }
 func (f *SessionForm) Title() string        { return f.title }
 func (f *SessionForm) Help() string         { return f.help }
 func (f *SessionForm) IsRename() bool       { return f.mode == sessionFormModeRename }
+func (f *SessionForm) FocusCmd() tea.Cmd    { return f.input.Focus() }
 
 func (f *SessionForm) ActionID() string {
 	if f.action != "" {

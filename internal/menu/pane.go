@@ -384,6 +384,7 @@ type PaneRenameForm struct {
 
 func NewPaneRenameForm(prompt PanePrompt) *PaneRenameForm {
 	ti := textinput.New()
+	styleFormInput(&ti)
 	ti.Placeholder = "pane-title"
 	ti.CharLimit = 128
 	ti.SetWidth(40)
@@ -411,6 +412,7 @@ func (f *PaneRenameForm) Title() string     { return f.title }
 func (f *PaneRenameForm) Help() string      { return f.help }
 func (f *PaneRenameForm) Value() string     { return strings.TrimSpace(f.input.Value()) }
 func (f *PaneRenameForm) InputView() string { return f.input.View() }
+func (f *PaneRenameForm) FocusCmd() tea.Cmd  { return f.input.Focus() }
 
 func (f *PaneRenameForm) ActionID() string { return "pane:rename" }
 
@@ -494,6 +496,7 @@ type PaneCaptureForm struct {
 // NewPaneCaptureForm creates a PaneCaptureForm from a PaneCapturePrompt.
 func NewPaneCaptureForm(prompt PaneCapturePrompt) *PaneCaptureForm {
 	ti := textinput.New()
+	styleFormInput(&ti)
 	ti.Placeholder = "file path"
 	ti.CharLimit = 256
 	ti.SetWidth(60)
@@ -515,6 +518,7 @@ func (f *PaneCaptureForm) EscSeqs() bool       { return f.escSeqs }
 func (f *PaneCaptureForm) Preview() string     { return f.preview }
 func (f *PaneCaptureForm) PreviewErr() string  { return f.previewErr }
 func (f *PaneCaptureForm) Seq() int            { return f.seq }
+func (f *PaneCaptureForm) FocusCmd() tea.Cmd    { return f.input.Focus() }
 func (f *PaneCaptureForm) ActionID() string    { return "pane:capture" }
 
 func (f *PaneCaptureForm) Title() string {

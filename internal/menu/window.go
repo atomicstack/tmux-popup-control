@@ -480,6 +480,7 @@ type WindowRenameForm struct {
 
 func NewWindowRenameForm(prompt WindowPrompt) *WindowRenameForm {
 	ti := textinput.New()
+	styleFormInput(&ti)
 	ti.Placeholder = "window-name"
 	ti.CharLimit = 64
 	ti.SetWidth(40)
@@ -508,6 +509,7 @@ func (f *WindowRenameForm) Title() string     { return f.title }
 func (f *WindowRenameForm) Help() string      { return f.help }
 func (f *WindowRenameForm) Value() string     { return strings.TrimSpace(f.input.Value()) }
 func (f *WindowRenameForm) InputView() string { return f.input.View() }
+func (f *WindowRenameForm) FocusCmd() tea.Cmd  { return f.input.Focus() }
 
 func (f *WindowRenameForm) ActionID() string { return "window:rename" }
 

@@ -22,6 +22,7 @@ type SaveForm struct {
 // NewSaveForm creates a SaveForm from a SaveAsPrompt.
 func NewSaveForm(prompt SaveAsPrompt) *SaveForm {
 	ti := textinput.New()
+	styleFormInput(&ti)
 	ti.Placeholder = "snapshot-name"
 	ti.CharLimit = 64
 	ti.SetWidth(40)
@@ -36,6 +37,7 @@ func NewSaveForm(prompt SaveAsPrompt) *SaveForm {
 func (f *SaveForm) Context() Context  { return f.ctx }
 func (f *SaveForm) Value() string     { return strings.TrimSpace(f.input.Value()) }
 func (f *SaveForm) InputView() string { return f.input.View() }
+func (f *SaveForm) FocusCmd() tea.Cmd  { return f.input.Focus() }
 func (f *SaveForm) Error() string     { return f.err }
 func (f *SaveForm) Title() string     { return "save as" }
 func (f *SaveForm) Subtitle() string  { return f.saveDir }
