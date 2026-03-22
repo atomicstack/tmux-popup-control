@@ -12,6 +12,7 @@ type Item struct {
 	ID          string
 	Label       string
 	StyledLabel string // optional; when set, used for display instead of Label
+	Header      bool   // non-selectable header row (e.g. column titles)
 }
 
 // Level describes a breadcrumb component for display purposes.

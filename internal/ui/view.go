@@ -343,6 +343,18 @@ func (m *Model) viewSideBySide(header string) string {
 // width is the target column width; when > 0 the text is padded so that
 // the selected item's background spans the full container.
 func (m *Model) buildItemLine(item menu.Item, idx int, current *level, width int) styledLine {
+	if item.Header {
+		fullText := "  " + item.Label
+		if width > 0 {
+			if pad := width - lipgloss.Width(fullText); pad > 0 {
+				fullText += strings.Repeat(" ", pad)
+			}
+		}
+		return styledLine{
+			text:  fullText,
+			style: styles.HeaderItem,
+		}
+	}
 	indicator := "▌"
 	lineStyle := styles.Item
 	indicatorStyle := styles.ItemIndicator

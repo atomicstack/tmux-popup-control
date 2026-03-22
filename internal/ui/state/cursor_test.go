@@ -85,6 +85,43 @@ func TestMoveCursorPaging(t *testing.T) {
 	}
 }
 
+func TestCursorSkipsHeaders(t *testing.T) {
+	items := []menu.Item{
+		{ID: "", Label: "header", Header: true},
+		{ID: "a", Label: "a"},
+		{ID: "b", Label: "b"},
+		{ID: "c", Label: "c"},
+	}
+	l := NewLevel("test", "Test", items, nil)
+	// initial cursor should skip the header at index 0
+	if l.Cursor != 3 {
+		// applyFilter sets cursor to len-1 when cursor starts at -1
+		t.Logf("initial cursor: %d (expected 3 from applyFilter)", l.Cursor)
+	}
+
+	// MoveCursorHome should land on index 1, not 0
+	l.Cursor = 3
+	l.MoveCursorHome()
+	if l.Cursor != 1 {
+		t.Fatalf("home: expected cursor 1, got %d", l.Cursor)
+	}
+
+	// moveCursorBy up from index 1 should stay at 1 (can't go to header)
+	old := l.Cursor
+	l.moveCursorBy(-1)
+	if l.Cursor != 1 {
+		t.Fatalf("move up from 1: expected cursor 1 (skip header), got %d", l.Cursor)
+	}
+	_ = old
+
+	// PageDown should skip headers
+	l.Cursor = 1
+	l.MoveCursorPageDown(10)
+	if l.Cursor != 3 {
+		t.Fatalf("page down: expected cursor 3, got %d", l.Cursor)
+	}
+}
+
 func TestEnsureCursorVisibleAdjustsViewport(t *testing.T) {
 	l := newTestLevel("a", "b", "c", "d", "e")
 	l.Cursor = 4

@@ -1,6 +1,6 @@
 package state
 
-// MoveCursorHome moves the cursor to the first item.
+// MoveCursorHome moves the cursor to the first selectable item.
 func (l *Level) MoveCursorHome() bool {
 	if len(l.Items) == 0 {
 		l.Cursor = 0
@@ -8,10 +8,11 @@ func (l *Level) MoveCursorHome() bool {
 	}
 	old := l.Cursor
 	l.Cursor = 0
+	l.SkipHeaders(1)
 	return old != l.Cursor
 }
 
-// MoveCursorEnd moves the cursor to the last item.
+// MoveCursorEnd moves the cursor to the last selectable item.
 func (l *Level) MoveCursorEnd() bool {
 	n := len(l.Items)
 	if n == 0 {
@@ -20,6 +21,7 @@ func (l *Level) MoveCursorEnd() bool {
 	}
 	old := l.Cursor
 	l.Cursor = n - 1
+	l.SkipHeaders(-1)
 	return old != l.Cursor
 }
 
@@ -49,7 +51,43 @@ func (l *Level) moveCursorBy(delta int) bool {
 	if l.Cursor >= len(l.Items) {
 		l.Cursor = len(l.Items) - 1
 	}
+	dir := 1
+	if delta < 0 {
+		dir = -1
+	}
+	l.SkipHeaders(dir)
 	return l.Cursor != old
+}
+
+// SkipHeaders advances the cursor past any header items in the given direction.
+// If no selectable item exists in that direction, it searches the opposite way.
+func (l *Level) SkipHeaders(dir int) {
+	n := len(l.Items)
+	if n == 0 {
+		return
+	}
+	for l.Cursor >= 0 && l.Cursor < n && l.Items[l.Cursor].Header {
+		l.Cursor += dir
+	}
+	if l.Cursor < 0 || l.Cursor >= n || l.Items[l.Cursor].Header {
+		// hit boundary while still on a header; search opposite direction
+		if l.Cursor < 0 {
+			l.Cursor = 0
+		}
+		if l.Cursor >= n {
+			l.Cursor = n - 1
+		}
+		opp := -dir
+		for l.Cursor >= 0 && l.Cursor < n && l.Items[l.Cursor].Header {
+			l.Cursor += opp
+		}
+		if l.Cursor < 0 {
+			l.Cursor = 0
+		}
+		if l.Cursor >= n {
+			l.Cursor = n - 1
+		}
+	}
 }
 
 func (l *Level) pageSize(maxVisible int) int {

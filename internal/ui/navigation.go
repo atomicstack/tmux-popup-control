@@ -94,6 +94,9 @@ func (m *Model) handleEnterKey() tea.Cmd {
 	}
 	ctx := m.menuContext()
 	item := current.Items[current.Cursor]
+	if item.Header {
+		return nil
+	}
 	events.UI.MenuEnter(current.ID, item.ID, item.Label, current.Filter)
 	beforeCursor := current.FilterCursorPos()
 	current.SetFilter("", 0)
@@ -188,8 +191,15 @@ func (m *Model) moveCursorUp() bool {
 		old := current.Cursor
 		if current.Cursor > 0 {
 			current.Cursor--
+			current.SkipHeaders(-1)
+			if current.Cursor == old {
+				// couldn't move up (hit headers); wrap to end
+				current.Cursor = n - 1
+				current.SkipHeaders(-1)
+			}
 		} else {
 			current.Cursor = n - 1
+			current.SkipHeaders(-1)
 		}
 		if old != current.Cursor {
 			events.UI.MenuCursor(current.ID, current.Cursor)
@@ -212,6 +222,7 @@ func (m *Model) moveCursorDown() bool {
 		} else {
 			current.Cursor = 0
 		}
+		current.SkipHeaders(1)
 		if old != current.Cursor {
 			events.UI.MenuCursor(current.ID, current.Cursor)
 			m.syncViewport(current)

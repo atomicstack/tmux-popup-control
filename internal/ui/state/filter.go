@@ -60,6 +60,7 @@ func (l *Level) applyFilter() {
 	if l.Cursor >= len(l.Items) {
 		l.Cursor = len(l.Items) - 1
 	}
+	l.SkipHeaders(-1)
 	if l.ViewportOffset > len(l.Items)-1 {
 		l.ViewportOffset = 0
 	}
@@ -209,13 +210,24 @@ func (l *Level) MoveFilterCursorRuneForward() bool {
 }
 
 // FilterItems returns items matching the supplied filter string.
+// Header items are always included regardless of the filter.
 func FilterItems(items []menu.Item, query string) []menu.Item {
 	trimmed := strings.TrimSpace(query)
 	if trimmed == "" {
 		return CloneItems(items)
 	}
-	labels := make([]string, len(items))
-	for i, item := range items {
+	// Separate headers (always kept) from filterable items.
+	var headers []menu.Item
+	var filterable []menu.Item
+	for _, item := range items {
+		if item.Header {
+			headers = append(headers, item)
+		} else {
+			filterable = append(filterable, item)
+		}
+	}
+	labels := make([]string, len(filterable))
+	for i, item := range filterable {
 		labels[i] = item.Label
 	}
 	ranks := fuzzy.RankFindNormalizedFold(trimmed, labels)
@@ -224,19 +236,21 @@ func FilterItems(items []menu.Item, query string) []menu.Item {
 		for _, rank := range ranks {
 			matches[rank.OriginalIndex] = struct{}{}
 		}
-		filtered := make([]menu.Item, 0, len(matches))
-		for idx, item := range items {
+		filtered := make([]menu.Item, 0, len(headers)+len(matches))
+		filtered = append(filtered, headers...)
+		for idx, item := range filterable {
 			if _, ok := matches[idx]; ok {
 				filtered = append(filtered, item)
 			}
 		}
-		if len(filtered) > 0 {
+		if len(filtered) > len(headers) {
 			return CloneItems(filtered)
 		}
 	}
 	lower := strings.ToLower(trimmed)
-	filtered := make([]menu.Item, 0, len(items))
-	for _, item := range items {
+	filtered := make([]menu.Item, 0, len(headers)+len(filterable))
+	filtered = append(filtered, headers...)
+	for _, item := range filterable {
 		labelLower := strings.ToLower(item.Label)
 		idLower := strings.ToLower(item.ID)
 		if strings.Contains(labelLower, lower) || strings.Contains(idLower, lower) {
