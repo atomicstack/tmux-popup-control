@@ -41,8 +41,7 @@ func (m *Model) handleWindowPromptMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	return m.withPrompt(func() promptResult {
-		m.startWindowForm(prompt)
-		return promptResult{}
+		return promptResult{Cmd: m.startWindowForm(prompt)}
 	})
 }
 
@@ -52,8 +51,7 @@ func (m *Model) handlePanePromptMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	return m.withPrompt(func() promptResult {
-		m.startPaneForm(prompt)
-		return promptResult{}
+		return promptResult{Cmd: m.startPaneForm(prompt)}
 	})
 }
 
@@ -85,8 +83,7 @@ func (m *Model) handleSessionPromptMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	return m.withPrompt(func() promptResult {
-		m.startSessionForm(prompt)
-		return promptResult{}
+		return promptResult{Cmd: m.startSessionForm(prompt)}
 	})
 }
 
@@ -96,8 +93,8 @@ func (m *Model) handlePaneCapturePromptMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	return m.withPrompt(func() promptResult {
-		m.startPaneCaptureForm(prompt)
-		return promptResult{Cmd: m.paneCaptureForm.ExpandPreviewCmd()}
+		focusCmd := m.startPaneCaptureForm(prompt)
+		return promptResult{Cmd: tea.Batch(focusCmd, m.paneCaptureForm.ExpandPreviewCmd())}
 	})
 }
 

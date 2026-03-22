@@ -112,19 +112,22 @@ func (m *Model) handleSessionForm(msg tea.Msg) (bool, tea.Cmd) {
 	return true, nil
 }
 
-func (m *Model) startSessionForm(prompt menu.SessionPrompt) {
+func (m *Model) startSessionForm(prompt menu.SessionPrompt) tea.Cmd {
 	m.sessionForm = menu.NewSessionForm(prompt)
 	m.mode = ModeSessionForm
+	return m.sessionForm.FocusCmd()
 }
 
-func (m *Model) startWindowForm(prompt menu.WindowPrompt) {
+func (m *Model) startWindowForm(prompt menu.WindowPrompt) tea.Cmd {
 	m.windowForm = menu.NewWindowRenameForm(prompt)
 	m.mode = ModeWindowForm
+	return m.windowForm.FocusCmd()
 }
 
-func (m *Model) startPaneForm(prompt menu.PanePrompt) {
+func (m *Model) startPaneForm(prompt menu.PanePrompt) tea.Cmd {
 	m.paneForm = menu.NewPaneRenameForm(prompt)
 	m.mode = ModePaneForm
+	return m.paneForm.FocusCmd()
 }
 
 func (m *Model) viewPaneForm() string {
@@ -197,16 +200,16 @@ func (m *Model) handleSaveForm(msg tea.Msg) (bool, tea.Cmd) {
 	return true, nil
 }
 
-func (m *Model) startSaveForm(prompt menu.SaveAsPrompt) {
+func (m *Model) startSaveForm(prompt menu.SaveAsPrompt) tea.Cmd {
 	m.loading = false
 	m.saveForm = menu.NewSaveForm(prompt)
 	m.mode = ModeSessionSaveForm
+	return m.saveForm.FocusCmd()
 }
 
 func (m *Model) handleSaveAsPromptMsg(msg tea.Msg) tea.Cmd {
 	prompt := msg.(menu.SaveAsPrompt)
-	m.startSaveForm(prompt)
-	return nil
+	return m.startSaveForm(prompt)
 }
 
 func (m *Model) viewSaveForm() string {
@@ -277,9 +280,10 @@ func (m *Model) handlePaneCaptureForm(msg tea.Msg) (bool, tea.Cmd) {
 	return true, cmd
 }
 
-func (m *Model) startPaneCaptureForm(prompt menu.PaneCapturePrompt) {
+func (m *Model) startPaneCaptureForm(prompt menu.PaneCapturePrompt) tea.Cmd {
 	m.paneCaptureForm = menu.NewPaneCaptureForm(prompt)
 	m.mode = ModePaneCaptureForm
+	return m.paneCaptureForm.FocusCmd()
 }
 
 func (m *Model) viewPaneCaptureForm(header string) string {

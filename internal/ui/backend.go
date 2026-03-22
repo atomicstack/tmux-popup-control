@@ -89,15 +89,16 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		if m.deferredRename != nil && m.deferredRename.ID == "session:rename" {
 			m.deferredRename = nil
 			target := strings.TrimSpace(m.menuArgs)
-			m.withPrompt(func() promptResult {
-				m.startSessionForm(menu.SessionPrompt{
+			if focusCmd := m.withPrompt(func() promptResult {
+				return promptResult{Cmd: m.startSessionForm(menu.SessionPrompt{
 					Context: ctx,
 					Action:  "session:rename",
 					Target:  target,
 					Initial: target,
-				})
-				return promptResult{}
-			})
+				})}
+			}); focusCmd != nil {
+				previewCmd = tea.Batch(previewCmd, focusCmd)
+			}
 		}
 		if currentLvl != nil && currentLvl.ID == "session:switch" {
 			previewCmd = m.refreshPreviewForLevel(currentLvl)
@@ -150,14 +151,15 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 					break
 				}
 			}
-			m.withPrompt(func() promptResult {
-				m.startWindowForm(menu.WindowPrompt{
+			if focusCmd := m.withPrompt(func() promptResult {
+				return promptResult{Cmd: m.startWindowForm(menu.WindowPrompt{
 					Context: ctx,
 					Target:  target,
 					Initial: initial,
-				})
-				return promptResult{}
-			})
+				})}
+			}); focusCmd != nil {
+				previewCmd = tea.Batch(previewCmd, focusCmd)
+			}
 		}
 		if currentLvl != nil && currentLvl.ID == "window:switch" {
 			previewCmd = m.refreshPreviewForLevel(currentLvl)
