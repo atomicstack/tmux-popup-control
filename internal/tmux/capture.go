@@ -8,9 +8,6 @@ import (
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
-// capturePaneToFileFn is the injectable var for tests.
-var capturePaneToFileFn = CapturePaneToFile
-
 // CapturePaneToFile captures the full scrollback of a pane and writes it to a
 // file. escSeqs controls whether ANSI escape sequences are included (-e flag).
 func CapturePaneToFile(socketPath, paneTarget, filePath string, escSeqs bool) error {
@@ -42,9 +39,6 @@ func trimCaptureOutput(s string) string {
 	}
 	return trimmed + "\n"
 }
-
-// expandFormatFn is the injectable var for tests.
-var expandFormatFn = ExpandFormat
 
 // ExpandFormat resolves a tmux format string against a target pane via
 // display-message. Used for the live filename preview.
