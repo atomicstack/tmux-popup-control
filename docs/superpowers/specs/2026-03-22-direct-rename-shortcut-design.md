@@ -57,14 +57,14 @@ add two new configurable keybindings following the existing pattern:
 [[ -z "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_SESSION_RENAME='$'
 tmux bind-key -T prefix -N "Renames session via $BINARY_NAME" \
   "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" \
-  run-shell -b "$LAUNCH_SCRIPT --root-menu session:rename --menu-args #{session_name}"
+  run-shell -b "$LAUNCH_SCRIPT --root-menu session:rename --menu-args '#{session_name}'"
 
 # window rename — default ','
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME="$(opt key-window-rename)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME=','
 tmux bind-key -T prefix -N "Renames window via $BINARY_NAME" \
   "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" \
-  run-shell -b "$LAUNCH_SCRIPT --root-menu window:rename --menu-args #{session_name}:#{window_index}"
+  run-shell -b "$LAUNCH_SCRIPT --root-menu window:rename --menu-args '#{session_name}:#{window_index}'"
 ```
 
 #### 4. tests
