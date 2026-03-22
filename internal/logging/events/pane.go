@@ -56,3 +56,19 @@ func (PaneTracer) CancelRename(target string, reason paneReason) {
 func (PaneTracer) SubmitRename(target, title string) {
 	logging.Trace("pane.rename.submit", map[string]interface{}{"target": target, "title": title})
 }
+
+func (PaneTracer) CapturePrompt(target string) {
+	logging.Trace("pane.capture.prompt", map[string]interface{}{"target": target})
+}
+
+func (PaneTracer) Capture(target, filePath string, escSeqs bool) {
+	logging.Trace("pane.capture", map[string]interface{}{"target": target, "file": filePath, "esc_seqs": escSeqs})
+}
+
+func (PaneTracer) CaptureCancel(reason paneReason) {
+	logging.Trace("pane.capture.cancel", map[string]interface{}{"reason": string(reason)})
+}
+
+func (PaneTracer) CaptureSubmit(filePath string) {
+	logging.Trace("pane.capture.submit", map[string]interface{}{"file": filePath})
+}
