@@ -151,6 +151,7 @@ func ActionHandlers() map[string]Action {
 		"pane:swap":            PaneSwapAction,
 		"pane:kill":            PaneKillAction,
 		"pane:rename":          PaneRenameAction,
+		"pane:capture":         PaneCaptureAction,
 		"pane:resize:left":     PaneResizeLeftAction,
 		"pane:resize:right":    PaneResizeRightAction,
 		"pane:resize:up":       PaneResizeUpAction,

@@ -3,6 +3,8 @@ package menu
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
@@ -123,5 +125,121 @@ func TestPaneBreakActionComputesDestination(t *testing.T) {
 	}
 	if gotSource != "sess:0.1" || gotDest != "sess:3" {
 		t.Fatalf("unexpected break args %s %s", gotSource, gotDest)
+	}
+}
+
+func TestPaneCaptureActionReturnsPrompt(t *testing.T) {
+	ctx := Context{SocketPath: "sock", CurrentPaneID: "%3"}
+	msg := PaneCaptureAction(ctx, Item{ID: "pane:capture", Label: "capture"})()
+	prompt, ok := msg.(PaneCapturePrompt)
+	if !ok {
+		t.Fatalf("expected PaneCapturePrompt, got %T", msg)
+	}
+	if prompt.Context.CurrentPaneID != "%3" {
+		t.Errorf("pane ID = %q, want %%3", prompt.Context.CurrentPaneID)
+	}
+	if prompt.Template == "" {
+		t.Error("template should not be empty")
+	}
+}
+
+func TestPaneCaptureActionEmptyPaneID(t *testing.T) {
+	ctx := Context{SocketPath: "sock", CurrentPaneID: ""}
+	msg := PaneCaptureAction(ctx, Item{ID: "pane:capture"})()
+	result, ok := msg.(ActionResult)
+	if !ok {
+		t.Fatalf("expected ActionResult, got %T", msg)
+	}
+	if result.Err == nil {
+		t.Fatal("expected error for empty pane ID")
+	}
+}
+
+func TestPaneCaptureFormToggleEscSeqs(t *testing.T) {
+	form := NewPaneCaptureForm(PaneCapturePrompt{
+		Context:  Context{CurrentPaneID: "%1"},
+		Template: "test.log",
+	})
+	if form.EscSeqs() {
+		t.Fatal("escSeqs should default to false")
+	}
+	form.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !form.EscSeqs() {
+		t.Fatal("escSeqs should be true after tab")
+	}
+	form.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if form.EscSeqs() {
+		t.Fatal("escSeqs should be false after second tab")
+	}
+}
+
+func TestPaneCaptureFormEscCancels(t *testing.T) {
+	form := NewPaneCaptureForm(PaneCapturePrompt{
+		Context:  Context{CurrentPaneID: "%1"},
+		Template: "test.log",
+	})
+	_, done, cancel := form.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if !cancel {
+		t.Fatal("esc should cancel")
+	}
+	if done {
+		t.Fatal("esc should not signal done")
+	}
+}
+
+func TestPaneCaptureFormEnterSubmits(t *testing.T) {
+	form := NewPaneCaptureForm(PaneCapturePrompt{
+		Context:  Context{CurrentPaneID: "%1"},
+		Template: "test.log",
+	})
+	_, done, cancel := form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !done {
+		t.Fatal("enter should signal done")
+	}
+	if cancel {
+		t.Fatal("enter should not cancel")
+	}
+	if form.Value() != "test.log" {
+		t.Errorf("Value() = %q, want %q", form.Value(), "test.log")
+	}
+}
+
+func TestPaneCaptureFormCtrlUClears(t *testing.T) {
+	form := NewPaneCaptureForm(PaneCapturePrompt{
+		Context:  Context{CurrentPaneID: "%1"},
+		Template: "test.log",
+	})
+	form.Update(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
+	if form.Value() != "" {
+		t.Errorf("Value() = %q after ctrl+u, want empty", form.Value())
+	}
+}
+
+func TestPaneCaptureFormSeqIncrementsOnInput(t *testing.T) {
+	form := NewPaneCaptureForm(PaneCapturePrompt{
+		Context:  Context{CurrentPaneID: "%1"},
+		Template: "test.log",
+	})
+	seq0 := form.Seq()
+	form.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if form.Seq() <= seq0 {
+		t.Error("seq should increment on input change")
+	}
+}
+
+func TestLoadPaneMenuIncludesCapture(t *testing.T) {
+	items, err := loadPaneMenu(Context{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range items {
+		if item.ID == "capture" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("pane menu should include 'capture' item")
 	}
 }
