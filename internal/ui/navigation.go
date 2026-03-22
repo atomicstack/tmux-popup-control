@@ -498,7 +498,11 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		m.pendingID = node.ID
 		m.deferredAction = node
 		m.rootMenuID = node.ID
-		m.rootTitle = headerSegmentCleaner.Replace(node.ID)
+		title := node.ID
+		if idx := strings.LastIndex(title, ":"); idx >= 0 {
+			title = title[:idx]
+		}
+		m.rootTitle = headerSegmentCleaner.Replace(title)
 		return
 	}
 

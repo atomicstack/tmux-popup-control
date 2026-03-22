@@ -153,6 +153,34 @@ func TestRootMenuLeafActionDeferredUntilPaneData(t *testing.T) {
 	}
 }
 
+func TestRootMenuLeafActionHeaderUsesParentSegment(t *testing.T) {
+	// When --root-menu launches a leaf action like pane:capture, the root
+	// title should be the parent segment ("pane"), not the full colon-
+	// separated ID ("pane:capture"). Otherwise the breadcrumb shows
+	// "pane:capture→capture to file" instead of "pane→capture to file".
+	m := NewModel("", 80, 24, false, false, nil, "pane:capture", "", "", "")
+	if m.rootTitle != "pane" {
+		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "pane")
+	}
+}
+
+func TestRootMenuLeafActionHeaderSessionSave(t *testing.T) {
+	// session:save is also a leaf action — root title should be "session".
+	m := NewModel("", 80, 24, false, false, nil, "session:save", "", "", "")
+	if m.rootTitle != "session" {
+		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "session")
+	}
+}
+
+func TestRootMenuLoaderHeaderUsesSegment(t *testing.T) {
+	// Loader-based root menus (like session:tree) should also produce
+	// a clean header segment without the colon prefix.
+	m := NewModel("", 80, 24, false, false, nil, "session:tree", "", "", "")
+	if m.rootTitle != "tree" {
+		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "tree")
+	}
+}
+
 func TestRootMenuLeafActionContextIsEmptyBeforeBackend(t *testing.T) {
 	// Verify that context has empty CurrentPaneID before backend data.
 	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
