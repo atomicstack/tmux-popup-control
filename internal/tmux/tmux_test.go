@@ -1399,3 +1399,44 @@ func TestNewTmuxCachesConnection(t *testing.T) {
 		t.Fatalf("expected newTmux factory called once, got %d", callCount)
 	}
 }
+
+func TestEnvOrOptionPrefersEnvVar(t *testing.T) {
+	fake := &fakeClient{
+		globalOptionFn: func(key string) (string, error) {
+			return "from-tmux", nil
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TEST_ENV_OR_OPT", "from-env")
+	result := envOrOption("", "TEST_ENV_OR_OPT", "@test-option")
+	if result != "from-env" {
+		t.Fatalf("expected env value, got %q", result)
+	}
+}
+
+func TestEnvOrOptionFallsBackToTmuxOption(t *testing.T) {
+	fake := &fakeClient{
+		globalOptionFn: func(key string) (string, error) {
+			if key == "@test-option" {
+				return "from-tmux", nil
+			}
+			return "", nil
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TEST_ENV_OR_OPT", "")
+	result := envOrOption("", "TEST_ENV_OR_OPT", "@test-option")
+	if result != "from-tmux" {
+		t.Fatalf("expected tmux option value, got %q", result)
+	}
+}
+
+func TestEnvOrOptionReturnsEmptyWhenBothUnset(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TEST_ENV_OR_OPT", "")
+	result := envOrOption("", "TEST_ENV_OR_OPT", "@nonexistent")
+	if result != "" {
+		t.Fatalf("expected empty, got %q", result)
+	}
+}
