@@ -3,6 +3,7 @@ package tmux
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -21,6 +22,8 @@ func TestTrimCaptureOutput(t *testing.T) {
 		{"empty", "", ""},
 		{"only blanks", "\n\n\n", ""},
 		{"no trailing newline", "line1\nline2", "line1\nline2\n"},
+		{"many trailing newlines", "prompt $ cmd\n" + strings.Repeat("\n", 50), "prompt $ cmd\n"},
+		{"scrollback with blank tail", "line1\nline2\nprompt »\n" + strings.Repeat("\n", 100), "line1\nline2\nprompt »\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -70,6 +73,34 @@ func TestCapturePaneToFile(t *testing.T) {
 	expected := "line1\nline2\nline3\n"
 	if string(data) != expected {
 		t.Errorf("file content = %q, want %q", string(data), expected)
+	}
+}
+
+func TestCapturePaneToFileTrimsTrailingNewlines(t *testing.T) {
+	// Simulate realistic tmux capture-pane output: content followed by dozens
+	// of blank lines (tmux pads to the scrollback height).
+	rawOutput := "prompt $ ls\nfile1  file2  file3\nprompt $\n" + strings.Repeat("\n", 80)
+	fake := &fakeClient{
+		capturePaneFn: func(_ string, _ *gotmux.CaptureOptions) (string, error) {
+			return rawOutput, nil
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	dir := t.TempDir()
+	outPath := filepath.Join(dir, "capture.log")
+	err := CapturePaneToFile("sock", "%0", outPath, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
+	expected := "prompt $ ls\nfile1  file2  file3\nprompt $\n"
+	if string(data) != expected {
+		t.Errorf("file has %d bytes, want %d\ngot:  %q\nwant: %q",
+			len(data), len(expected), string(data), expected)
 	}
 }
 

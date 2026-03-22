@@ -7,11 +7,24 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// cursorBlinkRE matches a single character rendered with a cursor background
+// colour: ESC[48;5;Nm (set indexed bg) + one char + ESC[49m (reset bg).
+// Bubble Tea's blinking cursor toggles this on/off, making golden comparisons
+// flaky because the capture timing determines which blink state is captured.
+var cursorBlinkRE = regexp.MustCompile(`\x1b\[48;5;\d+m(.)\x1b\[49m`)
+
+// normalizeCursorBlink strips single-character cursor background highlights so
+// golden file comparisons are stable regardless of cursor blink phase.
+func normalizeCursorBlink(s string) string {
+	return cursorBlinkRE.ReplaceAllString(s, "$1")
+}
 
 var (
 	buildOnce    sync.Once
@@ -155,8 +168,9 @@ func waitForRender(t *testing.T, ctx context.Context, socket, target, exitPath s
 func assertGolden(t *testing.T, goldenName, output string) {
 	t.Helper()
 	path := filepath.Join(repoRoot(t), "testdata", goldenName)
+	normalized := normalizeCursorBlink(output)
 	if os.Getenv("UPDATE_GOLDEN") != "" {
-		if err := os.WriteFile(path, []byte(output), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(normalized), 0o644); err != nil {
 			t.Fatalf("failed to update golden: %v", err)
 		}
 	}
@@ -164,8 +178,8 @@ func assertGolden(t *testing.T, goldenName, output string) {
 	if err != nil {
 		t.Fatalf("failed to read golden %s: %v", goldenName, err)
 	}
-	if string(data) != output {
-		t.Fatalf("output mismatch for %s\nexpected:\n%s\nactual:\n%s", goldenName, string(data), output)
+	if string(data) != normalized {
+		t.Fatalf("output mismatch for %s\nexpected:\n%s\nactual:\n%s", goldenName, string(data), normalized)
 	}
 }
 
