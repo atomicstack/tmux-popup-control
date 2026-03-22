@@ -182,8 +182,12 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		}
 	}
 
-	// Execute any deferred leaf action now that backend data is available.
-	if m.deferredAction != nil {
+	// Execute any deferred leaf action once pane data has arrived.
+	// We wait specifically for PanesUpdated because leaf actions like
+	// pane:capture need CurrentPaneID, which is only populated after
+	// the pane poller's first result. Session or window events arriving
+	// first must not trigger the action prematurely.
+	if m.deferredAction != nil && res.PanesUpdated {
 		node := m.deferredAction
 		m.deferredAction = nil
 		freshCtx := m.menuContext()

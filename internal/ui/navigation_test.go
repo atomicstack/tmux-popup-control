@@ -93,10 +93,11 @@ func TestLayoutPreviewRevertsOnEscape(t *testing.T) {
 	}
 }
 
-func TestRootMenuLeafActionDeferredUntilBackendData(t *testing.T) {
+func TestRootMenuLeafActionDeferredUntilPaneData(t *testing.T) {
 	// When --root-menu specifies a leaf action (like pane:capture), the
-	// action must be deferred until the backend provides data. Otherwise
-	// ctx.CurrentPaneID is empty and the action fails with "no current pane".
+	// action must be deferred until the backend provides pane data.
+	// Otherwise ctx.CurrentPaneID is empty and the action fails with
+	// "no current pane".
 	m := NewModel("", 80, 24, false, false, nil, "pane:capture", "", "", "")
 	if m.deferredAction == nil {
 		t.Fatal("expected deferredAction to be set for leaf action root menu")
@@ -105,9 +106,35 @@ func TestRootMenuLeafActionDeferredUntilBackendData(t *testing.T) {
 		t.Fatalf("rootMenuID = %q, want pane:capture", m.rootMenuID)
 	}
 
-	// Simulate a backend pane event with a current pane.
 	h := NewHarness(m)
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Send a session event first — this must NOT trigger the deferred
+	// action because pane data hasn't arrived yet.
+	sessSnap := tmux.SessionSnapshot{
+		Sessions: []tmux.Session{{Name: "main", Label: "main: 1 window"}},
+		Current:  "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindSessions, Data: sessSnap}})
+	if h.Model().deferredAction == nil {
+		t.Fatal("deferredAction should still be pending after session event")
+	}
+	if h.Model().mode != ModeMenu {
+		t.Fatalf("mode = %v, want ModeMenu (action should not have fired yet)", h.Model().mode)
+	}
+
+	// Send a window event — still no pane data, action must remain deferred.
+	winSnap := tmux.WindowSnapshot{
+		Windows:        []tmux.Window{{ID: "main:0", Session: "main", Name: "vim", Current: true}},
+		CurrentID:      "main:0",
+		CurrentSession: "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindWindows, Data: winSnap}})
+	if h.Model().deferredAction == nil {
+		t.Fatal("deferredAction should still be pending after window event")
+	}
+
+	// Now send a pane event — the deferred action should fire.
 	paneSnap := tmux.PaneSnapshot{
 		Panes: []tmux.Pane{
 			{ID: "s:0.0", PaneID: "%1", Session: "main", Current: true},
@@ -118,19 +145,16 @@ func TestRootMenuLeafActionDeferredUntilBackendData(t *testing.T) {
 	}
 	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindPanes, Data: paneSnap}})
 
-	// After the backend event, the deferred action should have fired and
-	// produced a PaneCapturePrompt, switching us to capture form mode.
 	if h.Model().deferredAction != nil {
-		t.Fatal("deferredAction should be nil after backend event")
+		t.Fatal("deferredAction should be nil after pane event")
 	}
 	if h.Model().mode != ModePaneCaptureForm {
 		t.Fatalf("mode = %v, want ModePaneCaptureForm", h.Model().mode)
 	}
 }
 
-func TestRootMenuLeafActionFailsWithoutBackendData(t *testing.T) {
-	// Verify that without the deferred mechanism, a leaf action launched
-	// directly would see an empty CurrentPaneID.
+func TestRootMenuLeafActionContextIsEmptyBeforeBackend(t *testing.T) {
+	// Verify that context has empty CurrentPaneID before backend data.
 	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
 	ctx := m.menuContext()
 	if ctx.CurrentPaneID != "" {
