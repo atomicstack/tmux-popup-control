@@ -29,3 +29,9 @@ tmux bind-key -T prefix -N "Launches $BINARY_NAME's session tree" "$TMUX_POPUP_C
 
 [[ -z "$TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER" ]] && TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER='f'
 tmux bind-key -T prefix -N "Launches $BINARY_NAME's pane switcher" "$TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER" run-shell -b "$LAUNCH_SCRIPT --root-menu pane:switch"
+
+[[ -z "$TMUX_POPUP_CONTROL_KEY_SESSION_SAVE" ]] && TMUX_POPUP_CONTROL_KEY_SESSION_SAVE='C-s'
+tmux bind-key -T prefix -N "Saves sessions via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_SESSION_SAVE" run-shell -b "$LAUNCH_SCRIPT --root-menu session:save"
+
+[[ -z "$TMUX_POPUP_CONTROL_KEY_SESSION_RESTORE_FROM" ]] && TMUX_POPUP_CONTROL_KEY_SESSION_RESTORE_FROM='C-r'
+tmux bind-key -T prefix -N "Restores sessions from a snapshot via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_SESSION_RESTORE_FROM" run-shell -b "$LAUNCH_SCRIPT --root-menu session:restore-from"
