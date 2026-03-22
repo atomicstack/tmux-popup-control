@@ -9,6 +9,16 @@ import (
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
+// envOrOption returns the value of an env var, falling back to a tmux server
+// option if the env var is empty. This lets users configure settings in
+// tmux.conf via `set -g @option-name "value"` as an alternative to env vars.
+func envOrOption(socketPath, envKey, optionName string) string {
+	if v := os.Getenv(envKey); v != "" {
+		return v
+	}
+	return ShowOption(socketPath, optionName)
+}
+
 func FetchSessions(socketPath string) (SessionSnapshot, error) {
 	client, err := newTmux(socketPath)
 	if err != nil {
@@ -25,10 +35,10 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 			sessions = fallback
 		}
 	}
-	labelMap := fetchSessionLabels(client, os.Getenv("TMUX_POPUP_CONTROL_SESSION_FORMAT"))
+	labelMap := fetchSessionLabels(client, envOrOption(socketPath, "TMUX_POPUP_CONTROL_SESSION_FORMAT", "@tmux-popup-control-session-format"))
 	currentName := currentSessionName(client)
 	realClients := realAttachedClients(client)
-	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
+	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	out := make([]Session, 0, len(sessions))
 	for _, s := range sessions {
 		label := labelMap[s.Name]
@@ -59,7 +69,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	if err != nil {
 		return WindowSnapshot{}, err
 	}
-	lines, err := fetchWindowLines(client)
+	lines, err := fetchWindowLines(socketPath, client)
 	if err != nil {
 		lines = fallbackWindowLines(allWindows)
 	}
@@ -68,7 +78,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 		windowMap[w.Id] = w
 	}
 	currentSession := currentSessionName(client)
-	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
+	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	var snapshot WindowSnapshot
 	snapshot.IncludeCurrent = includeCurrent
 	snapshot.CurrentSession = currentSession
@@ -145,7 +155,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	if err != nil {
 		return PaneSnapshot{}, err
 	}
-	lines, err := fetchPaneLines(client)
+	lines, err := fetchPaneLines(socketPath, client)
 	if err != nil {
 		lines = fallbackPaneLines(allPanes)
 	}
@@ -153,7 +163,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	for _, p := range allPanes {
 		paneMap[p.Id] = p
 	}
-	includeCurrent := os.Getenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT") != ""
+	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	var snapshot PaneSnapshot
 	snapshot.IncludeCurrent = includeCurrent
 	for _, line := range lines {
@@ -338,9 +348,9 @@ type paneLine struct {
 	current     bool
 }
 
-func fetchWindowLines(client tmuxClient) ([]windowLine, error) {
-	filter := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_WINDOW_FILTER"))
-	formatExpr := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_WINDOW_FORMAT"))
+func fetchWindowLines(socketPath string, client tmuxClient) ([]windowLine, error) {
+	filter := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_WINDOW_FILTER", "@tmux-popup-control-window-filter"))
+	formatExpr := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_WINDOW_FORMAT", "@tmux-popup-control-window-format"))
 	if formatExpr == "" {
 		formatExpr = "#{window_name}"
 	}
@@ -385,9 +395,9 @@ func fallbackWindowLines(windows []*gotmux.Window) []windowLine {
 	return lines
 }
 
-func fetchPaneLines(client tmuxClient) ([]paneLine, error) {
-	filter := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_FILTER"))
-	formatExpr := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_FORMAT"))
+func fetchPaneLines(socketPath string, client tmuxClient) ([]paneLine, error) {
+	filter := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_PANE_FILTER", "@tmux-popup-control-pane-filter"))
+	formatExpr := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_PANE_FORMAT", "@tmux-popup-control-pane-format"))
 	if formatExpr == "" {
 		formatExpr = "[#{window_name}:#{pane_title}] #{pane_current_command}  [#{pane_width}x#{pane_height}] [history #{history_size}/#{history_limit}, #{history_bytes} bytes] #{?pane_active,[active],[inactive]}"
 	}

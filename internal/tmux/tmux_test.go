@@ -584,7 +584,7 @@ func TestFetchWindowLinesParsesOutput(t *testing.T) {
 	}
 	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FILTER", "")
 	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FORMAT", "#{window_name}")
-	lines, err := fetchWindowLines(fake)
+	lines, err := fetchWindowLines("", fake)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -601,7 +601,7 @@ func TestFetchWindowLinesParsesOutput(t *testing.T) {
 
 func TestFetchWindowLinesFallsBackOnError(t *testing.T) {
 	fake := &fakeClient{listWindowsFormatErr: errors.New("boom")}
-	if _, err := fetchWindowLines(fake); err == nil {
+	if _, err := fetchWindowLines("", fake); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -630,7 +630,7 @@ func TestFetchPaneLinesParsesOutput(t *testing.T) {
 			"%1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
 		},
 	}
-	lines, err := fetchPaneLines(fake)
+	lines, err := fetchPaneLines("", fake)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -647,7 +647,7 @@ func TestFetchPaneLinesParsesOutput(t *testing.T) {
 
 func TestFetchPaneLinesError(t *testing.T) {
 	fake := &fakeClient{listPanesFormatErr: errors.New("boom")}
-	if _, err := fetchPaneLines(fake); err == nil {
+	if _, err := fetchPaneLines("", fake); err == nil {
 		t.Fatalf("expected error")
 	}
 }
