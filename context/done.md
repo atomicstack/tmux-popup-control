@@ -50,3 +50,27 @@ Here’s what’s happened so far:
 - Fixed preview panel showing blank content: `PanePreview` was using gotmuxcc's `CapturePane` via control-mode transport, which produced unreliable/empty output. Switched to `runExecCommand("tmux", "capture-pane", "-p", ...)` (direct exec, same pattern as other exec-based ops). Added ANSI escape stripping (`ansiEscapeRe`) so raw terminal output is cleaned before display. Removed `CapturePane` from `tmuxClient` interface and updated `preview_test.go` to use `withStubCommander`. All tests pass.
 
 - Added save/restore sessions feature (tmux-resurrect-style). New `internal/resurrect/` package with types, storage (dir resolution with env var + tmux option + XDG fallback), save/restore orchestration via channel-based progress events, and tar.gz pane contents archives. New `internal/tmux/restore.go` with helpers (`CreateSession`, `CreateWindow`, `SplitPane`, `SelectLayoutTarget`, `SelectPane`, `SendPaneContents`, `CapturePaneContents`, `ShowOption`). Added `ModeResurrect` and `ModeSessionSaveForm` UI modes with gradient progress bar (white↔purple) and scrolling log. Four new session menu items (`session:save`, `session:save-as`, `session:restore`, `session:restore-from`). CLI subcommands (`save-sessions`, `restore-sessions`) launch tmux display-popup with `--resurrect-popup` flag. Config wired via env vars (`TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR`, `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS`) and tmux options (`@tmux-popup-control-session-storage-dir`, `@tmux-popup-control-restore-pane-contents`). Save-as form includes collision detection with two-enter overwrite confirmation. Comprehensive test coverage across all new packages.
+
+- Hybrid progress bar with gradient blocks and background fill for save/restore operations: uses Unicode block characters with smooth colour transitions (white↔purple) instead of flat fills.
+
+- Added non-selectable header items to the menu system, used for section grouping in restore-from menus (e.g. separating auto-saves from named snapshots).
+
+- Added `prefix C-s` and `prefix C-r` keybindings for session save and restore-from shortcuts. All keybindings are now configurable via env vars and tmux options.
+
+- Improved session storage naming: save files use cleaner names in the restore-from menu.
+
+- Added pane capture-to-file feature: `pane:capture` menu action and `prefix H` keybinding let users save pane scrollback to a file. Template paths support tmux format variables (`#{session_name}`, `#{window_index}`, etc.) and strftime tokens (`%Y`, `%m`, `%d`, etc.). Trailing whitespace and blank lines are stripped from captured output. New `CapturePaneToFile`, `ExpandFormat`, strftime expansion, and tilde expansion helpers in `internal/tmux/capture.go`.
+
+- Added tmux option fallback for all configuration settings: format, filter, and switch-current options now fall back to `@tmux-popup-control-*` tmux server options when the corresponding env var is unset. This lets users configure settings in `tmux.conf` via `set -g @tmux-popup-control-... "value"` as an alternative to env vars. New `envOrOption` helper in `internal/tmux/snapshots.go`.
+
+- Fixed `main.sh` option propagation: removed redundant shell-side tmux option reads that were passing quoted/escaped values (e.g. `"\$HOME/..."`) as env vars, causing the Go binary to display mangled paths like `"\/Users/matt/..."` in session save/restore directory subheaders. Options are now read cleanly via Go's control-mode connection.
+
+- Batch tmux option reading in `main.tmux`: replaced per-keybinding `tmux show-option` calls with a single `tmux show-options -g` call, populating an associative array. Added quote and escape stripping for robustness.
+
+- Fixed `--root-menu` direct launch of leaf actions (like `pane:capture`): deferred action execution until backend pane data is available. Previously the action fired immediately during model construction with an empty context, producing "no current pane" errors.
+
+- Fixed breadcrumb header for directly-launched leaf actions: `--root-menu pane:capture` now shows `pane→capture to file` instead of `pane:capture→capture to file`.
+
+- Stabilized golden file tests against cursor blink timing: added `normalizeCursorBlink` to strip single-character cursor background highlights from captured output before golden comparison.
+
+- Documented all configuration env vars, tmux options, and keybindings in README.md.
