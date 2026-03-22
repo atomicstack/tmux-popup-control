@@ -67,6 +67,9 @@ control-mode connection via
 - Background polling keeps menu data in sync with tmux state
 - Multi-select with Tab for bulk operations
 - Alt-screen with mouse cell-motion support
+- Hybrid progress bar with gradient blocks and background fill for
+  save/restore operations
+- Non-selectable header items for menu section grouping
 
 ## Not yet implemented
 
