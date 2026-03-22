@@ -100,46 +100,46 @@ make release         # cross-compiles + creates GitHub release via gh
 
 ## Configuration
 
-| Flag / env var | Purpose |
-|---|---|
-| `--socket` / `TMUX_POPUP_CONTROL_SOCKET` | tmux socket path (falls back to `TMUX_POPUP_SOCKET`, then `$TMUX`) |
-| `--root-menu` / `TMUX_POPUP_CONTROL_ROOT_MENU` | open directly into a submenu (e.g. `window`, `pane:swap`, `session:tree`) |
-| `--menu-args` / `TMUX_POPUP_CONTROL_MENU_ARGS` | arguments for the target menu (e.g. `expanded` for `session:tree`) |
-| `--width` / `TMUX_POPUP_CONTROL_WIDTH` | viewport width in cells (0 = terminal width) |
-| `--height` / `TMUX_POPUP_CONTROL_HEIGHT` | viewport height in rows (0 = terminal height) |
-| `--footer` / `TMUX_POPUP_CONTROL_FOOTER` / `@tmux-popup-control-footer` | show keybinding hint row |
-| `--verbose` / `TMUX_POPUP_CONTROL_VERBOSE` | print success messages for actions |
-| `--log-file` / `TMUX_POPUP_CONTROL_LOG_FILE` | log file path |
-| `--trace` / `TMUX_POPUP_CONTROL_TRACE` | enable verbose JSON trace logging |
-| `--debug-to-sqlite` | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |
-| `TMUX_POPUP_CONTROL_CLIENT` | explicit client ID override (env only) |
-| `TMUX_POPUP_CONTROL_SESSION` | explicit session name override (env only) |
-| `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` / `@tmux-popup-control-session-storage-dir` | override save/restore storage directory; supports `$HOME` and other env vars (env only / tmux option) |
-| `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` / `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save (env only / tmux option) |
-| `TMUX_POPUP_CONTROL_SESSION_FORMAT` / `@tmux-popup-control-session-format` | custom tmux format string for session labels |
-| `TMUX_POPUP_CONTROL_WINDOW_FORMAT` / `@tmux-popup-control-window-format` | custom tmux format string for window labels |
-| `TMUX_POPUP_CONTROL_WINDOW_FILTER` / `@tmux-popup-control-window-filter` | tmux filter expression for window list |
-| `TMUX_POPUP_CONTROL_PANE_FORMAT` / `@tmux-popup-control-pane-format` | custom tmux format string for pane labels |
-| `TMUX_POPUP_CONTROL_PANE_FILTER` / `@tmux-popup-control-pane-filter` | tmux filter expression for pane list |
-| `TMUX_POPUP_CONTROL_SWITCH_CURRENT` / `@tmux-popup-control-switch-current` | include current session/window/pane in switch menus |
-| `TMUX_POPUP_CONTROL_COLOR_PROFILE` | force colour profile (`ansi256`, etc.) (env only) |
-| `TMUX_POPUP_CONTROL_RESURRECT_NAME` | snapshot name for save/restore CLI subcommands (env only) |
-| `TMUX_POPUP_CONTROL_RESURRECT_FROM` | snapshot name to restore from in CLI subcommand (env only) |
+| Flag | Env var | Tmux option | Purpose |
+|---|---|---|---|
+| `--socket` | `TMUX_POPUP_CONTROL_SOCKET` | | tmux socket path (falls back to `TMUX_POPUP_SOCKET`, then `$TMUX`) |
+| `--root-menu` | `TMUX_POPUP_CONTROL_ROOT_MENU` | | open directly into a submenu (e.g. `window`, `pane:swap`, `session:tree`) |
+| `--menu-args` | `TMUX_POPUP_CONTROL_MENU_ARGS` | | arguments for the target menu (e.g. `expanded` for `session:tree`) |
+| `--width` | `TMUX_POPUP_CONTROL_WIDTH` | | viewport width in cells (0 = terminal width) |
+| `--height` | `TMUX_POPUP_CONTROL_HEIGHT` | | viewport height in rows (0 = terminal height) |
+| `--footer` | `TMUX_POPUP_CONTROL_FOOTER` | `@tmux-popup-control-footer` | show keybinding hint row |
+| `--verbose` | `TMUX_POPUP_CONTROL_VERBOSE` | | print success messages for actions |
+| `--log-file` | `TMUX_POPUP_CONTROL_LOG_FILE` | | log file path |
+| `--trace` | `TMUX_POPUP_CONTROL_TRACE` | | enable verbose JSON trace logging |
+| `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |
+| | `TMUX_POPUP_CONTROL_CLIENT` | | explicit client ID override |
+| | `TMUX_POPUP_CONTROL_SESSION` | | explicit session name override |
+| | `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` | `@tmux-popup-control-session-storage-dir` | override save/restore storage directory; supports `$HOME` and other env vars |
+| | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` | `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save |
+| | `TMUX_POPUP_CONTROL_SESSION_FORMAT` | `@tmux-popup-control-session-format` | custom tmux format string for session labels |
+| | `TMUX_POPUP_CONTROL_WINDOW_FORMAT` | `@tmux-popup-control-window-format` | custom tmux format string for window labels |
+| | `TMUX_POPUP_CONTROL_WINDOW_FILTER` | `@tmux-popup-control-window-filter` | tmux filter expression for window list |
+| | `TMUX_POPUP_CONTROL_PANE_FORMAT` | `@tmux-popup-control-pane-format` | custom tmux format string for pane labels |
+| | `TMUX_POPUP_CONTROL_PANE_FILTER` | `@tmux-popup-control-pane-filter` | tmux filter expression for pane list |
+| | `TMUX_POPUP_CONTROL_SWITCH_CURRENT` | `@tmux-popup-control-switch-current` | include current session/window/pane in switch menus |
+| | `TMUX_POPUP_CONTROL_COLOR_PROFILE` | | force colour profile (`ansi256`, etc.) |
+| | `TMUX_POPUP_CONTROL_RESURRECT_NAME` | | snapshot name for save/restore CLI subcommands |
+| | `TMUX_POPUP_CONTROL_RESURRECT_FROM` | | snapshot name to restore from in CLI subcommand |
 
 ### Keybindings
 
 `main.tmux` binds prefix keys for common actions. Each is configurable via an
 env var or a tmux option in `tmux.conf` (env var takes precedence).
 
-| Env var / tmux option | Default | Action |
-|---|---|---|
-| `TMUX_POPUP_CONTROL_LAUNCH_KEY` / `@tmux-popup-control-launch-key` | `F` | open the main popup menu |
-| `TMUX_POPUP_CONTROL_KEY_COMMAND_MENU` / `@tmux-popup-control-key-command-menu` | `:` | open the command browser |
-| `TMUX_POPUP_CONTROL_KEY_SESSION_TREE` / `@tmux-popup-control-key-session-tree` | `s` | open the session tree |
-| `TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER` / `@tmux-popup-control-key-pane-switcher` | `f` | open the pane switcher |
-| `TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE` / `@tmux-popup-control-key-pane-capture` | `H` | capture pane to file |
-| `TMUX_POPUP_CONTROL_KEY_SESSION_SAVE` / `@tmux-popup-control-key-session-save` | `C-s` | save sessions |
-| `TMUX_POPUP_CONTROL_KEY_SESSION_RESTORE_FROM` / `@tmux-popup-control-key-session-restore-from` | `C-r` | restore sessions from a snapshot |
+| Env var | Tmux option | Default | Action |
+|---|---|---|---|
+| `TMUX_POPUP_CONTROL_LAUNCH_KEY` | `@tmux-popup-control-launch-key` | `F` | open the main popup menu |
+| `TMUX_POPUP_CONTROL_KEY_COMMAND_MENU` | `@tmux-popup-control-key-command-menu` | `:` | open the command browser |
+| `TMUX_POPUP_CONTROL_KEY_SESSION_TREE` | `@tmux-popup-control-key-session-tree` | `s` | open the session tree |
+| `TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER` | `@tmux-popup-control-key-pane-switcher` | `f` | open the pane switcher |
+| `TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE` | `@tmux-popup-control-key-pane-capture` | `H` | capture pane to file |
+| `TMUX_POPUP_CONTROL_KEY_SESSION_SAVE` | `@tmux-popup-control-key-session-save` | `C-s` | save sessions |
+| `TMUX_POPUP_CONTROL_KEY_SESSION_RESTORE_FROM` | `@tmux-popup-control-key-session-restore-from` | `C-r` | restore sessions from a snapshot |
 
 ### CLI subcommands
 
