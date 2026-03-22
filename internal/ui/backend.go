@@ -86,6 +86,19 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		if m.sessionForm != nil {
 			m.sessionForm.SetSessions(ctx.Sessions)
 		}
+		if m.deferredRename != nil && m.deferredRename.ID == "session:rename" {
+			m.deferredRename = nil
+			target := strings.TrimSpace(m.menuArgs)
+			m.withPrompt(func() promptResult {
+				m.startSessionForm(menu.SessionPrompt{
+					Context: ctx,
+					Action:  "session:rename",
+					Target:  target,
+					Initial: target,
+				})
+				return promptResult{}
+			})
+		}
 		if currentLvl != nil && currentLvl.ID == "session:switch" {
 			previewCmd = m.refreshPreviewForLevel(currentLvl)
 		}
@@ -124,6 +137,27 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 			lvl.UpdateItems(items)
 			m.applyNodeSettings(lvl)
 			m.syncViewport(lvl)
+		}
+		if m.deferredRename != nil && m.deferredRename.ID == "window:rename" {
+			m.deferredRename = nil
+			target := strings.TrimSpace(m.menuArgs)
+			initial := target
+			for _, entry := range ctx.Windows {
+				if entry.ID == target {
+					if entry.Name != "" {
+						initial = entry.Name
+					}
+					break
+				}
+			}
+			m.withPrompt(func() promptResult {
+				m.startWindowForm(menu.WindowPrompt{
+					Context: ctx,
+					Target:  target,
+					Initial: initial,
+				})
+				return promptResult{}
+			})
 		}
 		if currentLvl != nil && currentLvl.ID == "window:switch" {
 			previewCmd = m.refreshPreviewForLevel(currentLvl)

@@ -248,6 +248,120 @@ func TestRootMenuWindowRenameDeferredWithMenuArgs(t *testing.T) {
 	}
 }
 
+func TestDeferredSessionRenameFiresOnSessionsUpdated(t *testing.T) {
+	m := NewModel("", 80, 24, false, false, nil, "session:rename", "main", "", "")
+	if m.deferredRename == nil {
+		t.Fatal("expected deferredRename to be set")
+	}
+
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	sessSnap := tmux.SessionSnapshot{
+		Sessions: []tmux.Session{
+			{Name: "main", Label: "main: 2 windows"},
+			{Name: "other", Label: "other: 1 window"},
+		},
+		Current: "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindSessions, Data: sessSnap}})
+
+	if h.Model().deferredRename != nil {
+		t.Fatal("expected deferredRename cleared after SessionsUpdated")
+	}
+	if h.Model().mode != ModeSessionForm {
+		t.Fatalf("mode = %v, want ModeSessionForm", h.Model().mode)
+	}
+	if h.Model().sessionForm == nil {
+		t.Fatal("expected sessionForm to be set")
+	}
+	if h.Model().sessionForm.Target() != "main" {
+		t.Fatalf("sessionForm target = %q, want main", h.Model().sessionForm.Target())
+	}
+	if h.Model().loading {
+		t.Fatal("expected loading=false after form opens")
+	}
+}
+
+func TestDeferredWindowRenameFiresOnWindowsUpdated(t *testing.T) {
+	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	if m.deferredRename == nil {
+		t.Fatal("expected deferredRename to be set")
+	}
+
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Send sessions first — should NOT trigger the deferred window rename.
+	sessSnap := tmux.SessionSnapshot{
+		Sessions: []tmux.Session{{Name: "main", Label: "main: 1 window"}},
+		Current:  "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindSessions, Data: sessSnap}})
+	if h.Model().deferredRename == nil {
+		t.Fatal("deferredRename should still be pending after session event")
+	}
+
+	// Now send windows — should trigger the deferred window rename.
+	winSnap := tmux.WindowSnapshot{
+		Windows: []tmux.Window{
+			{ID: "main:0", Session: "main", Name: "vim", Label: "0: vim", Current: true},
+			{ID: "main:1", Session: "main", Name: "zsh", Label: "1: zsh"},
+		},
+		CurrentID:      "main:0",
+		CurrentSession: "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindWindows, Data: winSnap}})
+
+	if h.Model().deferredRename != nil {
+		t.Fatal("expected deferredRename cleared after WindowsUpdated")
+	}
+	if h.Model().mode != ModeWindowForm {
+		t.Fatalf("mode = %v, want ModeWindowForm", h.Model().mode)
+	}
+	if h.Model().windowForm == nil {
+		t.Fatal("expected windowForm to be set")
+	}
+	if h.Model().windowForm.Target() != "main:0" {
+		t.Fatalf("windowForm target = %q, want main:0", h.Model().windowForm.Target())
+	}
+	if h.Model().loading {
+		t.Fatal("expected loading=false after form opens")
+	}
+}
+
+func TestDeferredWindowRenameResolvesWindowName(t *testing.T) {
+	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Provide sessions first.
+	sessSnap := tmux.SessionSnapshot{
+		Sessions: []tmux.Session{{Name: "main", Label: "main: 1 window"}},
+		Current:  "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindSessions, Data: sessSnap}})
+
+	// Provide windows with a name for main:0.
+	winSnap := tmux.WindowSnapshot{
+		Windows: []tmux.Window{
+			{ID: "main:0", Session: "main", Name: "editor", Label: "0: editor", Current: true},
+		},
+		CurrentID:      "main:0",
+		CurrentSession: "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindWindows, Data: winSnap}})
+
+	if h.Model().windowForm == nil {
+		t.Fatal("expected windowForm to be set")
+	}
+	// The form's initial value should be the resolved window name, not the ID.
+	got := h.Model().windowForm.Value()
+	if got != "editor" {
+		t.Fatalf("windowForm initial value = %q, want %q", got, "editor")
+	}
+}
+
 func TestRootMenuSessionRenameWithoutMenuArgsFallsThrough(t *testing.T) {
 	// When menuArgs is empty, session:rename should load the picker list
 	// via the standard loader path, not defer.
