@@ -490,17 +490,13 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		return
 	}
 
-	// If the node is a leaf action with no loader, execute it immediately.
+	// If the node is a leaf action with no loader, defer it until backend
+	// data is available. Executing immediately would use an empty context
+	// (e.g. CurrentPaneID not yet populated by the backend poller).
 	if node.Loader == nil && node.Action != nil {
-		ctx := m.menuContext()
 		m.loading = true
 		m.pendingID = node.ID
-		m.initCmd = m.bus.Execute(ctx, command.Request{
-			ID:      node.ID,
-			Label:   node.ID,
-			Handler: node.Action,
-			Item:    menu.Item{ID: node.ID, Label: node.ID},
-		})
+		m.deferredAction = node
 		m.rootMenuID = node.ID
 		m.rootTitle = headerSegmentCleaner.Replace(node.ID)
 		return

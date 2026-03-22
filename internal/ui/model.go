@@ -127,6 +127,7 @@ type Model struct {
 	pluginInstallState *pluginInstallState
 	resurrectState     *resurrectState
 	initCmd            tea.Cmd
+	deferredAction     *menu.Node
 }
 
 // NewModel initialises the UI state with the root menu and configuration.

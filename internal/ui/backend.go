@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
 )
 
 func waitForBackendEvent(w *backend.Watcher) tea.Cmd {
@@ -179,6 +180,23 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 				m.rebuildTreeItems(lvl, ts)
 			}
 		}
+	}
+
+	// Execute any deferred leaf action now that backend data is available.
+	if m.deferredAction != nil {
+		node := m.deferredAction
+		m.deferredAction = nil
+		freshCtx := m.menuContext()
+		deferredCmd := m.bus.Execute(freshCtx, command.Request{
+			ID:      node.ID,
+			Label:   node.ID,
+			Handler: node.Action,
+			Item:    menu.Item{ID: node.ID, Label: node.ID},
+		})
+		if previewCmd != nil {
+			return tea.Batch(previewCmd, deferredCmd)
+		}
+		return deferredCmd
 	}
 
 	if warn, _ := m.hasBackendIssue(); !warn {

@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 func TestHandleEscapeKeyFromRootQuits(t *testing.T) {
@@ -88,6 +90,51 @@ func TestLayoutPreviewRevertsOnEscape(t *testing.T) {
 	// Should have popped back to root
 	if len(m.stack) != 1 {
 		t.Fatalf("expected stack length 1 after escape, got %d", len(m.stack))
+	}
+}
+
+func TestRootMenuLeafActionDeferredUntilBackendData(t *testing.T) {
+	// When --root-menu specifies a leaf action (like pane:capture), the
+	// action must be deferred until the backend provides data. Otherwise
+	// ctx.CurrentPaneID is empty and the action fails with "no current pane".
+	m := NewModel("", 80, 24, false, false, nil, "pane:capture", "", "", "")
+	if m.deferredAction == nil {
+		t.Fatal("expected deferredAction to be set for leaf action root menu")
+	}
+	if m.rootMenuID != "pane:capture" {
+		t.Fatalf("rootMenuID = %q, want pane:capture", m.rootMenuID)
+	}
+
+	// Simulate a backend pane event with a current pane.
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	paneSnap := tmux.PaneSnapshot{
+		Panes: []tmux.Pane{
+			{ID: "s:0.0", PaneID: "%1", Session: "main", Current: true},
+		},
+		CurrentID:      "s:0.0",
+		CurrentLabel:   "s:0.0: test",
+		IncludeCurrent: true,
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindPanes, Data: paneSnap}})
+
+	// After the backend event, the deferred action should have fired and
+	// produced a PaneCapturePrompt, switching us to capture form mode.
+	if h.Model().deferredAction != nil {
+		t.Fatal("deferredAction should be nil after backend event")
+	}
+	if h.Model().mode != ModePaneCaptureForm {
+		t.Fatalf("mode = %v, want ModePaneCaptureForm", h.Model().mode)
+	}
+}
+
+func TestRootMenuLeafActionFailsWithoutBackendData(t *testing.T) {
+	// Verify that without the deferred mechanism, a leaf action launched
+	// directly would see an empty CurrentPaneID.
+	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	ctx := m.menuContext()
+	if ctx.CurrentPaneID != "" {
+		t.Fatalf("expected empty CurrentPaneID before backend data, got %q", ctx.CurrentPaneID)
 	}
 }
 
