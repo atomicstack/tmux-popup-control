@@ -29,7 +29,18 @@ func CapturePaneToFile(socketPath, paneTarget, filePath string, escSeqs bool) er
 	if err != nil {
 		return fmt.Errorf("capture-pane %s: %w", target, err)
 	}
-	return os.WriteFile(filePath, []byte(output), 0644)
+	cleaned := trimCaptureOutput(output)
+	return os.WriteFile(filePath, []byte(cleaned), 0644)
+}
+
+// trimCaptureOutput removes trailing whitespace and blank lines from the end
+// of the captured output so the file doesn't end with endless empty space.
+func trimCaptureOutput(s string) string {
+	trimmed := strings.TrimRight(s, " \t\n\r")
+	if trimmed == "" {
+		return ""
+	}
+	return trimmed + "\n"
 }
 
 // expandFormatFn is the injectable var for tests.

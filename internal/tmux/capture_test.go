@@ -8,6 +8,30 @@ import (
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
+func TestTrimCaptureOutput(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{"clean", "line1\nline2\n", "line1\nline2\n"},
+		{"trailing blank lines", "line1\nline2\n\n\n\n", "line1\nline2\n"},
+		{"mid-line whitespace preserved", "line1   \nline2\t\n", "line1   \nline2\n"},
+		{"trailing blanks stripped", "a  \nb\n  \n\n", "a  \nb\n"},
+		{"empty", "", ""},
+		{"only blanks", "\n\n\n", ""},
+		{"no trailing newline", "line1\nline2", "line1\nline2\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := trimCaptureOutput(tt.input)
+			if got != tt.expect {
+				t.Errorf("trimCaptureOutput(%q) = %q, want %q", tt.input, got, tt.expect)
+			}
+		})
+	}
+}
+
 func TestCapturePaneToFile(t *testing.T) {
 	captured := "line1\nline2\nline3"
 	var gotTarget string
@@ -43,8 +67,9 @@ func TestCapturePaneToFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read output: %v", err)
 	}
-	if string(data) != captured {
-		t.Errorf("file content = %q, want %q", string(data), captured)
+	expected := "line1\nline2\nline3\n"
+	if string(data) != expected {
+		t.Errorf("file content = %q, want %q", string(data), expected)
 	}
 }
 
