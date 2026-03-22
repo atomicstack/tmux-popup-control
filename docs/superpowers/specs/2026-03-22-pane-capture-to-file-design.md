@@ -25,16 +25,59 @@ bind-key -T prefix H command-prompt -I "/Users/matt/tmux-#D.%F-%H-%M-%S.log" \
 
 ## action flow
 
-1. `PaneCaptureAction` returns a `PaneCapturePrompt` message containing the
-   menu `Context` and the default template `~/tmux-#{pane_id}.%F-%H-%M-%S.log`
+1. `PaneCaptureAction` checks `ctx.CurrentPaneID` — if empty, returns
+   `ActionResult{Err: ...}`. Otherwise returns a `PaneCapturePrompt` message
+   containing the menu `Context` and the default template
+   `~/tmux-#{pane_id}.%F-%H-%M-%S.log` (the `Item` argument is ignored; the
+   pane target comes from context)
 2. The UI handler receives `PaneCapturePrompt`, creates a `PaneCaptureForm`,
    and switches to `ModePaneCaptureForm`
 3. The form immediately fires a command to expand the template via
-   `ExpandFormat` (which wraps `DisplayMessage`) and returns a
-   `PaneCapturePreviewMsg` with the resolved path
-4. On each input change, a new expand command is dispatched (debounced ~200ms)
-5. On enter, the form submits; `PaneCaptureCommand` expands `~` to `$HOME`,
-   resolves the template, captures the pane, and writes the file
+   `expandPreview` and returns a `PaneCapturePreviewMsg` with the resolved path
+4. On each input change, a new expand command is dispatched; stale responses
+   are discarded via a sequence counter on the form (same pattern as
+   `previewSeq` in `internal/ui/preview.go`)
+5. On enter, the form submits; `PaneCaptureCommand` applies the full expansion
+   pipeline (`~` → `$HOME`, strftime → timestamp, `#{}` → tmux values),
+   captures the pane, and writes the file
+
+## template expansion
+
+The default template is `~/tmux-#{pane_id}.%F-%H-%M-%S.log` and contains three
+kinds of placeholders:
+
+- **tmux format variables** (`#{pane_id}`, `#{session_name}`, etc.) — expanded
+  by `DisplayMessage` against the target pane
+- **strftime tokens** (`%F`, `%H`, `%M`, `%S`, etc.) — expanded in Go via a
+  small `expandStrftime` helper that maps common strftime tokens to Go time
+  layout strings and calls `time.Now().Format()`
+- **tilde** (`~/`) — expanded to `$HOME/` in Go
+
+`DisplayMessage` does not perform strftime expansion, so Go handles it first.
+The supported strftime tokens (at minimum):
+
+| token | meaning | Go layout |
+|---|---|---|
+| `%F` | ISO date (YYYY-MM-DD) | `2006-01-02` |
+| `%Y` | 4-digit year | `2006` |
+| `%m` | month (01–12) | `01` |
+| `%d` | day (01–31) | `02` |
+| `%H` | hour (00–23) | `15` |
+| `%M` | minute (00–59) | `04` |
+| `%S` | second (00–59) | `05` |
+| `%T` | time (HH:MM:SS) | `15:04:05` |
+| `%%` | literal `%` | `%` |
+
+`expandStrftime` lives in `internal/menu/` (or a small helper file) since it is
+pure string manipulation with no tmux dependency. Unrecognised `%x` tokens are
+passed through unchanged so they don't clash with tmux format variables (tmux
+uses `#{}` syntax, not `%`).
+
+The preview expansion pipeline is:
+1. replace leading `~/` with `$HOME/` (Go-side)
+2. expand strftime tokens via `expandStrftime` (Go-side)
+3. pass the result to `ExpandFormat` → `DisplayMessage(target, format)` for
+   tmux variable resolution
 
 ## form type: `PaneCaptureForm`
 
@@ -48,10 +91,19 @@ type PaneCaptureForm struct {
     input      textinput.Model
     ctx        Context
     escSeqs    bool   // checkbox: include escape sequences (default false)
-    preview    string // expanded template from DisplayMessage
+    preview    string // expanded path from DisplayMessage
     previewErr string // error from expansion, if any
+    seq        int    // monotonic counter; stale PaneCapturePreviewMsg discarded
 }
 ```
+
+The `seq` counter increments on every input change. `PaneCapturePreviewMsg`
+carries the sequence number it was dispatched with; the handler discards it if
+it does not match the form's current `seq`. This follows the same stale-discard
+pattern as `previewSeq` in `internal/ui/preview.go`.
+
+`SetPreview(path, err string)` is a setter on the form so the UI handler can
+update preview state without reaching into unexported fields.
 
 ### keybindings
 
@@ -68,11 +120,11 @@ type PaneCaptureForm struct {
 ```
 pane→capture
 
-~/tmux-#{pane_id}.%F-%H-%M-%S.log|     ← text input with cursor
+~/tmux-#{pane_id}.%F-%H-%M-%S.log|            ← text input with cursor
 
-□ capture escape sequences               ← checkbox, tab to toggle
+□ capture escape sequences                    ← checkbox, tab to toggle
 
-~/tmux-%3.2026-03-22-14-30-00.log        ← faint preview of expanded path
+/Users/matt/tmux-%3.2026-03-22-14-30-00.log   ← faint preview (~, strftime, #{} resolved)
 
 tab: toggle escape sequences · enter: save · esc: cancel
 ```
@@ -153,21 +205,29 @@ Both are package-level function vars for test injection.
 | file | change |
 |---|---|
 | `internal/menu/pane.go` | `PaneCapturePrompt`, `PaneCaptureForm`, `PaneCaptureAction`, `PaneCaptureCommand`; add `"capture"` to `loadPaneMenu` |
+| `internal/menu/strftime.go` | new file: `expandStrftime` helper mapping strftime tokens to Go time layouts |
 | `internal/menu/menu.go` | register `"pane:capture": PaneCaptureAction` in `ActionHandlers()` |
 | `internal/tmux/capture.go` | new file: `CapturePaneToFile`, `ExpandFormat` (+ injectable vars) |
-| `internal/ui/model.go` | `ModePaneCaptureForm` constant, `paneCaptureForm` field |
+| `internal/ui/model.go` | `ModePaneCaptureForm` constant + `String()` case, `paneCaptureForm` field |
 | `internal/ui/forms.go` | `handlePaneCaptureForm`, `startPaneCaptureForm`, `viewPaneCaptureForm` |
 | `internal/ui/prompt.go` | `handlePaneCapturePromptMsg` |
 | `internal/ui/view.go` | `ModePaneCaptureForm` case in `View()` switch |
 | `internal/logging/events/` | trace events for capture |
 | tests | unit tests for form, tmux functions, UI handler |
 
-## tilde expansion
+## path expansion
 
-The form accepts `~` as a substitute for `$HOME` in the path template. On
-submit, `PaneCaptureCommand` replaces a leading `~/` with `os.UserHomeDir() +
-"/"`. The preview also applies this expansion so the user sees the resolved
-absolute path.
+The form accepts three kinds of expansion in the path template:
+
+1. **tilde** — leading `~/` is replaced with `os.UserHomeDir() + "/"`
+2. **strftime** — `%F`, `%H`, `%M`, `%S`, etc. are expanded via
+   `expandStrftime` using `time.Now()`
+3. **tmux format** — `#{pane_id}`, `#{session_name}`, etc. are expanded via
+   `DisplayMessage`
+
+Both the live preview and the submit path apply all three expansions in this
+order. The preview shows the fully resolved absolute path so the user knows
+exactly where the file will be written.
 
 ## testing
 
