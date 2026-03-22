@@ -215,3 +215,44 @@ func TestLayoutPreviewNoRevertWhenDataEmpty(t *testing.T) {
 		t.Fatalf("expected no revert when Data is empty, got %v", applied)
 	}
 }
+
+func TestRootMenuSessionRenameDeferredWithMenuArgs(t *testing.T) {
+	m := NewModel("", 80, 24, false, false, nil, "session:rename", "mysession", "", "")
+	if m.deferredRename == nil {
+		t.Fatal("expected deferredRename to be set when session:rename has menuArgs")
+	}
+	if m.deferredRename.ID != "session:rename" {
+		t.Fatalf("deferredRename.ID = %q, want session:rename", m.deferredRename.ID)
+	}
+	if !m.loading {
+		t.Fatal("expected loading=true while deferred rename is pending")
+	}
+	if m.rootMenuID != "session:rename" {
+		t.Fatalf("rootMenuID = %q, want session:rename", m.rootMenuID)
+	}
+	if m.rootTitle != "session" {
+		t.Fatalf("rootTitle = %q, want session", m.rootTitle)
+	}
+}
+
+func TestRootMenuWindowRenameDeferredWithMenuArgs(t *testing.T) {
+	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	if m.deferredRename == nil {
+		t.Fatal("expected deferredRename to be set when window:rename has menuArgs")
+	}
+	if m.deferredRename.ID != "window:rename" {
+		t.Fatalf("deferredRename.ID = %q, want window:rename", m.deferredRename.ID)
+	}
+	if !m.loading {
+		t.Fatal("expected loading=true while deferred rename is pending")
+	}
+}
+
+func TestRootMenuSessionRenameWithoutMenuArgsFallsThrough(t *testing.T) {
+	// When menuArgs is empty, session:rename should load the picker list
+	// via the standard loader path, not defer.
+	m := NewModel("", 80, 24, false, false, nil, "session:rename", "", "", "")
+	if m.deferredRename != nil {
+		t.Fatal("expected deferredRename to be nil when menuArgs is empty")
+	}
+}

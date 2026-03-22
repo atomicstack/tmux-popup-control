@@ -128,6 +128,7 @@ type Model struct {
 	resurrectState     *resurrectState
 	initCmd            tea.Cmd
 	deferredAction     *menu.Node
+	deferredRename     *menu.Node
 }
 
 // NewModel initialises the UI state with the root menu and configuration.

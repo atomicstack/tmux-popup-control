@@ -490,6 +490,23 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		return
 	}
 
+	// If the node is a rename action (session:rename or window:rename) and
+	// menuArgs provides a target, defer the rename form until backend data
+	// is available. The form needs session/window entries for duplicate
+	// name validation and for resolving the initial value.
+	if m.menuArgs != "" && (id == "session:rename" || id == "window:rename") {
+		m.loading = true
+		m.pendingID = node.ID
+		m.deferredRename = node
+		m.rootMenuID = node.ID
+		title := node.ID
+		if idx := strings.LastIndex(title, ":"); idx >= 0 {
+			title = title[:idx]
+		}
+		m.rootTitle = headerSegmentCleaner.Replace(title)
+		return
+	}
+
 	// If the node is a leaf action with no loader, defer it until backend
 	// data is available. Executing immediately would use an empty context
 	// (e.g. CurrentPaneID not yet populated by the backend poller).
