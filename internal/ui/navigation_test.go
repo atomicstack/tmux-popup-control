@@ -362,6 +362,65 @@ func TestDeferredWindowRenameResolvesWindowName(t *testing.T) {
 	}
 }
 
+func TestDeferredSessionRenameEscapeQuits(t *testing.T) {
+	m := NewModel("", 80, 24, false, false, nil, "session:rename", "main", "", "")
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	sessSnap := tmux.SessionSnapshot{
+		Sessions: []tmux.Session{{Name: "main", Label: "main: 1 window"}},
+		Current:  "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindSessions, Data: sessSnap}})
+	if h.Model().mode != ModeSessionForm {
+		t.Fatalf("mode = %v, want ModeSessionForm", h.Model().mode)
+	}
+
+	// Pressing escape in a directly-invoked rename form should quit,
+	// not return to the root menu.
+	_, cmd := h.Model().handleSessionForm(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("expected quit command on escape from directly-invoked session rename")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
+func TestDeferredWindowRenameEscapeQuits(t *testing.T) {
+	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	sessSnap := tmux.SessionSnapshot{
+		Sessions: []tmux.Session{{Name: "main", Label: "main: 1 window"}},
+		Current:  "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindSessions, Data: sessSnap}})
+
+	winSnap := tmux.WindowSnapshot{
+		Windows: []tmux.Window{
+			{ID: "main:0", Session: "main", Name: "vim", Label: "0: vim", Current: true},
+		},
+		CurrentID:      "main:0",
+		CurrentSession: "main",
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindWindows, Data: winSnap}})
+	if h.Model().mode != ModeWindowForm {
+		t.Fatalf("mode = %v, want ModeWindowForm", h.Model().mode)
+	}
+
+	_, cmd := h.Model().handleWindowForm(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("expected quit command on escape from directly-invoked window rename")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
 func TestRootMenuSessionRenameWithoutMenuArgsFallsThrough(t *testing.T) {
 	// When menuArgs is empty, session:rename should load the picker list
 	// via the standard loader path, not defer.

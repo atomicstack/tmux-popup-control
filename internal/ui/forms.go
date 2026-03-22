@@ -50,6 +50,9 @@ func (m *Model) handleWindowForm(msg tea.Msg) (bool, tea.Cmd) {
 	if cancel {
 		m.windowForm = nil
 		m.mode = ModeMenu
+		if m.rootMenuID == "window:rename" {
+			return true, tea.Quit
+		}
 		return true, cmd
 	}
 	if done {
@@ -82,6 +85,9 @@ func (m *Model) handleSessionForm(msg tea.Msg) (bool, tea.Cmd) {
 	if cancel {
 		m.sessionForm = nil
 		m.mode = ModeMenu
+		if m.rootMenuID == "session:rename" {
+			return true, tea.Quit
+		}
 		return true, cmd
 	}
 	if done {
