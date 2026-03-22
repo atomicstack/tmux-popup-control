@@ -224,7 +224,8 @@ func TestSaveFileExists(t *testing.T) {
 	dir := t.TempDir()
 
 	sf := &SaveFile{Version: currentVersion, Timestamp: time.Now(), Name: "mysnap"}
-	p := savePath(dir, "mysnap")
+	// create a file matching the new naming convention: mysnap_TIMESTAMP.json
+	p := filepath.Join(dir, "mysnap_20260322T120000.json")
 	if err := WriteSaveFile(p, sf); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -237,24 +238,35 @@ func TestSaveFileExists(t *testing.T) {
 	}
 }
 
-// TestSavePath: auto-timestamped and named variants.
+// TestSavePath: UUID-based unnamed and timestamped named variants.
 func TestSavePath(t *testing.T) {
 	dir := "/some/dir"
 
-	// named
+	// named: name_TIMESTAMP.json
 	got := savePath(dir, "mysave")
-	if got != "/some/dir/mysave.json" {
-		t.Errorf("named: got %q, want %q", got, "/some/dir/mysave.json")
-	}
-
-	// auto-timestamped: must start with save_ and end with .json
-	auto := savePath(dir, "")
-	base := filepath.Base(auto)
-	if !strings.HasPrefix(base, "save_") {
-		t.Errorf("auto: expected prefix save_, got %q", base)
+	base := filepath.Base(got)
+	if !strings.HasPrefix(base, "mysave_") {
+		t.Errorf("named: expected prefix mysave_, got %q", base)
 	}
 	if !strings.HasSuffix(base, ".json") {
-		t.Errorf("auto: expected suffix .json, got %q", base)
+		t.Errorf("named: expected suffix .json, got %q", base)
+	}
+
+	// unnamed: UUID_TIMESTAMP.json (UUID is 36 chars with hyphens)
+	auto := savePath(dir, "")
+	autoBase := filepath.Base(auto)
+	if !strings.HasSuffix(autoBase, ".json") {
+		t.Errorf("auto: expected suffix .json, got %q", autoBase)
+	}
+	stem := strings.TrimSuffix(autoBase, ".json")
+	// last segment after final _ is the timestamp; everything before is the UUID
+	lastUnderscore := strings.LastIndex(stem, "_")
+	if lastUnderscore < 0 {
+		t.Fatalf("auto: expected UUID_TIMESTAMP format, got %q", autoBase)
+	}
+	uuidStr := stem[:lastUnderscore]
+	if len(uuidStr) != 36 {
+		t.Errorf("auto: expected 36-char UUID, got %q (%d chars)", uuidStr, len(uuidStr))
 	}
 }
 
@@ -304,6 +316,58 @@ func TestResolvePaneContentsDefault(t *testing.T) {
 
 	if ResolvePaneContents("dummy") {
 		t.Error("expected false by default")
+	}
+}
+
+// TestRelativeTime: high-resolution relative timestamps.
+func TestRelativeTime(t *testing.T) {
+	now := time.Date(2026, 3, 22, 14, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name string
+		t    time.Time
+		want string
+	}{
+		{"just now", now.Add(-30 * time.Second), "just now"},
+		{"1m ago", now.Add(-90 * time.Second), "1m ago"},
+		{"5m ago", now.Add(-5 * time.Minute), "5m ago"},
+		{"59m ago", now.Add(-59 * time.Minute), "59m ago"},
+		{"1h ago", now.Add(-time.Hour), "1h ago"},
+		{"12h ago", now.Add(-12 * time.Hour), "12h ago"},
+		{"yesterday", now.Add(-36 * time.Hour), "yesterday"},
+		{"3d ago", now.Add(-3 * 24 * time.Hour), "3d ago"},
+		{"29d ago", now.Add(-29 * 24 * time.Hour), "29d ago"},
+		{"1 month ago", now.Add(-35 * 24 * time.Hour), "1 month ago"},
+		{"3 months ago", now.Add(-91 * 24 * time.Hour), "3 months ago"},
+		{"1 year ago", now.Add(-400 * 24 * time.Hour), "1 year ago"},
+		{"2 years ago", now.Add(-800 * 24 * time.Hour), "2 years ago"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := RelativeTime(tt.t, now)
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDisplayName: named saves return name, unnamed return truncated UUID.
+func TestDisplayName(t *testing.T) {
+	named := SaveEntry{Name: "mysnap", Path: "/data/mysnap_20260322T120000.json"}
+	if got := named.DisplayName(); got != "mysnap" {
+		t.Errorf("named: got %q, want %q", got, "mysnap")
+	}
+
+	uuid := SaveEntry{Name: "", Path: "/data/a1b2c3d4-e5f6-7890-abcd-ef1234567890_20260322T120000.json"}
+	if got := uuid.DisplayName(); got != "a1b2c3d4" {
+		t.Errorf("uuid: got %q, want %q", got, "a1b2c3d4")
+	}
+
+	short := SaveEntry{Name: "", Path: "/data/abc.json"}
+	if got := short.DisplayName(); got != "abc" {
+		t.Errorf("short: got %q, want %q", got, "abc")
 	}
 }
 

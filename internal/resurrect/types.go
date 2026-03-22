@@ -73,4 +73,6 @@ type SaveEntry struct {
 	HasPaneContents bool
 	Size            int64
 	SessionCount    int
+	WindowCount     int
+	PaneCount       int
 }

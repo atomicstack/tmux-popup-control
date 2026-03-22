@@ -3,6 +3,7 @@ package menu
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -432,14 +433,40 @@ func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
 	if err != nil {
 		return nil, nil
 	}
-	items := make([]Item, 0, len(entries))
-	for _, e := range entries {
-		label := e.Timestamp.Format("2006-01-02 15:04:05")
-		if e.Name != "" {
-			label += " [" + e.Name + "]"
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	// Reverse to oldest-first so the most recent entry is at the bottom.
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+
+	now := time.Now()
+	alignments := []table.Alignment{
+		table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignLeft,
+	}
+	headerRow := []string{"name", "age", "date", "time", "info"}
+	rows := make([][]string, 1+len(entries))
+	rows[0] = headerRow
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		name := e.DisplayName()
+		age := resurrect.RelativeTime(e.Timestamp, now)
+		date := e.Timestamp.Format("2006-01-02")
+		timeStr := e.Timestamp.Format("15:04")
+		info := fmt.Sprintf("%2ds %3dw %3dp", e.SessionCount, e.WindowCount, e.PaneCount)
+		if e.HasPaneContents {
+			info += " +contents"
 		}
-		label += fmt.Sprintf(" (%d session(s))", e.SessionCount)
-		items = append(items, Item{ID: e.Path, Label: label})
+		rows[1+i] = []string{name, age, date, timeStr, info}
+		ids[i] = e.Path
+	}
+	aligned := table.Format(rows, alignments)
+	items := make([]Item, len(aligned))
+	items[0] = Item{Label: aligned[0], Header: true}
+	for i := 1; i < len(aligned); i++ {
+		items[i] = Item{ID: ids[i-1], Label: aligned[i]}
 	}
 	return items, nil
 }

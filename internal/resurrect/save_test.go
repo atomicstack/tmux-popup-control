@@ -348,10 +348,10 @@ func TestSaveNamedSnapshot(t *testing.T) {
 		t.Error("last symlink should NOT be created for named snapshots")
 	}
 
-	// verify named file exists
-	expectedPath := filepath.Join(dir, "mysnap.json")
-	if _, err := os.Stat(expectedPath); err != nil {
-		t.Errorf("named save file not found: %v", err)
+	// verify named file exists (now includes timestamp: mysnap_TIMESTAMP.json)
+	matches, _ := filepath.Glob(filepath.Join(dir, "mysnap_*.json"))
+	if len(matches) != 1 {
+		t.Errorf("expected 1 named save file matching mysnap_*.json, found %d", len(matches))
 	}
 
 	// total: 1 session + 1 window + 0 panes + 1 (write json) + 0 (archive) + 0 (symlink, named) = 3
