@@ -7,9 +7,23 @@ POPUP_HINTS="$(tmux display-message -p '#{client_tty},#{session_name}')"
 POPUP_CLIENT="${POPUP_HINTS%%,*}"
 POPUP_SESSION="${POPUP_HINTS#*,}"
 
+# Options that the Go binary reads only from env vars (no ShowOption fallback)
+# need to be propagated from tmux options into the display-popup environment.
+# Most options (format, filter, switch-current, storage-dir, pane-contents)
+# are handled in Go via envOrOption/tmuxOptionFn, so they don't need
+# propagation here.
+EXTRA_ENV=()
+
+# Footer is read in config.go from env only, so propagate it.
+if [[ -z "$TMUX_POPUP_CONTROL_FOOTER" ]]; then
+  val="$(tmux show-option -gqv @tmux-popup-control-footer 2>/dev/null)"
+  [[ -n "$val" ]] && EXTRA_ENV+=(-e "TMUX_POPUP_CONTROL_FOOTER=$val")
+fi
+
 tmux display-popup -w 90% -h 80% \
   -e "TMUX_POPUP_CONTROL_CLIENT=$POPUP_CLIENT" \
   -e "TMUX_POPUP_CONTROL_SESSION=$POPUP_SESSION" \
+  "${EXTRA_ENV[@]}" \
   `# -e GOTMUXCC_TRACE=1 -e GOTMUXCC_TRACE_FILE=$CURRENT_DIR/gotmuxcc_trace.log --trace` \
   -E $CMD "$@"
 status=$?
@@ -17,21 +31,3 @@ if [ "$status" -eq 129 ]; then
   exit 0
 fi
 exit "$status"
-
-# [[ -z "$TMUX_FZF_ORDER" ]] && TMUX_FZF_ORDER="copy-mode|session|window|pane|command|keybinding|clipboard|process"
-# source "$CURRENT_DIR/scripts/.envs"
-# 
-# items_origin="$(echo $TMUX_FZF_ORDER | tr '|' '\n')"
-# 
-# # remove copy-mode from options if we aren't in copy-mode
-# if [ "$(tmux display-message -p '#{pane_in_mode}')" -eq 0 ]; then
-#     items_origin="$(echo "${items_origin}" | sed '/copy-mode/d')"
-# fi
-# 
-# if [[ ! -z "$TMUX_FZF_MENU" ]]; then
-#     items_origin+=$'\nmenu'
-# fi
-# items_origin+=$'\n[cancel]'
-# item=$(echo "${items_origin}" | $TMUX_FZF_BIN $TMUX_FZF_OPTIONS )
-# [[ "$item" == "[cancel]" || -z "$item" ]] && exit
-# tmux run-shell -b "$CURRENT_DIR/scripts/${item}.sh"
