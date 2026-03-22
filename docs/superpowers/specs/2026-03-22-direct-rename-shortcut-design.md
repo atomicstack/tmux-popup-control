@@ -16,14 +16,14 @@ use `--menu-args` to pass the target directly, skipping the picker and opening t
 
 ```
 tmux-popup-control --root-menu session:rename --menu-args "mysession"
-tmux-popup-control --root-menu window:rename --menu-args "@42"
+tmux-popup-control --root-menu window:rename --menu-args "mysession:1"
 ```
 
 ### changes
 
 #### 1. `internal/ui/navigation.go` — `applyRootMenuOverride`
 
-when the resolved node is `session:rename` or `window:rename` and `m.menuArgs` is non-empty, treat it as a **deferred rename form** instead of loading the picker list:
+when the resolved node is `session:rename` or `window:rename` and `m.menuArgs` is non-empty, treat it as a **deferred rename form** instead of loading the picker list. this check must come **before** the existing `node.Loader != nil` branch, since both rename nodes have loaders that would otherwise trigger the standard picker path:
 
 - set `m.loading = true`
 - store the node in a new field `m.deferredRename` (reusing the same pattern as `m.deferredAction` but for form-opening actions)
@@ -40,12 +40,12 @@ extend the deferred handling to check `m.deferredRename` after backend data arri
 - call `m.startSessionForm(prompt)` to open the form directly
 
 **window:rename** (fires on `WindowsUpdated`):
-- look up `m.menuArgs` as the target window ID (e.g. `@42`)
-- resolve the window name from `ctx.Windows` entries for the `Initial` field
+- look up `m.menuArgs` as the target window ID in `session:index` format (e.g. `mysession:1`), matching against `entry.ID`
+- resolve the window name from the matched entry for the `Initial` field
 - build a `WindowPrompt{Context: ctx, Target: target, Initial: windowName}`
 - call `m.startWindowForm(prompt)` to open the form directly
 
-both paths clear `m.deferredRename` and set `m.loading = false`.
+both paths clear `m.deferredRename` and set `m.loading = false`. `m.loading` must be explicitly cleared when opening the form since `startSessionForm`/`startWindowForm` do not clear it themselves — without this the spinner would render over the form.
 
 #### 3. `main.tmux` — keybindings
 
@@ -57,14 +57,14 @@ add two new configurable keybindings following the existing pattern:
 [[ -z "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_SESSION_RENAME='$'
 tmux bind-key -T prefix -N "Renames session via $BINARY_NAME" \
   "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" \
-  run-shell -b "$LAUNCH_SCRIPT --root-menu session:rename --menu-args '#{session_name}'"
+  run-shell -b "$LAUNCH_SCRIPT --root-menu session:rename --menu-args #{session_name}"
 
 # window rename — default ','
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME="$(opt key-window-rename)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME=','
 tmux bind-key -T prefix -N "Renames window via $BINARY_NAME" \
   "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" \
-  run-shell -b "$LAUNCH_SCRIPT --root-menu window:rename --menu-args '@#{window_id}'"
+  run-shell -b "$LAUNCH_SCRIPT --root-menu window:rename --menu-args #{session_name}:#{window_index}"
 ```
 
 #### 4. tests
