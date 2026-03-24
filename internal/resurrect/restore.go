@@ -162,13 +162,18 @@ func Restore(cfg Config, file string) <-chan ProgressEvent {
 	return ch
 }
 
+// shellQuote wraps s in single quotes, escaping any embedded single quotes
+// using the standard sh '\'' technique.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 // paneStartupCommand builds the startup command for a pane that has saved
 // content. The command prints the saved scrollback then execs into the shell.
-// Double quotes are used around the path so that the quoting works correctly
-// with both gotmuxcc's ShellCommand wrapping (which adds outer single quotes)
-// and the raw client.Command path (which uses quoteArgument).
+// Both contentPath and defaultCmd are shell-quoted to prevent injection when
+// tmux passes the string to /bin/sh -c.
 func paneStartupCommand(contentPath, defaultCmd string) string {
-	return fmt.Sprintf("cat \"%s\"; exec %s", contentPath, defaultCmd)
+	return fmt.Sprintf("cat %s; exec %s", shellQuote(contentPath), shellQuote(defaultCmd))
 }
 
 func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {

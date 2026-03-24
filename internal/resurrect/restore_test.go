@@ -1104,7 +1104,15 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 
 func TestPaneStartupCommand(t *testing.T) {
 	got := paneStartupCommand("/tmp/restore-123/dev:0.0", "/bin/bash")
-	want := `cat "/tmp/restore-123/dev:0.0"; exec /bin/bash`
+	want := `cat '/tmp/restore-123/dev:0.0'; exec '/bin/bash'`
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestPaneStartupCommandEscapesSingleQuotes(t *testing.T) {
+	got := paneStartupCommand("/tmp/restore/it's:0.0", "bash -c 'echo hi'")
+	want := `cat '/tmp/restore/it'\''s:0.0'; exec 'bash -c '\''echo hi'\'''`
 	if got != want {
 		t.Errorf("expected %q, got %q", want, got)
 	}

@@ -58,10 +58,25 @@ func ResolveDir(socketPath string) (string, error) {
 // ensureDir creates dir (and any parents) if it does not exist, then returns
 // the path unchanged.
 func ensureDir(dir string) (string, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("could not create storage directory %q: %w", dir, err)
 	}
 	return dir, nil
+}
+
+// ValidateSaveName rejects names containing path separators, leading dots, or
+// glob metacharacters that could cause path traversal or unexpected matches.
+func ValidateSaveName(name string) error {
+	if strings.ContainsAny(name, "/\\") {
+		return fmt.Errorf("name must not contain path separators")
+	}
+	if strings.HasPrefix(name, ".") {
+		return fmt.Errorf("name must not start with '.'")
+	}
+	if strings.ContainsAny(name, "*?[") {
+		return fmt.Errorf("name must not contain glob characters")
+	}
+	return nil
 }
 
 // savePath returns the full file path for a save file. Unnamed saves use a
@@ -105,7 +120,7 @@ func WriteSaveFile(path string, sf *SaveFile) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal save file: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("could not write save file %q: %w", path, err)
 	}
 	return nil
@@ -214,8 +229,12 @@ func parseBool(s string) bool {
 
 // SaveFileExists reports whether any snapshot with the given name prefix exists
 // in dir. Since named saves include timestamps, this globs for name_*.json.
+// Returns false for names that fail validation.
 func SaveFileExists(dir, name string) bool {
 	if name == "" {
+		return false
+	}
+	if ValidateSaveName(name) != nil {
 		return false
 	}
 	matches, _ := filepath.Glob(filepath.Join(dir, name+"_*.json"))

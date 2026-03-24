@@ -40,7 +40,9 @@ func clonePlugin(p Plugin) error {
 	}
 	args = append(args, "--single-branch", "--recursive")
 
-	directArgs := append(append([]string{}, args...), p.Source, p.Dir)
+	// Use "--" to terminate option parsing so p.Source cannot be
+	// interpreted as a git flag (e.g. --upload-pack=...).
+	directArgs := append(append([]string{}, args...), "--", p.Source, p.Dir)
 	if _, err := runGitCommand(directArgs...); err == nil {
 		return nil
 	}
@@ -48,7 +50,7 @@ func clonePlugin(p Plugin) error {
 	os.RemoveAll(p.Dir)
 
 	ghURL := fmt.Sprintf("https://git::@github.com/%s", p.Source)
-	fallbackArgs := append(append([]string{}, args...), ghURL, p.Dir)
+	fallbackArgs := append(append([]string{}, args...), "--", ghURL, p.Dir)
 	if _, err := runGitCommand(fallbackArgs...); err != nil {
 		return fmt.Errorf("git clone failed for %s: %w", p.Source, err)
 	}

@@ -99,8 +99,15 @@ func openSQLiteSink(info SQLiteRunInfo) (*sqliteSink, error) {
 	}
 
 	dbPath := ResolveSQLiteDebugPath(executablePath)
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return nil, fmt.Errorf("create sqlite debug directory: %w", err)
+	}
+
+	// Pre-create the database file with restricted permissions so it is
+	// not world-readable (it stores runtime metadata including socket
+	// paths, argv, and command output).
+	if f, err := os.OpenFile(dbPath, os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+		f.Close()
 	}
 
 	db, err := sql.Open("sqlite", dbPath)
@@ -315,27 +322,43 @@ func (s *sqliteSink) writer() {
 
 	for {
 		op := <-s.queue
-		if err := s.flushDropped(); err != nil {
-			fmt.Fprintf(os.Stderr, "sqlite debug drop flush failed: %v\n", err)
-		}
 
-		switch value := op.(type) {
-		case eventRecord:
-			if err := s.writeEvent(value); err != nil {
-				fmt.Fprintf(os.Stderr, "sqlite debug event write failed: %v\n", err)
-			}
-		case spanRecord:
-			if err := s.writeSpan(value); err != nil {
-				fmt.Fprintf(os.Stderr, "sqlite debug span write failed: %v\n", err)
-			}
-		case closeRequest:
+		// Recover from panics in writeEvent/writeSpan so the writer
+		// goroutine stays alive and Close() cannot deadlock waiting on
+		// a closeRequest that will never be processed.
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Fprintf(os.Stderr, "sqlite debug writer panic: %v\n", r)
+				}
+			}()
+
 			if err := s.flushDropped(); err != nil {
-				fmt.Fprintf(os.Stderr, "sqlite debug final drop flush failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "sqlite debug drop flush failed: %v\n", err)
 			}
-			if err := s.finishRun(value.Result); err != nil {
-				fmt.Fprintf(os.Stderr, "sqlite debug run finalization failed: %v\n", err)
+
+			switch value := op.(type) {
+			case eventRecord:
+				if err := s.writeEvent(value); err != nil {
+					fmt.Fprintf(os.Stderr, "sqlite debug event write failed: %v\n", err)
+				}
+			case spanRecord:
+				if err := s.writeSpan(value); err != nil {
+					fmt.Fprintf(os.Stderr, "sqlite debug span write failed: %v\n", err)
+				}
+			case closeRequest:
+				if err := s.flushDropped(); err != nil {
+					fmt.Fprintf(os.Stderr, "sqlite debug final drop flush failed: %v\n", err)
+				}
+				if err := s.finishRun(value.Result); err != nil {
+					fmt.Fprintf(os.Stderr, "sqlite debug run finalization failed: %v\n", err)
+				}
+				close(value.Done)
 			}
-			close(value.Done)
+		}()
+
+		// Check if we just processed a close request.
+		if _, ok := op.(closeRequest); ok {
 			return
 		}
 	}

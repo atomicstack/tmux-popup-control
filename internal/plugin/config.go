@@ -109,6 +109,11 @@ func parsePluginEntry(value string) Plugin {
 	}
 	name := path.Base(source)
 	name = strings.TrimSuffix(name, ".git")
+	// Reject pathological names that could cause path traversal or
+	// target the plugin directory itself on uninstall.
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+		return Plugin{}
+	}
 	return Plugin{
 		Name:   name,
 		Source: source,
@@ -124,6 +129,9 @@ func parsePluginEntries(options []optionPair) []Plugin {
 			continue
 		}
 		p := parsePluginEntry(opt.Value)
+		if p.Name == "" {
+			continue
+		}
 		plugins = append(plugins, p)
 	}
 	return plugins

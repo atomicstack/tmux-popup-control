@@ -540,6 +540,9 @@ func (f *WindowRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				events.Window.CancelRename(f.target, events.ReasonEmpty)
 				return nil, false, true
 			}
+			if strings.ContainsAny(name, "\n\r\t") {
+				return nil, false, false
+			}
 			events.Window.SubmitRename(f.target, name)
 			return WindowRenameCommand(f.ctx, f.target, name), true, false
 		}

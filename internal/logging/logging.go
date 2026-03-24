@@ -51,7 +51,7 @@ func Error(err error) {
 	sink := sqliteDebug
 	traceMu.RUnlock()
 
-	f, ferr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, ferr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if ferr != nil {
 		fmt.Fprintf(os.Stderr, "logging failed: %v\n", ferr)
 	} else {
@@ -143,7 +143,7 @@ func Trace(event string, payload interface{}) {
 	}
 
 	if enabled {
-		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "trace logging failed: %v\n", err)
 		} else {
@@ -260,7 +260,7 @@ func Configure(path string) {
 		logPath = defaultLogFile
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		fmt.Fprintf(os.Stderr, "unable to create log directory: %v\n", err)
 		logPath = defaultLogFile
 		return

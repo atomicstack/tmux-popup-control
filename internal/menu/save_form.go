@@ -63,6 +63,10 @@ func (f *SaveForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 			f.err = "name cannot be empty"
 			return nil, false, false
 		}
+		if err := resurrect.ValidateSaveName(name); err != nil {
+			f.err = err.Error()
+			return nil, false, false
+		}
 		if resurrect.SaveFileExists(f.saveDir, name) && !f.confirmOverwrite {
 			f.err = fmt.Sprintf("snapshot %q already exists — enter to overwrite", name)
 			f.confirmOverwrite = true

@@ -14,7 +14,7 @@ import (
 // pane. The key in contents is used as the tar entry filename (e.g. "dev:0.1")
 // and the value is the plain-text pane content.
 func WritePaneArchive(path string, contents map[string]string) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("could not create pane archive %q: %w", path, err)
 	}
@@ -30,7 +30,7 @@ func WritePaneArchive(path string, contents map[string]string) error {
 		data := []byte(body)
 		hdr := &tar.Header{
 			Name: name,
-			Mode: 0o644,
+			Mode: 0o600,
 			Size: int64(len(data)),
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
@@ -85,11 +85,11 @@ func ExtractPaneArchive(archivePath, destDir string) error {
 
 		destPath := filepath.Join(destDir, hdr.Name)
 
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o700); err != nil {
 			return fmt.Errorf("could not create directory for %q: %w", hdr.Name, err)
 		}
 
-		out, err := os.Create(destPath)
+		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 		if err != nil {
 			return fmt.Errorf("could not create file %q: %w", destPath, err)
 		}

@@ -64,8 +64,8 @@ tmux bind-key -T prefix -N "Restores sessions from a snapshot via $BINARY_NAME" 
 
 [[ -z "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_SESSION_RENAME="$(opt key-session-rename)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_SESSION_RENAME='$'
-tmux bind-key -T prefix -N "Renames session via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" run-shell -b "$LAUNCH_SCRIPT --root-menu session:rename --menu-args '#{session_name}'"
+tmux bind-key -T prefix -N "Renames session via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" run-shell -b "$LAUNCH_SCRIPT --root-menu session:rename --menu-args '#{q:session_name}'"
 
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME="$(opt key-window-rename)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME=','
-tmux bind-key -T prefix -N "Renames window via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" run-shell -b "$LAUNCH_SCRIPT --root-menu window:rename --menu-args '#{session_name}:#{window_index}'"
+tmux bind-key -T prefix -N "Renames window via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" run-shell -b "$LAUNCH_SCRIPT --root-menu window:rename --menu-args '#{q:session_name}:#{window_index}'"

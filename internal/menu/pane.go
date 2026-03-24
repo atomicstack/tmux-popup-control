@@ -443,6 +443,9 @@ func (f *PaneRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				events.Pane.CancelRename(f.target, events.PaneReasonEmpty)
 				return nil, false, true
 			}
+			if strings.ContainsAny(title, "\n\r\t") {
+				return nil, false, false
+			}
 			events.Pane.SubmitRename(f.target, title)
 			return nil, true, false
 		}

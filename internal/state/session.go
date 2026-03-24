@@ -1,6 +1,10 @@
 package state
 
-import "github.com/atomicstack/tmux-popup-control/internal/menu"
+import (
+	"sync"
+
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
+)
 
 type SessionStore interface {
 	Entries() []menu.SessionEntry
@@ -12,6 +16,7 @@ type SessionStore interface {
 }
 
 type sessionStore struct {
+	mu             sync.RWMutex
 	entries        []menu.SessionEntry
 	current        string
 	includeCurrent bool
@@ -22,26 +27,38 @@ func NewSessionStore() SessionStore {
 }
 
 func (s *sessionStore) Entries() []menu.SessionEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return cloneSessionEntries(s.entries)
 }
 
 func (s *sessionStore) SetEntries(entries []menu.SessionEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.entries = cloneSessionEntries(entries)
 }
 
 func (s *sessionStore) Current() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.current
 }
 
 func (s *sessionStore) SetCurrent(current string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.current = current
 }
 
 func (s *sessionStore) IncludeCurrent() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.includeCurrent
 }
 
 func (s *sessionStore) SetIncludeCurrent(include bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.includeCurrent = include
 }
 

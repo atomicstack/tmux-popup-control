@@ -3,6 +3,7 @@ package logging
 import (
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -104,5 +105,13 @@ func TestSQLiteDebugCapturesRunEventsAndSpans(t *testing.T) {
 	}
 	if spanCount != 1 {
 		t.Fatalf("expected 1 span, got %d", spanCount)
+	}
+
+	info, err := os.Stat(ResolveSQLiteDebugPath(executablePath))
+	if err != nil {
+		t.Fatalf("stat sqlite database: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("expected sqlite database mode 0600, got %03o", got)
 	}
 }

@@ -9,6 +9,44 @@ import (
 	"testing"
 )
 
+func TestWritePaneArchiveUsesPrivatePermissions(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "private.panes.tar.gz")
+
+	if err := WritePaneArchive(archivePath, map[string]string{"dev:0.0": "secret"}); err != nil {
+		t.Fatalf("WritePaneArchive: %v", err)
+	}
+
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		t.Fatalf("stat archive: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("expected archive mode 0600, got %03o", got)
+	}
+}
+
+func TestExtractPaneArchiveUsesPrivatePermissions(t *testing.T) {
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "private.panes.tar.gz")
+	destDir := filepath.Join(dir, "extracted")
+
+	if err := WritePaneArchive(archivePath, map[string]string{"dev:0.0": "secret"}); err != nil {
+		t.Fatalf("WritePaneArchive: %v", err)
+	}
+	if err := ExtractPaneArchive(archivePath, destDir); err != nil {
+		t.Fatalf("ExtractPaneArchive: %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(destDir, "dev:0.0"))
+	if err != nil {
+		t.Fatalf("stat extracted file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("expected extracted file mode 0600, got %03o", got)
+	}
+}
+
 // TestPaneArchiveRoundTrip writes an archive with three panes, extracts it,
 // and verifies each file matches the original content.
 func TestPaneArchiveRoundTrip(t *testing.T) {

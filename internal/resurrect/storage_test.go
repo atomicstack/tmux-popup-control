@@ -40,8 +40,12 @@ func TestResolveDirXDG(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 	// directory must exist
-	if _, err := os.Stat(got); err != nil {
+	info, err := os.Stat(got)
+	if err != nil {
 		t.Errorf("directory not created: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Errorf("directory mode: got %03o, want 700", got)
 	}
 }
 
@@ -117,6 +121,13 @@ func TestWriteReadSaveFile(t *testing.T) {
 
 	if err := WriteSaveFile(path, sf); err != nil {
 		t.Fatalf("WriteSaveFile: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat save file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("save file mode: got %03o, want 600", got)
 	}
 
 	got, err := ReadSaveFile(path)

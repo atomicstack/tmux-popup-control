@@ -17,21 +17,13 @@ func TestCreateSessionSuccess(t *testing.T) {
 	if err := CreateSession("", "mysession", "/tmp/work", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(fake.newSessionOptsCalls) != 1 {
-		t.Fatalf("expected 1 NewSession call, got %d", len(fake.newSessionOptsCalls))
+	if len(fake.commandCalls) != 1 {
+		t.Fatalf("expected 1 command call, got %d", len(fake.commandCalls))
 	}
-	opts := fake.newSessionOptsCalls[0]
-	if opts == nil {
-		t.Fatal("expected non-nil options")
-	}
-	if opts.Name != "mysession" {
-		t.Errorf("expected name %q, got %q", "mysession", opts.Name)
-	}
-	if opts.StartDirectory != "/tmp/work" {
-		t.Errorf("expected dir %q, got %q", "/tmp/work", opts.StartDirectory)
-	}
-	if opts.ShellCommand != "" {
-		t.Errorf("expected empty ShellCommand, got %q", opts.ShellCommand)
+	got := fmt.Sprintf("%v", fake.commandCalls[0])
+	want := "[new-session -d -s mysession -c /tmp/work]"
+	if got != want {
+		t.Errorf("expected %s, got %s", want, got)
 	}
 }
 
@@ -43,15 +35,15 @@ func TestCreateSessionWithCommand(t *testing.T) {
 	if err := CreateSession("", "mysession", "/tmp", cmd); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	opts := fake.newSessionOptsCalls[0]
-	if opts.ShellCommand != cmd {
-		t.Errorf("expected ShellCommand %q, got %q", cmd, opts.ShellCommand)
+	args := fake.commandCalls[0]
+	if got := args[len(args)-1]; got != cmd {
+		t.Errorf("expected last arg %q, got %q", cmd, got)
 	}
 }
 
 func TestCreateSessionError(t *testing.T) {
 	wantErr := errors.New("new-session failed")
-	fake := &fakeClient{newErr: wantErr}
+	fake := &fakeClient{commandErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
 	err := CreateSession("", "fail", "/tmp", "")
@@ -132,24 +124,13 @@ func TestSplitPaneSuccess(t *testing.T) {
 	if err := SplitPane("", "main:1.0", "/var/log", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(fake.splitWindowCalls) != 1 {
-		t.Fatalf("expected 1 SplitWindow call, got %d", len(fake.splitWindowCalls))
+	if len(fake.commandCalls) != 1 {
+		t.Fatalf("expected 1 command call, got %d", len(fake.commandCalls))
 	}
-	call := fake.splitWindowCalls[0]
-	if call.target != "main:1.0" {
-		t.Errorf("expected target %q, got %q", "main:1.0", call.target)
-	}
-	if call.opts == nil {
-		t.Fatal("expected non-nil options")
-	}
-	if call.opts.StartDirectory != "/var/log" {
-		t.Errorf("expected dir %q, got %q", "/var/log", call.opts.StartDirectory)
-	}
-	if !call.opts.Detached {
-		t.Error("expected Detached=true")
-	}
-	if call.opts.ShellCommand != "" {
-		t.Errorf("expected empty ShellCommand, got %q", call.opts.ShellCommand)
+	got := fmt.Sprintf("%v", fake.commandCalls[0])
+	want := "[split-window -d -t main:1.0 -c /var/log]"
+	if got != want {
+		t.Errorf("expected %s, got %s", want, got)
 	}
 }
 
@@ -161,15 +142,15 @@ func TestSplitPaneWithCommand(t *testing.T) {
 	if err := SplitPane("", "main:1.0", "/var/log", cmd); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	call := fake.splitWindowCalls[0]
-	if call.opts.ShellCommand != cmd {
-		t.Errorf("expected ShellCommand %q, got %q", cmd, call.opts.ShellCommand)
+	args := fake.commandCalls[0]
+	if got := args[len(args)-1]; got != cmd {
+		t.Errorf("expected last arg %q, got %q", cmd, got)
 	}
 }
 
 func TestSplitPaneError(t *testing.T) {
 	wantErr := errors.New("split-window failed")
-	fake := &fakeClient{splitWindowErr: wantErr}
+	fake := &fakeClient{commandErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
 	err := SplitPane("", "main:1.0", "/tmp", "")

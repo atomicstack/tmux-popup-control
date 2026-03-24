@@ -1,6 +1,10 @@
 package state
 
-import "github.com/atomicstack/tmux-popup-control/internal/menu"
+import (
+	"sync"
+
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
+)
 
 type WindowStore interface {
 	Entries() []menu.WindowEntry
@@ -14,6 +18,7 @@ type WindowStore interface {
 }
 
 type windowStore struct {
+	mu             sync.RWMutex
 	entries        []menu.WindowEntry
 	currentID      string
 	currentLabel   string
@@ -26,36 +31,52 @@ func NewWindowStore() WindowStore {
 }
 
 func (w *windowStore) Entries() []menu.WindowEntry {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return cloneWindowEntries(w.entries)
 }
 
 func (w *windowStore) SetEntries(entries []menu.WindowEntry) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.entries = cloneWindowEntries(entries)
 }
 
 func (w *windowStore) CurrentID() string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.currentID
 }
 
 func (w *windowStore) CurrentLabel() string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.currentLabel
 }
 
 func (w *windowStore) CurrentSession() string {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.currentSession
 }
 
 func (w *windowStore) SetCurrent(id, label, session string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.currentID = id
 	w.currentLabel = label
 	w.currentSession = session
 }
 
 func (w *windowStore) IncludeCurrent() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.includeCurrent
 }
 
 func (w *windowStore) SetIncludeCurrent(include bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.includeCurrent = include
 }
 

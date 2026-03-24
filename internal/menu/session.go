@@ -333,6 +333,10 @@ func (f *SessionForm) validate() string {
 func (f *SessionForm) validateName(name string) (string, bool) {
 	trimmed := strings.TrimSpace(name)
 	lower := strings.ToLower(trimmed)
+	// Reject control characters and colons that break tmux target parsing.
+	if strings.ContainsAny(trimmed, "\n\r\t:") {
+		return "name must not contain control characters or colons", false
+	}
 	switch f.mode {
 	case sessionFormModeRename:
 		if trimmed == "" {

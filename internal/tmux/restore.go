@@ -16,11 +16,14 @@ func CreateSession(socketPath, name, dir, command string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.NewSession(&gotmux.SessionOptions{
-		Name:           name,
-		StartDirectory: dir,
-		ShellCommand:   command,
-	})
+	args := []string{"new-session", "-d", "-s", name}
+	if dir != "" {
+		args = append(args, "-c", dir)
+	}
+	if command != "" {
+		args = append(args, command)
+	}
+	_, err = client.Command(args...)
 	return err
 }
 
@@ -49,11 +52,15 @@ func SplitPane(socketPath, target, dir, command string) error {
 	if err != nil {
 		return err
 	}
-	return client.SplitWindow(target, &gotmux.SplitWindowOptions{
-		StartDirectory: dir,
-		Detached:       true,
-		ShellCommand:   command,
-	})
+	args := []string{"split-window", "-d", "-t", target}
+	if dir != "" {
+		args = append(args, "-c", dir)
+	}
+	if command != "" {
+		args = append(args, command)
+	}
+	_, err = client.Command(args...)
+	return err
 }
 
 // SelectLayoutTarget applies the named layout to the given target window.
