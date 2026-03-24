@@ -79,7 +79,7 @@ control-mode connection via
 ## Prerequisites
 
 - Go 1.24+
-- `tmux` available in `$PATH`
+- `tmux` 3.2+ available in `$PATH`
 
 ## Building and running
 
