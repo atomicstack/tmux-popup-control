@@ -201,6 +201,7 @@ func (m *Model) Init() tea.Cmd {
 		cmds = append(cmds, m.initCmd)
 		m.initCmd = nil
 	}
+	cmds = append(cmds, previewTick())
 	if m.commandItemsCache == nil {
 		if node, ok := m.registry.Find("command"); ok && node.Loader != nil {
 			cmds = append(cmds, preloadCommandList(m.socketPath, node.Loader))
@@ -290,6 +291,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(backendEventMsg{}):          m.handleBackendEventMsg,
 		reflect.TypeOf(backendDoneMsg{}):           m.handleBackendDoneMsg,
 		reflect.TypeOf(commandPreloadMsg{}):        m.handleCommandPreloadMsg,
+		reflect.TypeOf(previewTickMsg{}):            m.handlePreviewTickMsg,
 		reflect.TypeOf(previewLoadedMsg{}):         m.handlePreviewLoadedMsg,
 		reflect.TypeOf(layoutAppliedMsg{}):         m.handleLayoutAppliedMsg,
 		reflect.TypeOf(tea.MouseWheelMsg{}):        m.handleMouseMsg,

@@ -13,6 +13,16 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
+// previewTickMsg triggers a periodic preview refresh.
+type previewTickMsg struct{}
+
+// previewTick schedules the next preview refresh after 1 second.
+func previewTick() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg {
+		return previewTickMsg{}
+	})
+}
+
 type previewKind int
 
 const (
@@ -185,6 +195,11 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 
 func (m *Model) ensurePreviewForCurrentLevel() tea.Cmd {
 	return m.ensurePreviewForLevel(m.currentLevel())
+}
+
+func (m *Model) handlePreviewTickMsg(msg tea.Msg) tea.Cmd {
+	cmd := m.refreshPreviewForLevel(m.currentLevel())
+	return tea.Batch(cmd, previewTick())
 }
 
 // refreshPreviewForLevel triggers a re-fetch for the level's preview while
