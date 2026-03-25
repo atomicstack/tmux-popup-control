@@ -1,9 +1,6 @@
 package menu
 
 import (
-	"strings"
-	"unicode"
-
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -203,30 +200,12 @@ func WindowEntriesToItems(entries []WindowEntry) []Item {
 	}
 	return items
 }
+// menuItemsFromIDs builds menu items using each id as both the ID and
+// the display label. IDs must be strictly kebab-case (e.g. "push-to-session").
 func menuItemsFromIDs(ids []string) []Item {
 	items := make([]Item, 0, len(ids))
 	for _, id := range ids {
-		items = append(items, Item{ID: id, Label: prettyLabel(id)})
+		items = append(items, Item{ID: id, Label: id})
 	}
 	return items
-}
-
-func prettyLabel(id string) string {
-	if id == "" {
-		return id
-	}
-	parts := strings.FieldsFunc(id, func(r rune) bool {
-		return r == '-' || r == '_' || r == ' '
-	})
-	for i, part := range parts {
-		if part == "" {
-			continue
-		}
-		runes := []rune(part)
-		for j := 1; j < len(runes); j++ {
-			runes[j] = unicode.ToLower(runes[j])
-		}
-		parts[i] = string(runes)
-	}
-	return strings.Join(parts, " ")
 }
