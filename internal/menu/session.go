@@ -131,7 +131,10 @@ func SessionCreateCommand(ctx Context, name string) tea.Cmd {
 		if err := tmux.NewSession(ctx.SocketPath, name); err != nil {
 			return ActionResult{Err: err}
 		}
-		return ActionResult{Info: fmt.Sprintf("Created session %s", name)}
+		if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, name); err != nil {
+			return ActionResult{Err: fmt.Errorf("created session %s but failed to switch: %w", name, err)}
+		}
+		return ActionResult{Info: fmt.Sprintf("Created and switched to %s", name)}
 	}
 }
 
