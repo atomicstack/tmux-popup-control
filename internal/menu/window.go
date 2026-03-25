@@ -32,7 +32,8 @@ func loadWindowMenu(Context) ([]Item, error) {
 		"rename",
 		"layout",
 		"swap",
-		"move",
+		"push-to-session",
+		"pull-from-session",
 		"link",
 		"switch",
 		// ^^^ do NOT reorder these! ^^^
@@ -229,15 +230,50 @@ func loadWindowLinkMenu(ctx Context) ([]Item, error) {
 	return items, nil
 }
 
-func loadWindowMoveMenu(ctx Context) ([]Item, error) {
-	items := make([]Item, 0, len(ctx.Windows))
-	for _, entry := range ctx.Windows {
-		if entry.Session == ctx.CurrentWindowSession {
+func loadWindowPullFromSessionMenu(ctx Context) ([]Item, error) {
+	sessions := make([]SessionEntry, 0, len(ctx.Sessions))
+	for _, s := range ctx.Sessions {
+		if s.Name != ctx.CurrentWindowSession {
+			sessions = append(sessions, s)
+		}
+	}
+	windows := make([]WindowEntry, 0, len(ctx.Windows))
+	for _, w := range ctx.Windows {
+		if w.Session != ctx.CurrentWindowSession {
+			windows = append(windows, w)
+		}
+	}
+	ts := NewTreeState(false)
+	return ts.BuildTreeItems(sessions, windows, nil), nil
+}
+
+func loadWindowPushToSessionMenu(ctx Context) ([]Item, error) {
+	items := make([]Item, 0, len(ctx.Sessions))
+	for _, entry := range ctx.Sessions {
+		if entry.Name == ctx.CurrentWindowSession {
 			continue
 		}
-		items = append(items, windowItemFromEntry(entry))
+		items = append(items, Item{ID: entry.Name, Label: entry.Label})
 	}
 	return items, nil
+}
+
+func WindowPushToSessionAction(ctx Context, item Item) tea.Cmd {
+	source := strings.TrimSpace(ctx.CurrentWindowID)
+	targetSession := strings.TrimSpace(item.ID)
+	if source == "" {
+		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("no current window detected")} }
+	}
+	if targetSession == "" {
+		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid target session")} }
+	}
+	return func() tea.Msg {
+		events.Window.PushToSession(source, targetSession)
+		if err := moveWindowFn(ctx.SocketPath, source, targetSession); err != nil {
+			return ActionResult{Err: err}
+		}
+		return ActionResult{Info: fmt.Sprintf("Moved window to %s", targetSession)}
+	}
 }
 
 func loadWindowSwapMenu(ctx Context) ([]Item, error) {
@@ -414,8 +450,16 @@ func WindowLinkAction(ctx Context, item Item) tea.Cmd {
 	}
 }
 
-func WindowMoveAction(ctx Context, item Item) tea.Cmd {
+func WindowPullFromSessionAction(ctx Context, item Item) tea.Cmd {
+	// Tree items have IDs like "tree:w:session:windowIndex".
+	// Extract the tmux window target (session:windowIndex).
 	source := strings.TrimSpace(item.ID)
+	if strings.HasPrefix(source, TreePrefixWindow) {
+		parts := strings.SplitN(strings.TrimPrefix(source, TreePrefixWindow), ":", 2)
+		if len(parts) == 2 {
+			source = parts[0] + ":" + parts[1]
+		}
+	}
 	targetSession := strings.TrimSpace(ctx.CurrentWindowSession)
 	if source == "" {
 		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target")} }
@@ -424,11 +468,11 @@ func WindowMoveAction(ctx Context, item Item) tea.Cmd {
 		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("no active session detected")} }
 	}
 	return func() tea.Msg {
-		events.Window.Move(source, targetSession)
+		events.Window.PullFromSession(source, targetSession)
 		if err := moveWindowFn(ctx.SocketPath, source, targetSession); err != nil {
 			return ActionResult{Err: err}
 		}
-		return ActionResult{Info: fmt.Sprintf("Moved %s to %s", item.Label, targetSession)}
+		return ActionResult{Info: fmt.Sprintf("Pulled %s into %s", source, targetSession)}
 	}
 }
 

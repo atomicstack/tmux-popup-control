@@ -17,9 +17,9 @@ func minimalEnumerator(children tree.Children, index int) string {
 	return "├─"
 }
 
-// isTreeLevel returns true if the given level ID is the session tree.
+// isTreeLevel returns true if the given level ID uses tree rendering.
 func isTreeLevel(id string) bool {
-	return id == "session:tree"
+	return id == "session:tree" || id == "window:pull-from-session"
 }
 
 // treeExpandIndicator returns ▼ or ▶ based on expand state, with a trailing space.
@@ -52,6 +52,7 @@ func buildTree(
 		paneByWindow[key] = append(paneByWindow[key], p)
 	}
 
+	hasPanes := len(panes) > 0
 	root := tree.New()
 	for _, sess := range sessions {
 		sid := menu.TreeSessionID(sess.Name)
@@ -64,19 +65,24 @@ func buildTree(
 		if state != nil && state.IsExpanded(sid) {
 			for _, win := range winBySession[sess.Name] {
 				wid := menu.TreeWindowID(sess.Name, win.Index)
-				wIndicator := treeExpandIndicator(state, wid)
-				pk := fmt.Sprintf("%s\x00%d", sess.Name, win.Index)
-				pc := paneCounts[pk]
-				wLabel := fmt.Sprintf("%s%s (%d panes)", wIndicator, menu.TreeWindowLabel(win), pc)
+				wLabel := menu.TreeWindowLabel(win)
+				if hasPanes {
+					wIndicator := treeExpandIndicator(state, wid)
+					pk := fmt.Sprintf("%s\x00%d", sess.Name, win.Index)
+					pc := paneCounts[pk]
+					wLabel = fmt.Sprintf("%s%s (%d panes)", wIndicator, wLabel, pc)
 
-				windowNode := tree.Root(wLabel)
+					windowNode := tree.Root(wLabel)
 
-				if state.IsExpanded(wid) {
-					for _, pane := range paneByWindow[fmt.Sprintf("%s\x00%d", sess.Name, win.Index)] {
-						windowNode.Child(menu.TreePaneLabel(pane))
+					if state.IsExpanded(wid) {
+						for _, pane := range paneByWindow[fmt.Sprintf("%s\x00%d", sess.Name, win.Index)] {
+							windowNode.Child(menu.TreePaneLabel(pane))
+						}
 					}
+					sessionNode.Child(windowNode)
+				} else {
+					sessionNode.Child(wLabel)
 				}
-				sessionNode.Child(windowNode)
 			}
 		}
 		root.Child(sessionNode)
@@ -157,11 +163,12 @@ func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
 	if current.Cursor >= 0 && current.Cursor < len(current.Items) {
 		cursorID = current.Items[current.Cursor].ID
 	}
+	sessions, windows, panes := m.treeDataForLevel(current)
 	var items []menu.Item
 	if current.Filter != "" {
-		items = ts.FilterTreeItems(m.treeSessions, m.treeWindows, m.treePanes, current.Filter)
+		items = ts.FilterTreeItems(sessions, windows, panes, current.Filter)
 	} else {
-		items = ts.BuildTreeItems(m.treeSessions, m.treeWindows, m.treePanes)
+		items = ts.BuildTreeItems(sessions, windows, panes)
 	}
 	// Set both Full and Items directly to bypass the generic FilterItems
 	// which would strip ancestor nodes that don't match the filter query.
@@ -199,10 +206,43 @@ func (m *Model) syncTreeFilter(current *level) {
 	m.rebuildTreeItems(current, ts)
 }
 
+// populatePullTreeData fills pullTreeSessions and pullTreeWindows
+// from the model's stores, excluding the current session.
+func (m *Model) populatePullTreeData() {
+	session := m.sessionName
+	if session == "" {
+		session = m.sessions.Current()
+	}
+	allSessions := m.sessions.Entries()
+	m.pullTreeSessions = make([]menu.SessionEntry, 0, len(allSessions))
+	for _, s := range allSessions {
+		if s.Name != session {
+			m.pullTreeSessions = append(m.pullTreeSessions, s)
+		}
+	}
+	allWindows := m.windows.Entries()
+	m.pullTreeWindows = make([]menu.WindowEntry, 0, len(allWindows))
+	for _, w := range allWindows {
+		if w.Session != session {
+			m.pullTreeWindows = append(m.pullTreeWindows, w)
+		}
+	}
+}
+
+// treeDataForLevel returns the source sessions, windows, and panes
+// for the given tree level. pull-from-session uses its own filtered
+// data (no panes, excluding the current session).
+func (m *Model) treeDataForLevel(current *level) ([]menu.SessionEntry, []menu.WindowEntry, []menu.PaneEntry) {
+	if current.ID == "window:pull-from-session" {
+		return m.pullTreeSessions, m.pullTreeWindows, nil
+	}
+	return m.treeSessions, m.treeWindows, m.treePanes
+}
+
 // renderTreeView renders the tree as styled lines for display.
 // The items parameter determines which nodes are visible — only
 // sessions/windows/panes whose IDs appear in items are rendered.
-func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorIdx int, width int, viewportOffset int, maxVisible int) []styledLine {
+func (m *Model) renderTreeView(levelID string, items []menu.Item, state *menu.TreeState, cursorIdx int, width int, viewportOffset int, maxVisible int) []styledLine {
 	if len(items) == 0 {
 		return nil
 	}
@@ -213,10 +253,23 @@ func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorI
 		idSet[it.ID] = true
 	}
 
+	// Select source data based on tree level type.
+	var allSessions []menu.SessionEntry
+	var allWindows []menu.WindowEntry
+	var allPanes []menu.PaneEntry
+	if levelID == "window:pull-from-session" {
+		allSessions = m.pullTreeSessions
+		allWindows = m.pullTreeWindows
+	} else {
+		allSessions = m.treeSessions
+		allWindows = m.treeWindows
+		allPanes = m.treePanes
+	}
+
 	// Filter source data to only include entries present in items.
-	sessions := filterTreeSessions(m.treeSessions, idSet)
-	windows := filterTreeWindows(m.treeWindows, idSet)
-	panes := filterTreePanes(m.treePanes, idSet)
+	sessions := filterTreeSessions(allSessions, idSet)
+	windows := filterTreeWindows(allWindows, idSet)
+	panes := filterTreePanes(allPanes, idSet)
 
 	// When a filter is active, override expand state so all matching
 	// nodes are visible (FilterTreeItems already computed the correct set).
@@ -227,12 +280,12 @@ func (m *Model) renderTreeView(items []menu.Item, state *menu.TreeState, cursorI
 
 	// Build window/pane counts from the full (unfiltered) lists so
 	// counts are always correct regardless of expand/collapse state.
-	windowCounts := make(map[string]int, len(m.treeSessions))
-	for _, w := range m.treeWindows {
+	windowCounts := make(map[string]int, len(allSessions))
+	for _, w := range allWindows {
 		windowCounts[w.Session]++
 	}
 	paneCounts := make(map[string]int)
-	for _, p := range m.treePanes {
+	for _, p := range allPanes {
 		paneCounts[fmt.Sprintf("%s\x00%d", p.Session, p.WindowIdx)]++
 	}
 

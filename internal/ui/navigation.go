@@ -98,6 +98,15 @@ func (m *Model) handleEnterKey() tea.Cmd {
 		return nil
 	}
 	events.UI.MenuEnter(current.ID, item.ID, item.Label, current.Filter)
+	// In pull-from-session tree, Enter on session nodes toggles
+	// expand/collapse instead of dispatching the action.
+	if current.ID == "window:pull-from-session" && strings.HasPrefix(item.ID, menu.TreePrefixSession) {
+		if ts, ok := current.Data.(*menu.TreeState); ok && ts != nil {
+			ts.Toggle(item.ID)
+			m.rebuildTreeItems(current, ts)
+		}
+		return nil
+	}
 	beforeCursor := current.FilterCursorPos()
 	current.SetFilter("", 0)
 	m.noteFilterCursorChange(current, beforeCursor)
@@ -427,13 +436,18 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 			level.Subtitle = dir
 		}
 	}
-	if isTreeLevel(update.id) {
+	if update.id == "session:tree" {
 		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
 		level.Data = menu.NewTreeState(allExpanded)
 		level.Cursor = 0
 		m.treeSessions = m.sessions.Entries()
 		m.treeWindows = m.windows.Entries()
 		m.treePanes = m.panes.Entries()
+	}
+	if update.id == "window:pull-from-session" {
+		level.Data = menu.NewTreeState(false)
+		level.Cursor = 0
+		m.populatePullTreeData()
 	}
 	m.applyNodeSettings(level)
 	m.syncViewport(level)
@@ -543,13 +557,18 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	title := headerSegmentCleaner.Replace(node.ID)
 	title = strings.TrimSpace(title)
 	root := newLevel(node.ID, title, items, node)
-	if isTreeLevel(node.ID) {
+	if node.ID == "session:tree" {
 		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
 		root.Data = menu.NewTreeState(allExpanded)
 		root.Cursor = 0
 		m.treeSessions = m.sessions.Entries()
 		m.treeWindows = m.windows.Entries()
 		m.treePanes = m.panes.Entries()
+	}
+	if node.ID == "window:pull-from-session" {
+		root.Data = menu.NewTreeState(false)
+		root.Cursor = 0
+		m.populatePullTreeData()
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)

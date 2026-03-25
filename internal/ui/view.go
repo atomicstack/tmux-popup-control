@@ -170,7 +170,7 @@ func (m *Model) viewVertical(header string) string {
 			lines = append(lines, styledLine{text: msg, style: styles.Info})
 		} else if isTreeLevel(current.ID) {
 			ts, _ := current.Data.(*menu.TreeState)
-			lines = append(lines, m.renderTreeView(current.Items, ts, current.Cursor, m.width, current.ViewportOffset, m.maxVisibleItems())...)
+			lines = append(lines, m.renderTreeView(current.ID, current.Items, ts, current.Cursor, m.width, current.ViewportOffset, m.maxVisibleItems())...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i
@@ -273,7 +273,7 @@ func (m *Model) viewSideBySide(header string) string {
 			contentLines = append(contentLines, styledLine{text: msg, style: styles.Info})
 		} else if isTreeLevel(current.ID) {
 			ts, _ := current.Data.(*menu.TreeState)
-			contentLines = append(contentLines, m.renderTreeView(current.Items, ts, current.Cursor, menuW, current.ViewportOffset, m.maxVisibleItems())...)
+			contentLines = append(contentLines, m.renderTreeView(current.ID, current.Items, ts, current.Cursor, menuW, current.ViewportOffset, m.maxVisibleItems())...)
 		} else {
 			for i, item := range displayItems {
 				idx := start + i

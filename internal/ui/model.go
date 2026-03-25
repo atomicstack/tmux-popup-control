@@ -123,6 +123,8 @@ type Model struct {
 	treeSessions       []menu.SessionEntry
 	treeWindows        []menu.WindowEntry
 	treePanes          []menu.PaneEntry
+	pullTreeSessions   []menu.SessionEntry
+	pullTreeWindows    []menu.WindowEntry
 	pluginConfirmState *pluginConfirmState
 	pluginInstallState *pluginInstallState
 	resurrectState     *resurrectState

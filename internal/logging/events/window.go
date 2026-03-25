@@ -33,8 +33,12 @@ func (WindowTracer) Link(source, session string) {
 	logging.Trace("window.link", map[string]interface{}{"source": source, "session": session})
 }
 
-func (WindowTracer) Move(source, session string) {
-	logging.Trace("window.move", map[string]interface{}{"source": source, "session": session})
+func (WindowTracer) PullFromSession(source, session string) {
+	logging.Trace("window.pull-from-session", map[string]interface{}{"source": source, "session": session})
+}
+
+func (WindowTracer) PushToSession(source, session string) {
+	logging.Trace("window.push-to-session", map[string]interface{}{"source": source, "session": session})
 }
 
 func (WindowTracer) SwapSelect(first string) {

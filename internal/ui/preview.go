@@ -330,7 +330,7 @@ func previewKindForLevel(id string) previewKind {
 		return previewKindWindow
 	case "pane:switch", "pane:join":
 		return previewKindPane
-	case "session:tree":
+	case "session:tree", "window:pull-from-session":
 		return previewKindTree
 	case "window:layout":
 		return previewKindLayout

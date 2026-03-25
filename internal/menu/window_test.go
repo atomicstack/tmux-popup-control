@@ -187,6 +187,116 @@ func TestWindowLinkActionUsesCurrentSession(t *testing.T) {
 	}
 }
 
+func TestPullFromSessionActionParsesTreeWindowID(t *testing.T) {
+	var gotSource, gotSession string
+	restore := withStub(&moveWindowFn, func(_ string, source, targetSession string) error {
+		gotSource, gotSession = source, targetSession
+		return nil
+	})
+	defer restore()
+
+	ctx := Context{SocketPath: "sock", CurrentWindowSession: "main"}
+	// tree:w:other:1 → source should be "other:1"
+	cmd := WindowPullFromSessionAction(ctx, Item{ID: "tree:w:other:1", Label: "1: shell"})
+	msg := cmd()
+	res := msg.(ActionResult)
+	if res.Err != nil {
+		t.Fatalf("unexpected error: %v", res.Err)
+	}
+	if gotSource != "other:1" || gotSession != "main" {
+		t.Fatalf("expected source=other:1 session=main, got %s %s", gotSource, gotSession)
+	}
+}
+
+func TestPushToSessionMovesCurrentWindow(t *testing.T) {
+	var gotSource, gotSession string
+	restore := withStub(&moveWindowFn, func(_ string, source, targetSession string) error {
+		gotSource, gotSession = source, targetSession
+		return nil
+	})
+	defer restore()
+
+	ctx := Context{
+		SocketPath:           "sock",
+		CurrentWindowID:      "main:1",
+		CurrentWindowSession: "main",
+	}
+	cmd := WindowPushToSessionAction(ctx, Item{ID: "other", Label: "other"})
+	msg := cmd()
+	res := msg.(ActionResult)
+	if res.Err != nil {
+		t.Fatalf("unexpected error: %v", res.Err)
+	}
+	if gotSource != "main:1" || gotSession != "other" {
+		t.Fatalf("expected source=main:1 session=other, got %s %s", gotSource, gotSession)
+	}
+}
+
+func TestPushToSessionErrorsWithNoCurrentWindow(t *testing.T) {
+	ctx := Context{SocketPath: "sock"}
+	cmd := WindowPushToSessionAction(ctx, Item{ID: "other", Label: "other"})
+	msg := cmd()
+	res := msg.(ActionResult)
+	if res.Err == nil {
+		t.Fatalf("expected error for missing current window")
+	}
+}
+
+func TestLoadWindowPushToSessionMenuExcludesCurrent(t *testing.T) {
+	ctx := Context{
+		CurrentWindowSession: "main",
+		Sessions: []SessionEntry{
+			{Name: "main", Label: "main (2 windows)"},
+			{Name: "dev", Label: "dev (1 windows)"},
+			{Name: "work", Label: "work (3 windows)"},
+		},
+	}
+	items, err := loadWindowPushToSessionMenu(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items (excluding current), got %d", len(items))
+	}
+	for _, item := range items {
+		if item.ID == "main" {
+			t.Fatalf("current session should be excluded, found %q", item.ID)
+		}
+	}
+}
+
+func TestLoadWindowPullFromSessionMenuBuildsTree(t *testing.T) {
+	ctx := Context{
+		CurrentWindowSession: "main",
+		Sessions: []SessionEntry{
+			{Name: "main", Label: "main"},
+			{Name: "dev", Label: "dev"},
+		},
+		Windows: []WindowEntry{
+			{ID: "main:1", Label: "main:1 editor", Session: "main", Index: 1, Name: "editor"},
+			{ID: "dev:1", Label: "dev:1 shell", Session: "dev", Index: 1, Name: "shell"},
+			{ID: "dev:2", Label: "dev:2 logs", Session: "dev", Index: 2, Name: "logs"},
+		},
+	}
+	items, err := loadWindowPullFromSessionMenu(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// collapsed by default: only session nodes visible
+	if len(items) != 1 {
+		t.Fatalf("expected 1 tree item (session only, collapsed), got %d: %v", len(items), items)
+	}
+	if items[0].ID != "tree:s:dev" {
+		t.Fatalf("expected session node, got %q", items[0].ID)
+	}
+	// no items from current session
+	for _, item := range items {
+		if strings.Contains(item.ID, "main") {
+			t.Fatalf("current session should be excluded, found %q", item.ID)
+		}
+	}
+}
+
 func TestWindowSwapActionReturnsPrompt(t *testing.T) {
 	ctx := Context{}
 	cmd := WindowSwapAction(ctx, Item{ID: "s1:1", Label: "s1:1"})

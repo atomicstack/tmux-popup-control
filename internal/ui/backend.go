@@ -83,6 +83,23 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 				m.syncViewport(lvl)
 			}
 		}
+		if lvl := m.findLevelByID("window:push-to-session"); lvl != nil {
+			items := make([]menu.Item, 0, len(ctx.Sessions))
+			for _, entry := range ctx.Sessions {
+				if entry.Name == ctx.CurrentWindowSession {
+					continue
+				}
+				items = append(items, menu.Item{ID: entry.Name, Label: entry.Label})
+			}
+			lvl.UpdateItems(items)
+			m.syncViewport(lvl)
+		}
+		if lvl := m.findLevelByID("window:pull-from-session"); lvl != nil {
+			m.populatePullTreeData()
+			if ts, ok := lvl.Data.(*menu.TreeState); ok && ts != nil {
+				m.rebuildTreeItems(lvl, ts)
+			}
+		}
 		if m.sessionForm != nil {
 			m.sessionForm.SetSessions(ctx.Sessions)
 		}
@@ -111,16 +128,11 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 			lvl.UpdateItems(menu.WindowSwitchItems(ctx))
 			m.syncViewport(lvl)
 		}
-		if lvl := m.findLevelByID("window:move"); lvl != nil {
-			items := make([]menu.Item, 0, len(ctx.Windows))
-			for _, entry := range ctx.Windows {
-				if entry.Session == ctx.CurrentWindowSession {
-					continue
-				}
-				items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
+		if lvl := m.findLevelByID("window:pull-from-session"); lvl != nil {
+			m.populatePullTreeData()
+			if ts, ok := lvl.Data.(*menu.TreeState); ok && ts != nil {
+				m.rebuildTreeItems(lvl, ts)
 			}
-			lvl.UpdateItems(items)
-			m.syncViewport(lvl)
 		}
 		if lvl := m.findLevelByID("window:swap"); lvl != nil {
 			items := menu.WindowEntriesToItems(ctx.Windows)
