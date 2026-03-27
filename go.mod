@@ -6,9 +6,10 @@ require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.1
 	charm.land/lipgloss/v2 v2.0.0
-	github.com/atomicstack/gotmuxcc v0.1.1
+	github.com/atomicstack/gotmuxcc v0.1.2
 	github.com/charmbracelet/colorprofile v0.4.2
 	github.com/charmbracelet/x/ansi v0.11.6
+	github.com/google/uuid v1.6.0
 	github.com/lithammer/fuzzysearch v1.1.5
 	golang.org/x/term v0.6.0
 	modernc.org/sqlite v1.47.0
@@ -23,7 +24,6 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
