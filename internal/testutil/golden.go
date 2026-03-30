@@ -183,6 +183,41 @@ func assertGolden(t *testing.T, goldenName, output string) {
 	}
 }
 
+// launchBinaryWithEnv is like launchBinary but accepts extra lines to inject
+// into the launcher script before the binary invocation (e.g. "export FOO=bar").
+func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, extraEnv []string) (pane, exitFile string) {
+	t.Helper()
+	scriptDir := t.TempDir()
+	exitFile = filepath.Join(scriptDir, "exit-code")
+	scriptPath := filepath.Join(scriptDir, "run.sh")
+	var rootLine string
+	if rootMenu != "" {
+		rootLine = fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shellQuote(rootMenu))
+	}
+	var extraLines string
+	for _, line := range extraEnv {
+		extraLines += line + "\n"
+	}
+	script := "#!/bin/sh\n" +
+		"POPUP_BIN=" + shellQuote(bin) + "\n" +
+		"POPUP_SOCKET=" + shellQuote(socket) + "\n" +
+		"POPUP_EXIT=" + shellQuote(exitFile) + "\n" +
+		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=ansi256\n" +
+		rootLine +
+		extraLines +
+		"\"$POPUP_BIN\" -socket \"$POPUP_SOCKET\" -width 80 -height 24 2>/dev/null\n" +
+		"printf '%s' $? > \"$POPUP_EXIT\"\n" +
+		"sleep 300\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write launcher script: %v", err)
+	}
+	cmd := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", session, scriptPath)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("start session %s: %v", session, err)
+	}
+	return session + ":0.0", exitFile
+}
+
 // shellQuote wraps s in single quotes, escaping any embedded single quotes.
 // Safe for paths produced by os.MkdirTemp and standard temp-dir locations.
 func shellQuote(s string) string {

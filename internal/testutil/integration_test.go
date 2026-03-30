@@ -291,6 +291,154 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 	_ = tmuxCommand(socket, "kill-session", "-t", target).Run()
 }
 
+// TestTreeFilterShowsOnlyMatchingItems launches the binary at session:tree
+// with multiple sessions and windows, types a filter that matches a session
+// name, and verifies that only the matching session is shown — its windows
+// (which don't independently match) must NOT appear.
+func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
+	bin := buildBinary(t)
+	socket, cleanup, logDir := StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	// Create sessions with distinct names and windows whose names do NOT
+	// contain the session name, so we can verify per-item filtering.
+	for _, name := range []string{"shells", "devbox"} {
+		if err := tmuxCommand(socket, "new-session", "-d", "-s", name).Run(); err != nil {
+			t.Fatalf("create session %s: %v", name, err)
+		}
+	}
+	// Rename windows to names that definitely don't contain "shells".
+	if err := tmuxCommand(socket, "rename-window", "-t", "shells:0", "vim").Run(); err != nil {
+		t.Fatalf("rename window: %v", err)
+	}
+	if err := tmuxCommand(socket, "new-window", "-t", "shells", "-n", "htop").Run(); err != nil {
+		t.Fatalf("new-window htop: %v", err)
+	}
+	if err := tmuxCommand(socket, "rename-window", "-t", "devbox:0", "code").Run(); err != nil {
+		t.Fatalf("rename window: %v", err)
+	}
+
+	// Launch at session:tree with expanded so windows are visible initially.
+	// Disable the preview panel — the preview would show the selected
+	// session's windows, causing false matches on window names.
+	pane, exitFile := launchBinaryWithEnv(t, bin, socket, "tree-filter", "session:tree",
+		[]string{
+			"export TMUX_POPUP_CONTROL_MENU_ARGS=expanded",
+			"export TMUX_POPUP_CONTROL_NO_PREVIEW=1",
+		})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Wait for the tree to render — both sessions should be visible.
+	WaitForContent(t, ctx, socket, pane, "shells")
+	WaitForContent(t, ctx, socket, pane, "devbox")
+
+	// Verify windows are visible in the expanded tree (pre-filter).
+	output := WaitForContent(t, ctx, socket, pane, "vim")
+	t.Logf("tree before filter:\n%s", output)
+	if !strings.Contains(output, "htop") {
+		t.Fatalf("expected htop window visible before filtering, got:\n%s", output)
+	}
+
+	// Type "shells" to filter.
+	SendText(t, socket, pane, "shells")
+
+	// Wait for non-matching items to disappear.
+	WaitForAbsent(t, ctx, socket, pane, "devbox")
+
+	// Capture the final filtered state.
+	output, err := CapturePane(t, socket, pane)
+	if err != nil {
+		t.Fatalf("capture-pane after filter: %v", err)
+	}
+	t.Logf("tree after filtering 'shells':\n%s", output)
+
+	// The "shells" session must be visible.
+	if !strings.Contains(output, "shells") {
+		t.Fatalf("expected 'shells' session visible after filter, got:\n%s", output)
+	}
+
+	// Windows "vim" and "htop" do NOT contain "shells" in their own metadata,
+	// so they must NOT appear.
+	if strings.Contains(output, "vim") {
+		t.Fatalf("window 'vim' should not be visible when filtering 'shells' (it doesn't match):\n%s", output)
+	}
+	if strings.Contains(output, "htop") {
+		t.Fatalf("window 'htop' should not be visible when filtering 'shells' (it doesn't match):\n%s", output)
+	}
+
+	// Clean up: Escape exits the binary.
+	SendKeys(t, socket, pane, "Escape")
+	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer exitCancel()
+	_ = waitForExit(t, exitCtx, exitFile)
+	_ = tmuxCommand(socket, "kill-session", "-t", "tree-filter").Run()
+	_ = tmuxCommand(socket, "kill-session", "-t", "shells").Run()
+	_ = tmuxCommand(socket, "kill-session", "-t", "devbox").Run()
+}
+
+// TestTreeFilterChildMatchShowsAncestor verifies that when a window name
+// matches the filter, its parent session is shown as an ancestor even if
+// the session name itself doesn't match.
+func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
+	bin := buildBinary(t)
+	socket, cleanup, logDir := StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	// Create a session with a uniquely-named window.
+	if err := tmuxCommand(socket, "new-session", "-d", "-s", "mywork").Run(); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := tmuxCommand(socket, "rename-window", "-t", "mywork:0", "xyzzyfind").Run(); err != nil {
+		t.Fatalf("rename window: %v", err)
+	}
+	// A second window that should NOT match.
+	if err := tmuxCommand(socket, "new-window", "-t", "mywork", "-n", "bash").Run(); err != nil {
+		t.Fatalf("new-window: %v", err)
+	}
+
+	pane, exitFile := launchBinaryWithEnv(t, bin, socket, "tree-child", "session:tree",
+		[]string{"export TMUX_POPUP_CONTROL_MENU_ARGS=expanded"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Wait for tree to render with both windows visible.
+	WaitForContent(t, ctx, socket, pane, "xyzzyfind")
+	WaitForContent(t, ctx, socket, pane, "bash")
+
+	// Filter for "xyzzy" — should match window "xyzzyfind" only.
+	SendText(t, socket, pane, "xyzzy")
+
+	// "bash" window should disappear.
+	WaitForAbsent(t, ctx, socket, pane, "bash")
+
+	output, err := CapturePane(t, socket, pane)
+	if err != nil {
+		t.Fatalf("capture-pane after filter: %v", err)
+	}
+	t.Logf("tree after filtering 'xyzzy':\n%s", output)
+
+	// Parent session "mywork" must still be visible as an ancestor.
+	if !strings.Contains(output, "mywork") {
+		t.Fatalf("expected ancestor session 'mywork' visible, got:\n%s", output)
+	}
+	// The matching window must be visible.
+	if !strings.Contains(output, "xyzzyfind") {
+		t.Fatalf("expected matching window 'xyzzyfind' visible, got:\n%s", output)
+	}
+
+	SendKeys(t, socket, pane, "Escape")
+	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer exitCancel()
+	_ = waitForExit(t, exitCtx, exitFile)
+	_ = tmuxCommand(socket, "kill-session", "-t", "tree-child").Run()
+	_ = tmuxCommand(socket, "kill-session", "-t", "mywork").Run()
+}
+
 // windowIndices returns the sorted window indices for the given session.
 func windowIndices(t *testing.T, socket, session string) []int {
 	t.Helper()
