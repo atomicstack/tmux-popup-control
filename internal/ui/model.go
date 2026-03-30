@@ -100,6 +100,7 @@ type Model struct {
 	pendingWindowSwap *menu.Item
 	pendingPaneSwap   *menu.Item
 	commandItemsCache []menu.Item
+	noPreview         bool
 	filterCursor      cursor.Model
 	filterCursorDirty bool
 
@@ -133,8 +134,23 @@ type Model struct {
 	deferredRename     *menu.Node
 }
 
+// ModelConfig holds parameters for NewModel.
+type ModelConfig struct {
+	SocketPath  string
+	Width       int
+	Height      int
+	ShowFooter  bool
+	Verbose     bool
+	NoPreview   bool
+	Watcher     *backend.Watcher
+	RootMenu    string
+	MenuArgs    string
+	ClientID    string
+	SessionName string
+}
+
 // NewModel initialises the UI state with the root menu and configuration.
-func NewModel(socketPath string, width, height int, showFooter bool, verbose bool, watcher *backend.Watcher, rootMenu string, menuArgs string, clientID string, sessionName string) *Model {
+func NewModel(cfg ModelConfig) *Model {
 	registry := menu.BuildRegistry()
 	sessions := state.NewSessionStore()
 	sessions.SetIncludeCurrent(true)
@@ -148,16 +164,17 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 		stack:        []*level{root},
 		registry:     registry,
 		bus:          command.New(),
-		backend:      watcher,
+		backend:      cfg.Watcher,
 		backendState: map[backend.Kind]error{},
-		showFooter:   showFooter,
-		verbose:      verbose,
+		showFooter:   cfg.ShowFooter,
+		verbose:      cfg.Verbose,
+		noPreview:    cfg.NoPreview,
 		mode:         ModeMenu,
 		rootTitle:    defaultRootTitle,
-		menuArgs:     menuArgs,
-		socketPath:   socketPath,
-		clientID:     clientID,
-		sessionName:  sessionName,
+		menuArgs:     cfg.MenuArgs,
+		socketPath:   cfg.SocketPath,
+		clientID:     cfg.ClientID,
+		sessionName:  cfg.SessionName,
 		sessions:     sessions,
 		windows:      windows,
 		panes:        panes,
@@ -166,12 +183,12 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)
-	if width > 0 {
-		m.width = width
+	if cfg.Width > 0 {
+		m.width = cfg.Width
 		m.fixedWidth = true
 	}
-	if height > 0 {
-		m.height = height
+	if cfg.Height > 0 {
+		m.height = cfg.Height
 		m.fixedHeight = true
 	}
 	c := cursor.New()
@@ -183,7 +200,7 @@ func NewModel(socketPath string, width, height int, showFooter bool, verbose boo
 	}
 	c.SetChar(" ")
 	m.filterCursor = c
-	m.applyRootMenuOverride(rootMenu)
+	m.applyRootMenuOverride(cfg.RootMenu)
 	m.registerHandlers()
 	return m
 }

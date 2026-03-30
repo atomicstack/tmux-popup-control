@@ -30,6 +30,7 @@ type Config struct {
 	SessionName         string
 	SessionStorageDir   string
 	RestorePaneContents bool
+	NoPreview           bool
 	// ResurrectOp is set to "save" or "restore" when launched as a popup
 	// instance for the save/restore-sessions CLI subcommand.
 	ResurrectOp   string
@@ -50,7 +51,19 @@ func Run(cfg Config) error {
 	}
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	defer watcher.Stop()
-	model := ui.NewModel(socketPath, cfg.Width, cfg.Height, cfg.ShowFooter, cfg.Verbose, watcher, cfg.RootMenu, cfg.MenuArgs, clientID, strings.TrimSpace(cfg.SessionName))
+	model := ui.NewModel(ui.ModelConfig{
+		SocketPath:  socketPath,
+		Width:       cfg.Width,
+		Height:      cfg.Height,
+		ShowFooter:  cfg.ShowFooter,
+		Verbose:     cfg.Verbose,
+		NoPreview:   cfg.NoPreview,
+		Watcher:     watcher,
+		RootMenu:    cfg.RootMenu,
+		MenuArgs:    cfg.MenuArgs,
+		ClientID:    clientID,
+		SessionName: strings.TrimSpace(cfg.SessionName),
+	})
 	if cfg.ResurrectOp != "" {
 		model.SetResurrectInit(buildResurrectStart(cfg, socketPath, clientID))
 	}

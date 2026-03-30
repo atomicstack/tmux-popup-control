@@ -9,7 +9,7 @@ import (
 )
 
 func TestHandleTextInputAppendsRunes(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	current := m.currentLevel()
 	current.UpdateItems([]menu.Item{{ID: "one"}})
 	handled, _ := m.handleTextInput(tea.KeyPressMsg{Text: "abc"})
@@ -25,7 +25,7 @@ func TestHandleTextInputAppendsRunes(t *testing.T) {
 }
 
 func TestHandleTextInputCursorMovement(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	current := m.currentLevel()
 	current.UpdateItems([]menu.Item{{ID: "one"}})
 	current.SetFilter("abc", 3)
@@ -46,7 +46,7 @@ func TestHandleTextInputCursorMovement(t *testing.T) {
 }
 
 func TestFilterPromptPlaceholder(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	current := m.currentLevel()
 	current.SetFilter("", 0)
 	prompt, _ := m.filterPrompt()

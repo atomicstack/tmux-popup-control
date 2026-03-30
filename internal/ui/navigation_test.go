@@ -10,7 +10,7 @@ import (
 )
 
 func TestHandleEscapeKeyFromRootQuits(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	cmd := m.handleEscapeKey()
 	if cmd == nil {
 		t.Fatalf("expected quit command")
@@ -22,7 +22,7 @@ func TestHandleEscapeKeyFromRootQuits(t *testing.T) {
 }
 
 func TestHandleEscapeKeyPopsLevelAndClearsSwapState(t *testing.T) {
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	parent := m.currentLevel()
 	parent.Items = []menu.Item{{ID: "one"}, {ID: "two"}, {ID: "window:swap-target"}}
 	parent.Cursor = 1
@@ -63,7 +63,7 @@ func TestLayoutPreviewRevertsOnEscape(t *testing.T) {
 	}
 	defer func() { layoutPreviewFn = old }()
 
-	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 80, Height: 24})
 	// Need a parent level so escape doesn't quit
 	root := m.stack[0]
 	_ = root
@@ -98,7 +98,7 @@ func TestRootMenuLeafActionDeferredUntilPaneData(t *testing.T) {
 	// action must be deferred until the backend provides pane data.
 	// Otherwise ctx.CurrentPaneID is empty and the action fails with
 	// "no current pane".
-	m := NewModel("", 80, 24, false, false, nil, "pane:capture", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "pane:capture"})
 	if m.deferredAction == nil {
 		t.Fatal("expected deferredAction to be set for leaf action root menu")
 	}
@@ -158,7 +158,7 @@ func TestRootMenuLeafActionHeaderUsesParentSegment(t *testing.T) {
 	// title should be the parent segment ("pane"), not the full colon-
 	// separated ID ("pane:capture"). Otherwise the breadcrumb shows
 	// "pane:capture→capture to file" instead of "pane→capture to file".
-	m := NewModel("", 80, 24, false, false, nil, "pane:capture", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "pane:capture"})
 	if m.rootTitle != "pane" {
 		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "pane")
 	}
@@ -166,7 +166,7 @@ func TestRootMenuLeafActionHeaderUsesParentSegment(t *testing.T) {
 
 func TestRootMenuLeafActionHeaderSessionSave(t *testing.T) {
 	// session:save is also a leaf action — root title should be "session".
-	m := NewModel("", 80, 24, false, false, nil, "session:save", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "session:save"})
 	if m.rootTitle != "session" {
 		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "session")
 	}
@@ -175,7 +175,7 @@ func TestRootMenuLeafActionHeaderSessionSave(t *testing.T) {
 func TestRootMenuLoaderHeaderUsesSegment(t *testing.T) {
 	// Loader-based root menus (like session:tree) should also produce
 	// a clean header segment without the colon prefix.
-	m := NewModel("", 80, 24, false, false, nil, "session:tree", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "session:tree"})
 	if m.rootTitle != "tree" {
 		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "tree")
 	}
@@ -183,7 +183,7 @@ func TestRootMenuLoaderHeaderUsesSegment(t *testing.T) {
 
 func TestRootMenuLeafActionContextIsEmptyBeforeBackend(t *testing.T) {
 	// Verify that context has empty CurrentPaneID before backend data.
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	ctx := m.menuContext()
 	if ctx.CurrentPaneID != "" {
 		t.Fatalf("expected empty CurrentPaneID before backend data, got %q", ctx.CurrentPaneID)
@@ -199,7 +199,7 @@ func TestLayoutPreviewNoRevertWhenDataEmpty(t *testing.T) {
 	}
 	defer func() { layoutPreviewFn = old }()
 
-	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 80, Height: 24})
 	items := []menu.Item{
 		{ID: "even-horizontal", Label: "Even Horizontal"},
 	}
@@ -217,7 +217,7 @@ func TestLayoutPreviewNoRevertWhenDataEmpty(t *testing.T) {
 }
 
 func TestRootMenuSessionRenameDeferredWithMenuArgs(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "session:rename", "mysession", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "session:rename", MenuArgs: "mysession"})
 	if m.deferredRename == nil {
 		t.Fatal("expected deferredRename to be set when session:rename has menuArgs")
 	}
@@ -236,7 +236,7 @@ func TestRootMenuSessionRenameDeferredWithMenuArgs(t *testing.T) {
 }
 
 func TestRootMenuWindowRenameDeferredWithMenuArgs(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "window:rename", MenuArgs: "main:0"})
 	if m.deferredRename == nil {
 		t.Fatal("expected deferredRename to be set when window:rename has menuArgs")
 	}
@@ -249,7 +249,7 @@ func TestRootMenuWindowRenameDeferredWithMenuArgs(t *testing.T) {
 }
 
 func TestDeferredSessionRenameFiresOnSessionsUpdated(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "session:rename", "main", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "session:rename", MenuArgs: "main"})
 	if m.deferredRename == nil {
 		t.Fatal("expected deferredRename to be set")
 	}
@@ -284,7 +284,7 @@ func TestDeferredSessionRenameFiresOnSessionsUpdated(t *testing.T) {
 }
 
 func TestDeferredWindowRenameFiresOnWindowsUpdated(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "window:rename", MenuArgs: "main:0"})
 	if m.deferredRename == nil {
 		t.Fatal("expected deferredRename to be set")
 	}
@@ -331,7 +331,7 @@ func TestDeferredWindowRenameFiresOnWindowsUpdated(t *testing.T) {
 }
 
 func TestDeferredWindowRenameResolvesWindowName(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "window:rename", MenuArgs: "main:0"})
 	h := NewHarness(m)
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -363,7 +363,7 @@ func TestDeferredWindowRenameResolvesWindowName(t *testing.T) {
 }
 
 func TestDeferredSessionRenameEscapeQuits(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "session:rename", "main", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "session:rename", MenuArgs: "main"})
 	h := NewHarness(m)
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -389,7 +389,7 @@ func TestDeferredSessionRenameEscapeQuits(t *testing.T) {
 }
 
 func TestDeferredWindowRenameEscapeQuits(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "window:rename", "main:0", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "window:rename", MenuArgs: "main:0"})
 	h := NewHarness(m)
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -424,7 +424,7 @@ func TestDeferredWindowRenameEscapeQuits(t *testing.T) {
 func TestRootMenuSessionRenameWithoutMenuArgsFallsThrough(t *testing.T) {
 	// When menuArgs is empty, session:rename should load the picker list
 	// via the standard loader path, not defer.
-	m := NewModel("", 80, 24, false, false, nil, "session:rename", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "session:rename"})
 	if m.deferredRename != nil {
 		t.Fatal("expected deferredRename to be nil when menuArgs is empty")
 	}

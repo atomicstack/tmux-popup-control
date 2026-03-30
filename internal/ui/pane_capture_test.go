@@ -8,7 +8,7 @@ import (
 )
 
 func TestPaneCapturePromptSwitchesToForm(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	h := NewHarness(m)
 	h.Send(menu.PaneCapturePrompt{
 		Context:  menu.Context{CurrentPaneID: "%1", SocketPath: "sock"},
@@ -23,7 +23,7 @@ func TestPaneCapturePromptSwitchesToForm(t *testing.T) {
 }
 
 func TestPaneCapturePreviewMsgUpdatesPreview(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.paneCaptureForm = menu.NewPaneCaptureForm(menu.PaneCapturePrompt{
 		Context:  menu.Context{CurrentPaneID: "%1"},
 		Template: "test.log",
@@ -38,7 +38,7 @@ func TestPaneCapturePreviewMsgUpdatesPreview(t *testing.T) {
 }
 
 func TestPaneCapturePreviewMsgStaleDiscarded(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.paneCaptureForm = menu.NewPaneCaptureForm(menu.PaneCapturePrompt{
 		Context:  menu.Context{CurrentPaneID: "%1"},
 		Template: "test.log",
@@ -54,7 +54,7 @@ func TestPaneCapturePreviewMsgStaleDiscarded(t *testing.T) {
 }
 
 func TestPaneCaptureFormEscReturnsToMenu(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.paneCaptureForm = menu.NewPaneCaptureForm(menu.PaneCapturePrompt{
 		Context:  menu.Context{CurrentPaneID: "%1"},
 		Template: "test.log",

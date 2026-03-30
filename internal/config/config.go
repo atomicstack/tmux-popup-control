@@ -48,6 +48,7 @@ const (
 	envSession             = "TMUX_POPUP_CONTROL_SESSION"
 	envSessionStorageDir   = "TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR"
 	envRestorePaneContents = "TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS"
+	envNoPreview           = "TMUX_POPUP_CONTROL_NO_PREVIEW"
 )
 
 // Load parses configuration from CLI arguments and environment variables.
@@ -69,6 +70,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	trace := fs.Bool("trace", envOrBool(env, envTrace, false), "enable verbose JSON trace logging")
 	debugToSQLite := fs.Bool("debug-to-sqlite", false, "write structured debug events and spans to a sqlite database next to the binary")
 	verbose := fs.Bool("verbose", envOrBool(env, envVerbose, false), "print success messages for actions")
+	noPreview := fs.Bool("no-preview", envOrBool(env, envNoPreview, false), "disable the preview panel")
 	logFile := fs.String("log-file", envOrDefault(env, envLogFile, ""), "path to the log file")
 	rootMenu := fs.String("root-menu", envOrDefault(env, envRootMenu, ""), "open directly into the specified menu path")
 	menuArgs := fs.String("menu-args", envOrDefault(env, envMenuArgs, ""), "arguments for the target menu (e.g. 'expanded' for session:tree)")
@@ -102,6 +104,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			SessionName:         envOrDefault(env, envSession, ""),
 			SessionStorageDir:   envOrDefault(env, envSessionStorageDir, ""),
 			RestorePaneContents: envOrBool(env, envRestorePaneContents, false),
+			NoPreview:           *noPreview,
 		},
 		Logging: Logging{
 			FilePath:      *logFile,

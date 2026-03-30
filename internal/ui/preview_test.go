@@ -11,7 +11,7 @@ import (
 // derived from the window store.
 func TestEnsurePreviewForLevelFallsBackToWindowList(t *testing.T) {
 	lvl := newLevel("session:switch", "Sessions", []menu.Item{{ID: "dev", Label: "Dev"}}, nil)
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	m.stack = []*level{lvl}
 	m.preview = make(map[string]*previewData)
 	m.windows.SetEntries([]menu.WindowEntry{{Session: "dev", Index: 1, Name: "main"}})
@@ -43,7 +43,7 @@ func TestEnsurePreviewForLevelFallsBackToWindowList(t *testing.T) {
 // capture-pane command rather than the window-list fallback.
 func TestSessionPreviewUsesPaneCaptureWhenPanesAvailable(t *testing.T) {
 	lvl := newLevel("session:switch", "Sessions", []menu.Item{{ID: "dev", Label: "Dev"}}, nil)
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	m.stack = []*level{lvl}
 	m.preview = make(map[string]*previewData)
 	m.panes.SetEntries([]menu.PaneEntry{
@@ -84,7 +84,7 @@ func TestSessionPreviewUsesPaneCaptureWhenPanesAvailable(t *testing.T) {
 // for the window:switch level.
 func TestWindowPreviewUsesPaneCaptureWhenPanesAvailable(t *testing.T) {
 	lvl := newLevel("window:switch", "Windows", []menu.Item{{ID: "dev:1", Label: "main"}}, nil)
-	m := NewModel("", 0, 0, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{})
 	m.stack = []*level{lvl}
 	m.preview = make(map[string]*previewData)
 	m.panes.SetEntries([]menu.PaneEntry{
@@ -144,7 +144,7 @@ func TestLayoutPreviewAppliesOnCursorMove(t *testing.T) {
 	}
 	defer func() { layoutPreviewFn = old }()
 
-	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 80, Height: 24})
 	items := []menu.Item{
 		{ID: "even-horizontal", Label: "Even Horizontal"},
 		{ID: "even-vertical", Label: "Even Vertical"},
@@ -173,7 +173,7 @@ func TestLayoutPreviewSavesOriginalLayout(t *testing.T) {
 	layoutPreviewFn = func(_, _ string) error { return nil }
 	defer func() { layoutPreviewFn = old }()
 
-	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 80, Height: 24})
 	items := []menu.Item{
 		{ID: "even-horizontal", Label: "Even Horizontal"},
 		{ID: "bb62,159x48", Label: "current layout"},
@@ -199,7 +199,7 @@ func TestLayoutPreviewSkipsDuplicateApply(t *testing.T) {
 	layoutPreviewFn = func(_, _ string) error { count++; return nil }
 	defer func() { layoutPreviewFn = old }()
 
-	m := NewModel("test.sock", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 80, Height: 24})
 	items := []menu.Item{
 		{ID: "even-horizontal", Label: "Even Horizontal"},
 	}
@@ -226,7 +226,7 @@ func TestLayoutPreviewSkipsDuplicateApply(t *testing.T) {
 }
 
 func TestLayoutPreviewNoSidePanelRendered(t *testing.T) {
-	m := NewModel("test.sock", 120, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 120, Height: 24})
 	items := []menu.Item{
 		{ID: "even-horizontal", Label: "Even Horizontal"},
 	}
@@ -241,7 +241,7 @@ func TestLayoutPreviewNoSidePanelRendered(t *testing.T) {
 // TestMaxVisibleItemsAccountsForPreview verifies that the item viewport
 // shrinks to make room for an active preview block.
 func TestMaxVisibleItemsAccountsForPreview(t *testing.T) {
-	m := NewModel("", 0, 20, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Height: 20})
 	lvl := newLevel("session:switch", "Sessions", []menu.Item{
 		{ID: "s1", Label: "s1"},
 		{ID: "s2", Label: "s2"},

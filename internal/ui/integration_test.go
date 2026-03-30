@@ -12,7 +12,7 @@ import (
 )
 
 func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {
-	model := NewModel("/tmp/tmux.sock", 40, 8, false, false, nil, "", "", "", "")
+	model := NewModel(ModelConfig{SocketPath: "/tmp/tmux.sock", Width: 40, Height: 8})
 	harness := NewHarness(model)
 
 	harness.Send(tea.WindowSizeMsg{Width: 40, Height: 8})

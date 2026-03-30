@@ -13,7 +13,7 @@ import (
 // TestResurrectProgressFlow verifies that progress messages accumulate log
 // entries and update step/total on the resurrectState.
 func TestResurrectProgressFlow(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	ch := make(chan resurrect.ProgressEvent, 5)
 	m.resurrectState = &resurrectState{
@@ -62,7 +62,7 @@ func TestResurrectProgressFlow(t *testing.T) {
 // TestResurrectProgressNoMessageSkipsLogEntry verifies that progress events
 // with empty messages do not add log entries.
 func TestResurrectProgressNoMessageSkipsLogEntry(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	ch := make(chan resurrect.ProgressEvent, 5)
 	m.resurrectState = &resurrectState{
@@ -81,7 +81,7 @@ func TestResurrectProgressNoMessageSkipsLogEntry(t *testing.T) {
 // TestResurrectKeysDuringProgress verifies that key presses are consumed
 // while the operation is still running (done=false).
 func TestResurrectKeysDuringProgress(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	m.resurrectState = &resurrectState{
 		operation: "save",
@@ -102,7 +102,7 @@ func TestResurrectKeysDuringProgress(t *testing.T) {
 // TestResurrectKeyOnError verifies that a key press on a failed operation
 // dismisses the resurrect UI and returns to the menu.
 func TestResurrectKeyOnError(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	m.resurrectState = &resurrectState{
 		operation: "save",
@@ -124,7 +124,7 @@ func TestResurrectKeyOnError(t *testing.T) {
 // TestResurrectKeyOnSuccess verifies that a key press on a successful
 // operation emits tea.Quit.
 func TestResurrectKeyOnSuccess(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	m.resurrectState = &resurrectState{
 		operation: "save",
@@ -145,7 +145,7 @@ func TestResurrectKeyOnSuccess(t *testing.T) {
 // TestResurrectViewContainsLogAndBar verifies that the resurrect view includes
 // log messages and progress bar characters.
 func TestResurrectViewContainsLogAndBar(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	m.resurrectState = &resurrectState{
 		operation: "save",
@@ -178,7 +178,7 @@ func TestResurrectViewContainsLogAndBar(t *testing.T) {
 // TestResurrectDiscoveringPhase verifies that when no log entries and total=0
 // exist, the view shows the discovering indicator.
 func TestResurrectDiscoveringPhase(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	m.resurrectState = &resurrectState{
 		operation: "restore",
@@ -197,7 +197,7 @@ func TestResurrectDiscoveringPhase(t *testing.T) {
 // TestResurrectDoneEventSetsFlag verifies that a progress event with Done=true
 // transitions the state to done.
 func TestResurrectDoneEventSetsFlag(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	ch := make(chan resurrect.ProgressEvent, 1)
 	m.resurrectState = &resurrectState{
@@ -226,7 +226,7 @@ func TestResurrectDoneEventSetsFlag(t *testing.T) {
 // TestResurrectDoneErrorEventSetsError verifies that a progress event with
 // Done=true and a non-nil Err records the error correctly.
 func TestResurrectDoneErrorEventSetsError(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	ch := make(chan resurrect.ProgressEvent, 1)
 	m.resurrectState = &resurrectState{
@@ -261,7 +261,7 @@ func TestResurrectDoneErrorEventSetsError(t *testing.T) {
 // TestResurrectViewRestoreOperation verifies the restore operation also
 // renders the progress bar (gradient direction differs but bar chars present).
 func TestResurrectViewRestoreOperation(t *testing.T) {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.mode = ModeResurrect
 	m.resurrectState = &resurrectState{
 		operation: "restore",

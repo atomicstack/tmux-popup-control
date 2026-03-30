@@ -49,7 +49,7 @@ func (m *Model) hasSidePreview() bool {
 // previewPanelWidth returns the width in columns for the right-hand preview
 // panel.  Returns 0 when the terminal is too narrow to split.
 func (m *Model) previewPanelWidth() int {
-	if m.width <= 0 {
+	if m.noPreview || m.width <= 0 {
 		return 0
 	}
 	w := int(float64(m.width) * previewPanelFraction)
@@ -178,7 +178,7 @@ func (m *Model) viewVertical(header string) string {
 			}
 		}
 	}
-	if preview := m.activePreview(); shouldRenderPreview(preview) {
+	if preview := m.activePreview(); !m.noPreview && shouldRenderPreview(preview) {
 		lines = append(lines, styledLine{})
 		title := previewTitleText(preview)
 		titleStyle := styles.Info

@@ -9,7 +9,7 @@ import (
 )
 
 func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool) *Model {
-	m := NewModel("", 80, 24, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	ts := menu.NewTreeState(allExpanded)
 	items := ts.BuildTreeItems(sessions, windows, panes)
 	node, _ := m.registry.Find("session:tree")
@@ -25,7 +25,7 @@ func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, pan
 }
 
 func testTreeModelWithSize(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool, width int, height int) *Model {
-	m := NewModel("", width, height, false, false, nil, "", "", "", "")
+	m := NewModel(ModelConfig{Width: width, Height: height})
 	ts := menu.NewTreeState(allExpanded)
 	items := ts.BuildTreeItems(sessions, windows, panes)
 	node, _ := m.registry.Find("session:tree")
