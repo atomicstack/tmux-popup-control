@@ -83,14 +83,14 @@ func TestFilterItemsPreservesAncestors(t *testing.T) {
 		{Name: "work", Windows: 1},
 	}
 	windows := []WindowEntry{
-		{ID: "@1", Label: "bash", Session: "main", Index: 0},
-		{ID: "@2", Label: "vim", Session: "main", Index: 1},
-		{ID: "@3", Label: "htop", Session: "work", Index: 0},
+		{ID: "@1", Label: "bash", Name: "bash", Session: "main", Index: 0},
+		{ID: "@2", Label: "vim", Name: "vim", Session: "main", Index: 1},
+		{ID: "@3", Label: "htop", Name: "htop", Session: "work", Index: 0},
 	}
 	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"},
-		{ID: "%2", Label: "vim-pane", WindowIdx: 1, Session: "main"},
-		{ID: "%3", Label: "htop-pane", WindowIdx: 0, Session: "work"},
+		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main", Window: "bash", Command: "bash"},
+		{ID: "%2", Label: "vim-pane", WindowIdx: 1, Session: "main", Window: "vim", Command: "vim"},
+		{ID: "%3", Label: "htop-pane", WindowIdx: 0, Session: "work", Window: "htop", Command: "htop"},
 	}
 
 	state := NewTreeState(false)
@@ -121,8 +121,8 @@ func TestFilterItemsPreservesAncestors(t *testing.T) {
 
 func TestFilterItemsNoMatchReturnsEmpty(t *testing.T) {
 	sessions := []SessionEntry{{Name: "main", Windows: 1}}
-	windows := []WindowEntry{{ID: "@1", Label: "bash", Session: "main", Index: 0}}
-	panes := []PaneEntry{{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"}}
+	windows := []WindowEntry{{ID: "@1", Label: "bash", Name: "bash", Session: "main", Index: 0}}
+	panes := []PaneEntry{{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main", Window: "bash", Command: "bash"}}
 
 	state := NewTreeState(false)
 	items := state.FilterTreeItems(sessions, windows, panes, "zzzznotfound")
@@ -176,91 +176,229 @@ func TestTreeItemKind(t *testing.T) {
 	}
 }
 
-func TestFilterItemsMultiWordCrossHierarchy(t *testing.T) {
+func TestFilterItemsSessionMatchDoesNotIncludeChildren(t *testing.T) {
+	sessions := []SessionEntry{
+		{Name: "staging", Windows: 2},
+		{Name: "production", Windows: 1},
+	}
+	// Labels include session:index prefix like real tmux data.
+	windows := []WindowEntry{
+		{ID: "@1", Label: "staging:0: cron", Name: "cron", Session: "staging", Index: 0},
+		{ID: "@2", Label: "staging:1: nginx", Name: "nginx", Session: "staging", Index: 1},
+		{ID: "@3", Label: "production:0: web", Name: "web", Session: "production", Index: 0},
+	}
+	panes := []PaneEntry{}
+
+	state := NewTreeState(false)
+	items := state.FilterTreeItems(sessions, windows, panes, "staging")
+
+	// Only the session should appear — window tree labels (with the
+	// session prefix stripped) don't contain "staging".
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item (session only), got %d: %v", len(items), ids)
+	}
+	if items[0].ID != "tree:s:staging" {
+		t.Errorf("expected tree:s:staging, got %s", items[0].ID)
+	}
+}
+
+func TestFilterItemsChildMatchShowsAncestorOnly(t *testing.T) {
+	sessions := []SessionEntry{
+		{Name: "dev", Windows: 2},
+		{Name: "work", Windows: 1},
+	}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "dev:0: vim", Name: "vim", Session: "dev", Index: 0},
+		{ID: "@2", Label: "dev:1: bash", Name: "bash", Session: "dev", Index: 1},
+		{ID: "@3", Label: "work:0: htop", Name: "htop", Session: "work", Index: 0},
+	}
+	panes := []PaneEntry{}
+
+	state := NewTreeState(false)
+	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+
+	// "vim" matches window dev:0 — session "dev" shown as ancestor,
+	// but window "bash" (dev:1) should NOT appear.
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items (session + matching window), got %d: %v", len(items), ids)
+	}
+	if items[0].ID != "tree:s:dev" {
+		t.Errorf("[0] expected tree:s:dev, got %s", items[0].ID)
+	}
+	if items[1].ID != "tree:w:dev:0" {
+		t.Errorf("[1] expected tree:w:dev:0, got %s", items[1].ID)
+	}
+}
+
+func TestFilterItemsPaneMatchShowsAncestorsOnly(t *testing.T) {
+	sessions := []SessionEntry{{Name: "dev", Windows: 1}}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "dev:0: editor", Name: "editor", Session: "dev", Index: 0},
+	}
+	panes := []PaneEntry{
+		{ID: "%1", Label: "dev:0.0: vim-main", WindowIdx: 0, Session: "dev", Index: 0, Window: "editor", Command: "vim"},
+		{ID: "%2", Label: "dev:0.1: shell", WindowIdx: 0, Session: "dev", Index: 1, Window: "editor", Command: "bash"},
+	}
+
+	state := NewTreeState(false)
+	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+
+	// "vim" matches pane "vim-main" — ancestors shown, but pane "shell" excluded.
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items (session + window + pane), got %d: %v", len(items), ids)
+	}
+	if items[0].ID != "tree:s:dev" {
+		t.Errorf("[0] expected tree:s:dev, got %s", items[0].ID)
+	}
+	if items[1].ID != "tree:w:dev:0" {
+		t.Errorf("[1] expected tree:w:dev:0, got %s", items[1].ID)
+	}
+	if items[2].ID != "tree:p:dev:0:%1" {
+		t.Errorf("[2] expected tree:p:dev:0:%%1, got %s", items[2].ID)
+	}
+}
+
+func TestFilterItemsWindowMatchExcludesNonMatchingPanes(t *testing.T) {
+	sessions := []SessionEntry{{Name: "dev", Windows: 1}}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "dev:0: vim", Name: "vim", Session: "dev", Index: 0},
+	}
+	panes := []PaneEntry{
+		{ID: "%1", Label: "dev:0.0: pane-1", WindowIdx: 0, Session: "dev", Index: 0, Window: "vim", Command: "bash"},
+		{ID: "%2", Label: "dev:0.1: pane-2", WindowIdx: 0, Session: "dev", Index: 1, Window: "vim", Command: "zsh"},
+	}
+
+	state := NewTreeState(false)
+	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+
+	// "vim" matches window "vim" — panes "pane-1" and "pane-2" do NOT
+	// match "vim", so they must NOT appear.
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items (session + window), got %d: %v", len(items), ids)
+	}
+	if items[0].ID != "tree:s:dev" {
+		t.Errorf("[0] expected tree:s:dev, got %s", items[0].ID)
+	}
+	if items[1].ID != "tree:w:dev:0" {
+		t.Errorf("[1] expected tree:w:dev:0, got %s", items[1].ID)
+	}
+}
+
+func TestFilterItemsSessionMatchExcludesNonMatchingDescendants(t *testing.T) {
+	sessions := []SessionEntry{{Name: "staging", Windows: 2}}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "staging:0: cron", Name: "cron", Session: "staging", Index: 0},
+		{ID: "@2", Label: "staging:1: nginx", Name: "nginx", Session: "staging", Index: 1},
+	}
+	panes := []PaneEntry{
+		{ID: "%1", Label: "staging:0.0: worker", WindowIdx: 0, Session: "staging", Index: 0, Window: "cron", Command: "worker"},
+		{ID: "%2", Label: "staging:1.0: logs", WindowIdx: 1, Session: "staging", Index: 0, Window: "nginx", Command: "tail"},
+	}
+
+	state := NewTreeState(false)
+	items := state.FilterTreeItems(sessions, windows, panes, "staging")
+
+	// "staging" matches the session only — no window or pane contains
+	// "staging", so none of the descendants should appear.
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item (session only), got %d: %v", len(items), ids)
+	}
+	if items[0].ID != "tree:s:staging" {
+		t.Errorf("expected tree:s:staging, got %s", items[0].ID)
+	}
+}
+
+func TestFilterItemsMultiWordPerItem(t *testing.T) {
 	sessions := []SessionEntry{
 		{Name: "staging", Windows: 1},
 		{Name: "production", Windows: 1},
 	}
 	windows := []WindowEntry{
-		{ID: "@1", Label: "cron", Session: "staging", Index: 0},
-		{ID: "@2", Label: "nginx", Session: "production", Index: 0},
+		{ID: "@1", Label: "cron", Name: "cron", Session: "staging", Index: 0},
+		{ID: "@2", Label: "nginx", Name: "nginx", Session: "production", Index: 0},
 	}
-	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "staging"},
-		{ID: "%2", Label: "pane-2", WindowIdx: 0, Session: "production"},
-	}
+	panes := []PaneEntry{}
 
 	state := NewTreeState(false)
 
-	// "cron staging" — words match across session+window hierarchy.
+	// "cron staging" — each word must match within a single item's own metadata.
+	// No single item contains both "cron" AND "staging", so no results.
 	items := state.FilterTreeItems(sessions, windows, panes, "cron staging")
-	var ids []string
-	for _, it := range items {
-		ids = append(ids, it.ID)
-	}
-	if len(items) == 0 {
-		t.Fatal("expected results for 'cron staging', got none")
-	}
-	foundSession := false
-	foundWindow := false
-	for _, it := range items {
-		if it.ID == "tree:s:staging" {
-			foundSession = true
-		}
-		if it.ID == "tree:w:staging:0" {
-			foundWindow = true
-		}
-	}
-	if !foundSession {
-		t.Errorf("expected session 'staging' in results, got %v", ids)
-	}
-	if !foundWindow {
-		t.Errorf("expected window 'cron' in results, got %v", ids)
-	}
-
-	// production session should NOT appear — "cron" doesn't match it.
-	for _, it := range items {
-		if it.ID == "tree:s:production" {
-			t.Errorf("production should not match 'cron staging', got %v", ids)
-		}
-	}
-}
-
-func TestFilterItemsMultiWordReversedOrder(t *testing.T) {
-	sessions := []SessionEntry{{Name: "staging", Windows: 1}}
-	windows := []WindowEntry{
-		{ID: "@1", Label: "cron", Session: "staging", Index: 0},
-	}
-	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "staging"},
-	}
-
-	state := NewTreeState(false)
-
-	// "staging cron" — reversed word order should also match.
-	items := state.FilterTreeItems(sessions, windows, panes, "staging cron")
-	if len(items) == 0 {
-		t.Fatal("expected results for 'staging cron', got none")
-	}
-	foundWindow := false
-	for _, it := range items {
-		if it.ID == "tree:w:staging:0" {
-			foundWindow = true
-		}
-	}
-	if !foundWindow {
+	if len(items) != 0 {
 		var ids []string
 		for _, it := range items {
 			ids = append(ids, it.ID)
 		}
-		t.Errorf("expected window 'cron' in results, got %v", ids)
+		t.Fatalf("expected 0 items for 'cron staging' (no single item matches both words), got %d: %v", len(items), ids)
+	}
+
+	// "cron" alone matches the window, with session as ancestor.
+	items = state.FilterTreeItems(sessions, windows, panes, "cron")
+	var ids []string
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items for 'cron', got %d: %v", len(items), ids)
+	}
+	if items[0].ID != "tree:s:staging" {
+		t.Errorf("[0] expected tree:s:staging, got %s", items[0].ID)
+	}
+	if items[1].ID != "tree:w:staging:0" {
+		t.Errorf("[1] expected tree:w:staging:0, got %s", items[1].ID)
+	}
+}
+
+func TestFilterItemsMultiWordWithinSingleItem(t *testing.T) {
+	sessions := []SessionEntry{{Name: "dev", Windows: 1}}
+	windows := []WindowEntry{
+		{ID: "@1", Label: "cron staging-sync", Name: "cron staging-sync", Session: "dev", Index: 0},
+	}
+	panes := []PaneEntry{}
+
+	state := NewTreeState(false)
+
+	// Both words exist in the window's own label — should match.
+	items := state.FilterTreeItems(sessions, windows, panes, "cron staging")
+	if len(items) != 2 {
+		var ids []string
+		for _, it := range items {
+			ids = append(ids, it.ID)
+		}
+		t.Fatalf("expected 2 items for 'cron staging', got %d: %v", len(items), ids)
+	}
+	if items[0].ID != "tree:s:dev" {
+		t.Errorf("[0] expected tree:s:dev, got %s", items[0].ID)
+	}
+	if items[1].ID != "tree:w:dev:0" {
+		t.Errorf("[1] expected tree:w:dev:0, got %s", items[1].ID)
 	}
 }
 
 func TestFilterItemsMultiWordNoMatch(t *testing.T) {
 	sessions := []SessionEntry{{Name: "staging", Windows: 1}}
 	windows := []WindowEntry{
-		{ID: "@1", Label: "cron", Session: "staging", Index: 0},
+		{ID: "@1", Label: "cron", Name: "cron", Session: "staging", Index: 0},
 	}
 	panes := []PaneEntry{}
 
@@ -277,46 +415,46 @@ func TestFilterItemsMultiWordNoMatch(t *testing.T) {
 	}
 }
 
-func TestFilterItemsMultiWordPaneContext(t *testing.T) {
+func TestFilterItemsPaneMatchedByOwnMetadataOnly(t *testing.T) {
 	sessions := []SessionEntry{{Name: "dev", Windows: 1}}
 	windows := []WindowEntry{
-		{ID: "@1", Label: "editor", Session: "dev", Index: 0},
+		{ID: "@1", Label: "editor", Name: "editor", Session: "dev", Index: 0},
 	}
 	panes := []PaneEntry{
-		{ID: "%1", Label: "vim-main", WindowIdx: 0, Session: "dev"},
-		{ID: "%2", Label: "shell", WindowIdx: 0, Session: "dev"},
+		{ID: "%1", Label: "vim-main", WindowIdx: 0, Session: "dev", Window: "editor", Command: "vim"},
+		{ID: "%2", Label: "shell", WindowIdx: 0, Session: "dev", Window: "editor", Command: "bash"},
 	}
 
 	state := NewTreeState(false)
 
-	// "vim dev" — "vim" matches pane label, "dev" matches session name.
-	items := state.FilterTreeItems(sessions, windows, panes, "vim dev")
-	if len(items) == 0 {
-		t.Fatal("expected results for 'vim dev', got none")
-	}
-	foundPane := false
+	// "vim" matches pane "vim-main" on its own label — ancestors shown.
+	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+	var ids []string
 	for _, it := range items {
-		if it.ID == "tree:p:dev:0:%1" {
-			foundPane = true
+		ids = append(ids, it.ID)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected 3 items (session + window + pane), got %d: %v", len(items), ids)
+	}
+	if items[2].ID != "tree:p:dev:0:%1" {
+		t.Errorf("[2] expected tree:p:dev:0:%%1, got %s", items[2].ID)
+	}
+
+	// "shell" pane should not appear — "vim" doesn't match it.
+	for _, it := range items {
+		if it.ID == "tree:p:dev:0:%2" {
+			t.Errorf("pane 'shell' should not match 'vim', got %v", ids)
 		}
 	}
-	if !foundPane {
-		var ids []string
+
+	// "vim dev" — no single item contains both words, so no results.
+	items = state.FilterTreeItems(sessions, windows, panes, "vim dev")
+	if len(items) != 0 {
+		ids = nil
 		for _, it := range items {
 			ids = append(ids, it.ID)
 		}
-		t.Errorf("expected pane 'vim-main' in results, got %v", ids)
-	}
-
-	// The "shell" pane should NOT appear — "vim" doesn't match it.
-	for _, it := range items {
-		if it.ID == "tree:p:dev:0:%2" {
-			var ids []string
-			for _, it := range items {
-				ids = append(ids, it.ID)
-			}
-			t.Errorf("pane 'shell' should not match 'vim dev', got %v", ids)
-		}
+		t.Fatalf("expected 0 items for 'vim dev' (cross-hierarchy), got %d: %v", len(items), ids)
 	}
 }
 

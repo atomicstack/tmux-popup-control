@@ -170,8 +170,8 @@ func TestTreeFilter(t *testing.T) {
 		{Name: "beta", Windows: 1},
 	}
 	windows := []menu.WindowEntry{
-		{ID: "0", Label: "0:bash", Session: "alpha"},
-		{ID: "0", Label: "0:vim", Session: "beta"},
+		{ID: "0", Label: "0:bash", Name: "bash", Session: "alpha"},
+		{ID: "0", Label: "0:vim", Name: "vim", Session: "beta"},
 	}
 
 	m := testTreeModel(sessions, windows, nil, true)
@@ -351,10 +351,10 @@ func TestTreeFilterAllItemsSelectable(t *testing.T) {
 		{Name: "gamma", Windows: 1},
 	}
 	windows := []menu.WindowEntry{
-		{ID: "0", Label: "0:bash", Session: "alpha"},
-		{ID: "1", Label: "1:vim", Session: "alpha"},
-		{ID: "0", Label: "0:zsh", Session: "beta"},
-		{ID: "0", Label: "0:top", Session: "gamma"},
+		{ID: "0", Label: "0:bash", Name: "bash", Session: "alpha"},
+		{ID: "1", Label: "1:vim", Name: "vim", Session: "alpha"},
+		{ID: "0", Label: "0:zsh", Name: "zsh", Session: "beta"},
+		{ID: "0", Label: "0:top", Name: "top", Session: "gamma"},
 	}
 
 	m := testTreeModel(sessions, windows, nil, true) // all expanded

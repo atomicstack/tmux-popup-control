@@ -193,17 +193,21 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 	var items []Item
 	for _, sess := range sessions {
 		sid := TreeSessionID(sess.Name)
+		sessionMatches := treeAllWordsMatch(sess.Name, words)
 
+		// Collect children that independently match (per-item matching).
+		// Match against short structured fields (Name, Title, Command)
+		// rather than the full label which includes long metadata (paths,
+		// dimensions, history) that causes fuzzy false positives.
 		var sessionChildren []Item
 		for _, win := range winBySession[sess.Name] {
 			wid := TreeWindowID(sess.Name, win.Index)
-			winContext := sess.Name + " " + win.Label + " " + win.ID
-			windowMatches := treeAllWordsMatch(winContext, words)
+			windowMatches := treeAllWordsMatch(win.Name, words)
 
 			var windowChildren []Item
 			for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
 				pid := TreePaneID(sess.Name, win.Index, pane.ID)
-				paneContext := winContext + " " + pane.Label + " " + pane.ID
+				paneContext := pane.Title + " " + pane.Command
 				if treeAllWordsMatch(paneContext, words) {
 					windowChildren = append(windowChildren, Item{ID: pid, Label: TreePaneLabel(pane)})
 				}
@@ -215,31 +219,10 @@ func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEnt
 			}
 		}
 
-		// Session matches on its own if all words match the session name.
-		sessionMatches := treeAllWordsMatch(sess.Name, words)
+		// Show session if it matches or if any descendant matches.
+		// Children are only included if they independently match.
 		if sessionMatches || len(sessionChildren) > 0 {
 			items = append(items, Item{ID: sid, Label: sess.Name})
-			if sessionMatches {
-				// All words matched the session — include all children.
-				for _, win := range winBySession[sess.Name] {
-					wid := TreeWindowID(sess.Name, win.Index)
-					alreadyAdded := false
-					for _, c := range sessionChildren {
-						if c.ID == wid {
-							alreadyAdded = true
-							break
-						}
-					}
-					if alreadyAdded {
-						continue
-					}
-					sessionChildren = append(sessionChildren, Item{ID: wid, Label: TreeWindowLabel(win)})
-					for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
-						pid := TreePaneID(sess.Name, win.Index, pane.ID)
-						sessionChildren = append(sessionChildren, Item{ID: pid, Label: TreePaneLabel(pane)})
-					}
-				}
-			}
 			items = append(items, sessionChildren...)
 		}
 	}

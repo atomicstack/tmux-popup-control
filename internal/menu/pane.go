@@ -325,6 +325,7 @@ func PaneEntriesFromTmux(panes []tmux.Pane) []PaneEntry {
 			Index:     p.Index,
 			Current:   p.Current,
 			Title:     p.Title,
+			Command:   p.Command,
 		})
 	}
 	return entries

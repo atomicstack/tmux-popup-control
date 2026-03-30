@@ -62,6 +62,7 @@ type PaneEntry struct {
 	Index     int
 	Current   bool
 	Title     string
+	Command   string
 }
 
 // SessionEntry represents a tmux session reference for menu loaders.

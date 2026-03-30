@@ -52,7 +52,7 @@ func buildTree(
 		paneByWindow[key] = append(paneByWindow[key], p)
 	}
 
-	hasPanes := len(panes) > 0
+	hasPanes := len(paneCounts) > 0
 	root := tree.New()
 	for _, sess := range sessions {
 		sid := menu.TreeSessionID(sess.Name)
