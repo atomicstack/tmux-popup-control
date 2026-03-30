@@ -191,6 +191,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 
 		sess := Session{
 			Name:     s.Name,
+			Path:     s.Path,
 			Created:  parseCreated(s),
 			Attached: s.Attached,
 		}

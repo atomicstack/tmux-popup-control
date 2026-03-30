@@ -32,6 +32,10 @@ var selectLayoutTargetFn = func(socketPath, target, layout string) error {
 	return tmux.SelectLayoutTarget(socketPath, target, layout)
 }
 
+var respawnPaneFn = func(socketPath, target, dir, command string) error {
+	return tmux.RespawnPane(socketPath, target, dir, command)
+}
+
 var selectPaneFn = func(socketPath, target string) error {
 	return tmux.SelectPane(socketPath, target)
 }
@@ -101,6 +105,12 @@ func withSelectLayoutTargetFn(fn func(string, string, string) error) func() {
 	orig := selectLayoutTargetFn
 	selectLayoutTargetFn = fn
 	return func() { selectLayoutTargetFn = orig }
+}
+
+func withRespawnPaneFn(fn func(string, string, string, string) error) func() {
+	orig := respawnPaneFn
+	respawnPaneFn = fn
+	return func() { respawnPaneFn = orig }
 }
 
 func withSelectPaneFn(fn func(string, string) error) func() {
@@ -310,14 +320,6 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				indexMap[win.Index] = win.Index
 			}
 
-			startDir := ""
-			startCmd := ""
-			if len(sess.Windows) > 0 && len(sess.Windows[0].Panes) > 0 {
-				p0 := sess.Windows[0].Panes[0]
-				startDir = p0.WorkingDir
-				startCmd = lookupPaneCmd(sess.Name, sess.Windows[0].Index, p0.Index)
-			}
-
 			step++
 			ch <- ProgressEvent{
 				Step:    step,
@@ -326,8 +328,28 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				Kind:    "session",
 				ID:      sess.Name,
 			}
-			if err := createSessionFn(cfg.SocketPath, sess.Name, startDir, startCmd); err != nil {
+			// create the session with $HOME as the working directory so
+			// that new windows inherit the correct default. we must pass
+			// -c explicitly because tmux otherwise inherits the cwd of
+			// whatever process (control-mode client, popup, etc.) sends
+			// the new-session command.
+			sessionDir := os.Getenv("HOME")
+			if err := createSessionFn(cfg.SocketPath, sess.Name, sessionDir, ""); err != nil {
 				return sendError(ch, "creating session %s: %w", sess.Name, err)
+			}
+
+			// the first pane is auto-created with the session; respawn it
+			// in the correct working directory with any startup command.
+			// this avoids polluting session_path with a pane-specific dir.
+			if len(sess.Windows) > 0 && len(sess.Windows[0].Panes) > 0 {
+				p0 := sess.Windows[0].Panes[0]
+				paneCmd := lookupPaneCmd(sess.Name, sess.Windows[0].Index, p0.Index)
+				if p0.WorkingDir != "" || paneCmd != "" {
+					paneTarget := fmt.Sprintf("%s:0.0", sess.Name)
+					if err := respawnPaneFn(cfg.SocketPath, paneTarget, p0.WorkingDir, paneCmd); err != nil {
+						return sendError(ch, "respawning pane %s: %w", paneTarget, err)
+					}
+				}
 			}
 		}
 

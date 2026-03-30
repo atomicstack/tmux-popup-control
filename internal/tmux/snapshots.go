@@ -49,6 +49,7 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 		entry := Session{
 			Name:     s.Name,
 			Label:    label,
+			Path:     s.Path,
 			Attached: len(clients) > 0,
 			Clients:  clients,
 			Current:  s.Name == currentName,

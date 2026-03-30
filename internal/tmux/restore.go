@@ -63,6 +63,25 @@ func SplitPane(socketPath, target, dir, command string) error {
 	return err
 }
 
+// RespawnPane kills the running command in the target pane and restarts it in
+// the given directory with an optional command. This is used during restore to
+// set the first pane's working directory without polluting session_path.
+func RespawnPane(socketPath, target, dir, command string) error {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	args := []string{"respawn-pane", "-k", "-t", target}
+	if dir != "" {
+		args = append(args, "-c", dir)
+	}
+	if command != "" {
+		args = append(args, command)
+	}
+	_, err = client.Command(args...)
+	return err
+}
+
 // SelectLayoutTarget applies the named layout to the given target window.
 func SelectLayoutTarget(socketPath, target, layout string) error {
 	client, err := newTmux(socketPath)

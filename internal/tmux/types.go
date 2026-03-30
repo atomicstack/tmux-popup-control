@@ -47,6 +47,7 @@ type PaneSnapshot struct {
 type Session struct {
 	Name     string
 	Label    string
+	Path     string
 	Attached bool
 	Clients  []string
 	Current  bool

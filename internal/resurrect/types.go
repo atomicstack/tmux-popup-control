@@ -27,6 +27,7 @@ type SaveFile struct {
 // Session represents one tmux session in the save file.
 type Session struct {
 	Name     string   `json:"name"`
+	Path     string   `json:"path,omitempty"`
 	Created  int64    `json:"created"`
 	Attached bool     `json:"attached"`
 	Windows  []Window `json:"windows"`

@@ -44,6 +44,7 @@ func noopLayout(_, _, _ string) error                        { return nil }
 func noopPane(_, _ string) error                             { return nil }
 func noopSelectWindow(_, _ string) error                     { return nil }
 func noopSwitch(_, _, _ string) error                        { return nil }
+func noopRespawn(_, _, _, _ string) error                     { return nil }
 func noopDefaultCommand(_ string) string                     { return "/bin/bash" }
 
 // collectRestoreEvents drains the channel returned by Restore.
@@ -96,6 +97,7 @@ func installNoopRestoreFns(t *testing.T) func() {
 		return map[int]bool{}, nil
 	})
 	r12, r13 := withStatefulSessionOptionFns(nil)
+	r14 := withRespawnPaneFn(noopRespawn)
 	return func() {
 		r1()
 		r2()
@@ -110,6 +112,7 @@ func installNoopRestoreFns(t *testing.T) func() {
 		r11()
 		r12()
 		r13()
+		r14()
 	}
 }
 
@@ -406,13 +409,14 @@ func TestRestoreSessionCreationError(t *testing.T) {
 // ── TestRestoreWithPaneArchive ───────────────────────────────────────────────
 
 // TestRestoreWithPaneArchive verifies that when a companion .panes.tar.gz
-// exists, startup commands are passed to creation functions instead of using
-// paste-buffer.
+// exists, startup commands are passed to respawn (for pane 0) and split (for
+// pane 1) instead of being bundled into session creation.
 func TestRestoreWithPaneArchive(t *testing.T) {
 	dir := t.TempDir()
 
-	// track startup commands passed to creation functions
+	// track commands passed to creation functions
 	var sessionCommands []string
+	var respawnCommands []string
 	var splitCommands []string
 
 	r1 := withCreateSessionFn(func(_, _, _, command string) error {
@@ -450,6 +454,11 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
 	defer r13()
+	r14 := withRespawnPaneFn(func(_, _, _, command string) error {
+		respawnCommands = append(respawnCommands, command)
+		return nil
+	})
+	defer r14()
 
 	sf := buildSaveFile(Session{
 		Name: "dev",
@@ -483,12 +492,21 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
 	}
 
-	// verify session creation got a startup command (for pane 0)
+	// session creation should NOT get a startup command — the first pane's
+	// command is handled by respawn instead
 	if len(sessionCommands) != 1 {
 		t.Fatalf("expected 1 createSession call, got %d", len(sessionCommands))
 	}
-	if sessionCommands[0] == "" {
-		t.Error("expected non-empty startup command for session creation (pane 0)")
+	if sessionCommands[0] != "" {
+		t.Errorf("session creation should get empty command, got %q", sessionCommands[0])
+	}
+
+	// respawn should get the startup command for pane 0
+	if len(respawnCommands) != 1 {
+		t.Fatalf("expected 1 respawnPane call, got %d", len(respawnCommands))
+	}
+	if respawnCommands[0] == "" {
+		t.Error("expected non-empty startup command for respawn (pane 0)")
 	}
 
 	// verify split got a startup command (for pane 1)
@@ -619,6 +637,8 @@ func TestRestoreSwitchesClientWithID(t *testing.T) {
 	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
 	defer r13()
+	r14 := withRespawnPaneFn(noopRespawn)
+	defer r14()
 
 	sf := buildSaveFile(Session{
 		Name: "dev",
@@ -1060,6 +1080,8 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 		return map[int]bool{}, nil
 	})
 	defer r11()
+	r14 := withRespawnPaneFn(noopRespawn)
+	defer r14()
 	// no marker check for new sessions (merge=false), but set IS called
 	store := make(map[string]string)
 	r12 := withSessionOptionFn(func(_, _, option string) string {

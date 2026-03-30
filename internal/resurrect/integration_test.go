@@ -471,6 +471,162 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 	tmux.Shutdown()
 }
 
+// sessionPath queries #{session_path} for a session on the given socket.
+func sessionPath(t *testing.T, socket, session string) string {
+	t.Helper()
+	out, err := tmuxCmd(socket, "display-message", "-t", session+":", "-p", "#{session_path}").Output()
+	if err != nil {
+		t.Fatalf("display-message session_path for %s: %v", session, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// paneCurrentPath queries #{pane_current_path} for a pane on the given socket.
+func paneCurrentPath(t *testing.T, socket, target string) string {
+	t.Helper()
+	out, err := tmuxCmd(socket, "display-message", "-t", target, "-p", "#{pane_current_path}").Output()
+	if err != nil {
+		t.Fatalf("display-message pane_current_path for %s: %v", target, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestRestoreSessionPathIntegration verifies that after a save→restore cycle,
+// the restored session's session_path is $HOME (the tmux default), NOT the
+// working directory of the first restored pane. This matters because tmux
+// uses session_path as the default directory for new windows.
+func TestRestoreSessionPathIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	home := os.Getenv("HOME")
+	if home == "" {
+		t.Skip("skipping: $HOME not set")
+	}
+	// resolve symlinks so comparison works on macOS (/var → /private/var)
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		home = resolved
+	}
+
+	// ── server 1: build a session with windows in different directories ──
+
+	socket1, cleanup1, logDir1 := testutil.StartTmuxServer(t)
+	defer cleanup1()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
+
+	// create temp directories to simulate per-window working dirs.
+	// resolve symlinks because macOS /var → /private/var and tmux
+	// reports the resolved path in pane_current_path.
+	dirA, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("eval symlinks dirA: %v", err)
+	}
+	dirB, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("eval symlinks dirB: %v", err)
+	}
+
+	// rename default session and set up windows with specific directories
+	if err := tmuxCmd(socket1, "rename-session", "-t", "tmux-popup-control-test", "work").Run(); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+
+	// kill the auto-created window (running sleep) and replace it with a
+	// shell in dirA so that pane_current_path is actually set
+	if err := tmuxCmd(socket1, "respawn-pane", "-k", "-t", "work:0", "-c", dirA).Run(); err != nil {
+		t.Fatalf("respawn work:0 in dirA: %v", err)
+	}
+	if err := tmuxCmd(socket1, "rename-window", "-t", "work:0", "alpha").Run(); err != nil {
+		t.Fatalf("rename work:0: %v", err)
+	}
+
+	// second window in dirB
+	if err := tmuxCmd(socket1, "new-window", "-t", "work", "-n", "beta", "-c", dirB).Run(); err != nil {
+		t.Fatalf("new-window beta: %v", err)
+	}
+
+	// give shells a moment to initialize and set pane_current_path
+	time.Sleep(500 * time.Millisecond)
+
+	// verify source directories are what we expect
+	srcPathAlpha := paneCurrentPath(t, socket1, "work:0.0")
+	srcPathBeta := paneCurrentPath(t, socket1, "work:1.0")
+	t.Logf("source pane dirs: alpha=%s beta=%s", srcPathAlpha, srcPathBeta)
+
+	if srcPathAlpha != dirA {
+		t.Fatalf("expected alpha pane in %s, got %s", dirA, srcPathAlpha)
+	}
+	if srcPathBeta != dirB {
+		t.Fatalf("expected beta pane in %s, got %s", dirB, srcPathBeta)
+	}
+
+	// verify original session_path (should be $HOME from session creation,
+	// but the test server creates with -f /dev/null so it may vary)
+	srcSessionPath := sessionPath(t, socket1, "work")
+	t.Logf("source session_path: %s", srcSessionPath)
+
+	// ── save ─────────────────────────────────────────────────────────────
+
+	saveDir := t.TempDir()
+	ch := Save(Config{
+		SocketPath: socket1,
+		SaveDir:    saveDir,
+		Name:       "session-path-test",
+	})
+	for ev := range ch {
+		t.Logf("save: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("save error: %v", ev.Err)
+		}
+	}
+	tmux.Shutdown()
+
+	entries, err := ListSaves(saveDir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no save file: err=%v", err)
+	}
+	savedPath := entries[0].Path
+
+	// ── server 2: restore into a fresh instance ──────────────────────────
+
+	socket2, cleanup2, logDir2 := testutil.StartTmuxServer(t)
+	defer cleanup2()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
+
+	ch2 := Restore(Config{SocketPath: socket2, SaveDir: saveDir}, savedPath)
+	for ev := range ch2 {
+		t.Logf("restore: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("restore error: %v", ev.Err)
+		}
+	}
+	tmux.Shutdown()
+	time.Sleep(200 * time.Millisecond)
+
+	// ── verify session_path is $HOME, not a restored pane's dir ──────────
+
+	restoredSessionPath := sessionPath(t, socket2, "work")
+	t.Logf("restored session_path: %s (want: %s)", restoredSessionPath, home)
+
+	if restoredSessionPath != home {
+		t.Errorf("session_path after restore = %q, want %q ($HOME); "+
+			"new windows created by attached clients would incorrectly "+
+			"start in the restored pane's directory",
+			restoredSessionPath, home)
+	}
+
+	// verify restored panes still have their original working directories
+	time.Sleep(300 * time.Millisecond)
+	restoredAlphaPath := paneCurrentPath(t, socket2, "work:0.0")
+	restoredBetaPath := paneCurrentPath(t, socket2, "work:1.0")
+	t.Logf("restored pane dirs: alpha=%s beta=%s", restoredAlphaPath, restoredBetaPath)
+
+	if restoredAlphaPath != dirA {
+		t.Errorf("restored alpha pane_current_path = %q, want %q", restoredAlphaPath, dirA)
+	}
+	if restoredBetaPath != dirB {
+		t.Errorf("restored beta pane_current_path = %q, want %q", restoredBetaPath, dirB)
+	}
+}
+
 // TestRestoreWithUserConfigIntegration repeats the restore half of the
 // round-trip test but boots the destination server with the user's real
 // ~/.tmux.conf (including plugins). This catches phantom-session bugs that
