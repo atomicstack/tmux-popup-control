@@ -69,9 +69,6 @@ func DetachSessions(socketPath string, targets []string) error {
 			return err
 		}
 		if session == nil {
-			if err := detachSessionCLI(socketPath, trimmed); err != nil {
-				return err
-			}
 			continue
 		}
 		if err := session.Detach(); err != nil {
@@ -99,33 +96,35 @@ func KillSessions(socketPath string, targets []string) error {
 		if err != nil {
 			return err
 		}
-		if session != nil {
-			if err := session.Kill(); err != nil {
-				return err
-			}
-			if waitForSessionRemoval(socketPath, trimmed) {
-				continue
-			}
+		if session == nil {
+			continue
 		}
-		if err := killSessionCLI(socketPath, trimmed); err != nil {
+		id := session.ID()
+		if err := session.Kill(); err != nil {
 			return err
 		}
-		if !waitForSessionRemoval(socketPath, trimmed) {
-			return fmt.Errorf("session %s still exists after kill", trimmed)
+		if waitForSessionRemoval(socketPath, id) {
+			continue
+		}
+		if err := killSessionCLI(socketPath, trimmed, id); err != nil {
+			return err
+		}
+		if !waitForSessionRemoval(socketPath, id) {
+			return fmt.Errorf("session %s [%s] still exists after kill", trimmed, id)
 		}
 	}
 	return nil
 }
 
-func waitForSessionRemoval(socketPath, name string) bool {
+func waitForSessionRemoval(socketPath, id string) bool {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if !hasSessionCLI(socketPath, name) {
+		if !hasSessionCLI(socketPath, id) {
 			return true
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return !hasSessionCLI(socketPath, name)
+	return !hasSessionCLI(socketPath, id)
 }
 
 func ResolveSocketPath(flagValue string) (string, error) {
@@ -192,8 +191,8 @@ func sessionHasClient(client tmuxClient, session string) (bool, error) {
 	return false, nil
 }
 
-func killSessionCLI(socketPath, target string) error {
-	args := append(baseArgs(socketPath), "kill-session", "-t", target)
+func killSessionCLI(socketPath, name, id string) error {
+	args := append(baseArgs(socketPath), "kill-session", "-t", id)
 	err := runExecCommand("tmux", args...).Run()
 	if err == nil {
 		return nil
@@ -202,23 +201,10 @@ func killSessionCLI(socketPath, target string) error {
 	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 		return nil
 	}
-	return fmt.Errorf("failed to kill session %s: %w", target, err)
+	return fmt.Errorf("failed to kill session %s [%s]: %w", name, id, err)
 }
 
-func detachSessionCLI(socketPath, target string) error {
-	args := append(baseArgs(socketPath), "detach-client", "-s", target)
-	err := runExecCommand("tmux", args...).Run()
-	if err == nil {
-		return nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-		return nil
-	}
-	return fmt.Errorf("failed to detach session %s: %w", target, err)
-}
-
-func hasSessionCLI(socketPath, name string) bool {
-	args := append(baseArgs(socketPath), "has-session", "-t", name)
+func hasSessionCLI(socketPath, id string) bool {
+	args := append(baseArgs(socketPath), "has-session", "-t", id)
 	return runExecCommand("tmux", args...).Run() == nil
 }

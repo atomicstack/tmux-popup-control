@@ -75,6 +75,7 @@ type windowHandle interface {
 }
 
 type sessionHandle interface {
+	ID() string
 	Rename(string) error
 	Detach() error
 	Kill() error
@@ -208,6 +209,10 @@ func (h *realWindowHandle) Kill() error {
 
 type realSessionHandle struct {
 	session *gotmux.Session
+}
+
+func (h *realSessionHandle) ID() string {
+	return h.session.Id
 }
 
 func (h *realSessionHandle) Rename(name string) error {

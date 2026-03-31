@@ -51,12 +51,17 @@ func (s *stubWindowHandle) Kill() error {
 }
 
 type stubSessionHandle struct {
+	id          string
 	renameArgs  []string
 	renameErr   error
 	detachCalls int
 	detachErr   error
 	killCalls   int
 	killErr     error
+}
+
+func (s *stubSessionHandle) ID() string {
+	return s.id
 }
 
 func (s *stubSessionHandle) Rename(name string) error {
@@ -972,10 +977,10 @@ func TestRenameSessionValidation(t *testing.T) {
 }
 
 func TestRenameSessionUsesHandle(t *testing.T) {
-	handle := &stubSessionHandle{}
+	handle := &stubSessionHandle{id: "42"}
 	fake := &fakeClient{
 		getSessions: map[string]*gotmux.Session{
-			"dev": {Name: "dev"},
+			"dev": {Name: "dev", Id: "42"},
 		},
 	}
 	fake.useSessionHandles(t, map[string]*stubSessionHandle{"dev": handle})
@@ -988,11 +993,11 @@ func TestRenameSessionUsesHandle(t *testing.T) {
 	}
 }
 
-func TestDetachSessionsUsesHandles(t *testing.T) {
-	handle := &stubSessionHandle{}
+func TestDetachSessionsUsesHandle(t *testing.T) {
+	handle := &stubSessionHandle{id: "7"}
 	fake := &fakeClient{
 		getSessions: map[string]*gotmux.Session{
-			"dev": {Name: "dev"},
+			"dev": {Name: "dev", Id: "7"},
 		},
 		clients: []*gotmux.Client{
 			{Session: "dev"},
@@ -1009,10 +1014,10 @@ func TestDetachSessionsUsesHandles(t *testing.T) {
 }
 
 func TestDetachSessionsPropagatesError(t *testing.T) {
-	handle := &stubSessionHandle{detachErr: errors.New("boom")}
+	handle := &stubSessionHandle{id: "7", detachErr: errors.New("boom")}
 	fake := &fakeClient{
 		getSessions: map[string]*gotmux.Session{
-			"dev": {Name: "dev"},
+			"dev": {Name: "dev", Id: "7"},
 		},
 		clients: []*gotmux.Client{
 			{Session: "dev"},
@@ -1025,11 +1030,11 @@ func TestDetachSessionsPropagatesError(t *testing.T) {
 	}
 }
 
-func TestKillSessionsUsesHandles(t *testing.T) {
-	handle := &stubSessionHandle{}
+func TestKillSessionsUsesHandle(t *testing.T) {
+	handle := &stubSessionHandle{id: "3"}
 	fake := &fakeClient{
 		getSessions: map[string]*gotmux.Session{
-			"dev": {Name: "dev"},
+			"dev": {Name: "dev", Id: "3"},
 		},
 	}
 	fake.useSessionHandles(t, map[string]*stubSessionHandle{"dev": handle})
@@ -1043,10 +1048,10 @@ func TestKillSessionsUsesHandles(t *testing.T) {
 }
 
 func TestKillSessionsPropagatesError(t *testing.T) {
-	handle := &stubSessionHandle{killErr: errors.New("boom")}
+	handle := &stubSessionHandle{id: "3", killErr: errors.New("boom")}
 	fake := &fakeClient{
 		getSessions: map[string]*gotmux.Session{
-			"dev": {Name: "dev"},
+			"dev": {Name: "dev", Id: "3"},
 		},
 	}
 	fake.useSessionHandles(t, map[string]*stubSessionHandle{"dev": handle})
@@ -1062,6 +1067,13 @@ func TestSwitchPaneValidatesTarget(t *testing.T) {
 	}
 	if err := SwitchPane("", "", "dev:0"); err == nil || !strings.Contains(err.Error(), "invalid pane target") {
 		t.Fatalf("expected validation error, got %v", err)
+	}
+}
+
+func TestRealSessionHandleID(t *testing.T) {
+	handle := newSessionHandle(&gotmux.Session{Name: "claude", Id: "$5"})
+	if handle.ID() != "$5" {
+		t.Fatalf("expected $5, got %s", handle.ID())
 	}
 }
 
