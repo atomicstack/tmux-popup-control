@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
@@ -171,6 +173,8 @@ func Restore(cfg Config, file string) <-chan ProgressEvent {
 	}()
 	return ch
 }
+
+var greenCheck = lipgloss.NewStyle().Foreground(lipgloss.Color("#00c853")).Render("✓")
 
 // shellQuote wraps s in single quotes, escaping any embedded single quotes
 // using the standard sh '\'' technique.
@@ -471,16 +475,16 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 
 	// restore client session
 	step++
-	ch <- ProgressEvent{
-		Step:    step,
-		Total:   total,
-		Message: fmt.Sprintf("switching client to session %s", sf.ClientSession),
-		Kind:    "info",
-	}
 	if sf.ClientSession != "" {
 		if err := switchClientFn(cfg.SocketPath, cfg.ClientID, sf.ClientSession); err != nil {
 			return sendError(ch, "switching client to session %s: %w", sf.ClientSession, err)
 		}
+	}
+	ch <- ProgressEvent{
+		Step:    step,
+		Total:   total,
+		Message: fmt.Sprintf("switched client to session %s %s", sf.ClientSession, greenCheck),
+		Kind:    "info",
 	}
 
 	// schedule background cleanup of extracted pane content files. the
@@ -499,7 +503,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	ch <- ProgressEvent{
 		Step:    total,
 		Total:   total,
-		Message: fmt.Sprintf("restored %d session(s)", len(sf.Sessions)),
+		Message: fmt.Sprintf("restored %d session(s) %s", len(sf.Sessions), greenCheck),
 		Kind:    "info",
 		Done:    true,
 	}
