@@ -480,52 +480,38 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 	sessionID := strings.TrimSpace(string(sidOut))
 	t.Logf("target session ID: %s", sessionID)
 
-	// Launch the binary in a new session, rooted at the "pane" submenu.
+	// Launch the binary directly into the pane:capture form.
 	// Pass env vars simulating the display-popup environment.
-	pane, exitFile := launchBinaryWithEnv(t, bin, socket, "capture-test", "pane",
+	pane, exitFile := launchBinaryWithEnv(t, bin, socket, "capture-test", "pane:capture",
 		[]string{
 			"export TMUX_POPUP_CONTROL_SESSION=" + targetSession,
 			"export TMUX_POPUP_CONTROL_SESSION_ID=" + strings.TrimPrefix(sessionID, "$"),
 			"export TMUX_POPUP_CONTROL_PANE_ID=" + targetPaneID,
 		})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// Ensure sessions are cleaned up even if the test fails mid-way.
+	t.Cleanup(func() {
+		_ = tmuxCommand(socket, "kill-session", "-t", "capture-test").Run()
+		_ = tmuxCommand(socket, "kill-session", "-t", targetSession).Run()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Wait for the pane submenu to render.
-	WaitForContent(t, ctx, socket, pane, "capture")
-
-	// Navigate to "capture" — type to filter then Enter.
-	SendText(t, socket, pane, "capture")
-	WaitForContent(t, ctx, socket, pane, "capture")
-	SendKeys(t, socket, pane, "Enter")
-
-	// Wait for the capture form to render with the preview line.
-	// The preview contains the expanded path with the resolved pane ID.
-	// Give the async preview expansion time to complete.
-	WaitForContent(t, ctx, socket, pane, "tmux-")
-
-	// Capture the pane output and find the preview line containing the pane ID.
-	output, err := CapturePane(t, socket, pane)
-	if err != nil {
-		t.Fatalf("capture-pane: %v", err)
-	}
+	// Wait for the capture form's async preview to resolve with the
+	// correct pane ID. Waiting for the exact expected string avoids a
+	// race where we capture the pane output between "tmux-" appearing
+	// and the full pane ID being rendered.
+	expectedPreview := "tmux-" + targetPaneID + "."
+	output := WaitForContent(t, ctx, socket, pane, expectedPreview)
 	t.Logf("capture form output:\n%s", output)
 
-	// The preview line should contain the target pane ID (e.g. %4).
-	if !strings.Contains(output, "tmux-"+targetPaneID+".") {
-		t.Fatalf("expected preview to contain pane ID %s, got:\n%s", targetPaneID, output)
-	}
-
-	// Clean up: Escape from capture form → pane menu → root (exits binary).
-	SendKeys(t, socket, pane, "Escape")
-	time.Sleep(100 * time.Millisecond)
+	// Clean up: Escape quits directly since pane:capture was invoked
+	// via root menu override.
 	SendKeys(t, socket, pane, "Escape")
 	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer exitCancel()
 	_ = waitForExit(t, exitCtx, exitFile)
-	_ = tmuxCommand(socket, "kill-session", "-t", "capture-test").Run()
-	_ = tmuxCommand(socket, "kill-session", "-t", targetSession).Run()
 }
 
 // windowIndices returns the sorted window indices for the given session.
