@@ -153,6 +153,40 @@ func TestRootMenuLeafActionDeferredUntilPaneData(t *testing.T) {
 	}
 }
 
+func TestEscapeFromDirectCaptureFormQuits(t *testing.T) {
+	// When pane:capture is invoked directly via root menu override,
+	// Escape from the capture form should quit the app, not return
+	// to the root menu.
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "pane:capture"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Feed pane data to trigger the deferred action.
+	paneSnap := tmux.PaneSnapshot{
+		Panes: []tmux.Pane{
+			{ID: "s:0.0", PaneID: "%1", Session: "main", Current: true},
+		},
+		CurrentID:      "s:0.0",
+		CurrentLabel:   "s:0.0: test",
+		IncludeCurrent: true,
+	}
+	h.Send(backendEventMsg{event: backend.Event{Kind: backend.KindPanes, Data: paneSnap}})
+	if h.Model().mode != ModePaneCaptureForm {
+		t.Fatalf("mode = %v, want ModePaneCaptureForm", h.Model().mode)
+	}
+
+	// Press Escape to cancel the form — should quit since pane:capture
+	// was invoked directly and there's no meaningful menu to return to.
+	_, cmd := h.Model().handlePaneCaptureForm(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("expected quit command on escape from directly-invoked pane capture")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
 func TestRootMenuLeafActionHeaderUsesParentSegment(t *testing.T) {
 	// When --root-menu launches a leaf action like pane:capture, the root
 	// title should be the parent segment ("pane"), not the full colon-

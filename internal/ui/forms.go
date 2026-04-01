@@ -253,6 +253,9 @@ func (m *Model) handlePaneCaptureForm(msg tea.Msg) (bool, tea.Cmd) {
 	if cancel {
 		m.paneCaptureForm = nil
 		m.mode = ModeMenu
+		if m.rootMenuID == "pane:capture" {
+			return true, tea.Quit
+		}
 		return true, cmd
 	}
 	if done {
