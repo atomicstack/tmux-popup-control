@@ -1,11 +1,24 @@
 package ui
 
 import (
+	"os"
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 )
+
+// currentPaneIDWithFallback returns storeID if non-empty, otherwise reads
+// TMUX_POPUP_CONTROL_PANE_ID (set by main.sh) so pane actions work even
+// before the backend's first poll completes.
+func currentPaneIDWithFallback(storeID string) string {
+	if storeID != "" {
+		return storeID
+	}
+	return strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_ID"))
+}
 
 func (m *Model) handleActionResultMsg(msg tea.Msg) tea.Cmd {
 	result, ok := msg.(menu.ActionResult)
@@ -106,7 +119,7 @@ func (m *Model) menuContext() menu.Context {
 		CurrentWindowSession: m.windows.CurrentSession(),
 		WindowIncludeCurrent: m.windows.IncludeCurrent(),
 		Panes:                m.panes.Entries(),
-		CurrentPaneID:        m.panes.CurrentID(),
+		CurrentPaneID:        currentPaneIDWithFallback(m.panes.CurrentID()),
 		CurrentPaneLabel:     m.panes.CurrentLabel(),
 		PaneIncludeCurrent:   m.panes.IncludeCurrent(),
 	}

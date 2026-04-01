@@ -165,6 +165,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 		paneMap[p.Id] = p
 	}
 	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
+	hostSession := currentSessionName(client)
 	var snapshot PaneSnapshot
 	snapshot.IncludeCurrent = includeCurrent
 	for _, line := range lines {
@@ -173,6 +174,10 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 			continue
 		}
 		session := line.session
+		// The tmux format "session_attached" is true for all attached
+		// sessions, so line.current may be set for panes outside the
+		// popup's host session. Narrow it to the host session only.
+		current := line.current && (hostSession == "" || session == hostSession)
 		entry := Pane{
 			ID:        line.displayID,
 			PaneID:    line.paneID,
@@ -187,7 +192,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 			Height:    pane.Height,
 			Active:    pane.Active,
 			Label:     line.label,
-			Current:   line.current,
+			Current:   current,
 		}
 		if entry.Current {
 			snapshot.CurrentID = entry.ID
@@ -196,9 +201,24 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 		}
 		snapshot.Panes = append(snapshot.Panes, entry)
 	}
+	// Prefer the pane ID captured by main.sh before the popup opened.
+	// This is the most reliable source because it was resolved in the
+	// user's actual terminal context, not the control-mode client's.
+	if hpid := hostPaneID(); hpid != "" {
+		for i, p := range snapshot.Panes {
+			if p.PaneID == hpid {
+				snapshot.Panes[i].Current = true
+				snapshot.CurrentID = p.ID
+				snapshot.CurrentLabel = p.Label
+				snapshot.CurrentWindow = fmt.Sprintf("%s:%d", p.Session, p.WindowIdx)
+				break
+			}
+		}
+	}
 	if snapshot.CurrentID == "" {
+		// Fallback: find the active pane in the host session.
 		for _, p := range snapshot.Panes {
-			if p.Active {
+			if p.Active && (hostSession == "" || p.Session == hostSession) {
 				snapshot.CurrentID = p.ID
 				snapshot.CurrentLabel = p.Label
 				snapshot.CurrentWindow = fmt.Sprintf("%s:%d", p.Session, p.WindowIdx)
@@ -314,13 +334,45 @@ func realAttachedClients(client tmuxClient) map[string][]string {
 	return result
 }
 
+// hostPaneID returns the pane ID (e.g. "%4") of the pane that was active
+// when the popup was opened. main.sh captures #{pane_id} before opening
+// display-popup and passes it as TMUX_POPUP_CONTROL_PANE_ID.
+func hostPaneID() string {
+	return strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_ID"))
+}
+
+// hostSessionID returns the session ID of the popup's host session in
+// tmux's "$N" format (e.g. "$1"). It checks TMUX_POPUP_CONTROL_SESSION_ID
+// (set by main.sh) first, then falls back to parsing the TMUX env var.
+func hostSessionID() string {
+	if id := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_SESSION_ID")); id != "" {
+		if !strings.HasPrefix(id, "$") {
+			id = "$" + id
+		}
+		return id
+	}
+	parts := strings.Split(os.Getenv("TMUX"), ",")
+	if len(parts) >= 3 {
+		if id := strings.TrimSpace(parts[2]); id != "" {
+			return "$" + id
+		}
+	}
+	return ""
+}
+
 func currentSessionName(client tmuxClient) string {
-	if pane := strings.TrimSpace(os.Getenv("TMUX_PANE")); pane != "" {
-		if name, err := client.DisplayMessage(pane, "#{session_name}"); err == nil {
-			if name = strings.TrimSpace(name); name != "" {
-				return name
+	// Prefer the session ID — stable across renames.
+	if id := hostSessionID(); id != "" {
+		if sessions, err := client.ListSessions(); err == nil {
+			for _, s := range sessions {
+				if s.Id == id {
+					return s.Name
+				}
 			}
 		}
+	}
+	if name := popupSessionName(client); name != "" {
+		return name
 	}
 	if clients, err := client.ListClients(); err == nil {
 		for _, c := range clients {

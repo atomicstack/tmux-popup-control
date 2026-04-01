@@ -439,6 +439,95 @@ func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
 	_ = tmuxCommand(socket, "kill-session", "-t", "mywork").Run()
 }
 
+// TestPaneCaptureResolvesCorrectPaneID launches the binary with two sessions
+// and verifies that the pane:capture form's preview shows the pane ID of the
+// active pane in the host session, not a pane from another session.
+//
+// Reproduces a bug where #{pane_id} in the capture template resolves to %1
+// (from the first session) instead of the actual active pane (e.g. %4).
+func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
+	bin := buildBinary(t)
+	socket, cleanup, logDir := StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	// StartTmuxServer creates "tmux-popup-control-test" as the initial session.
+	// Create a second session and split it to get higher pane IDs.
+	targetSession := "zzz-target"
+	if err := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", targetSession).Run(); err != nil {
+		t.Fatalf("create target session: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := tmuxCommand(socket, "split-window", "-t", targetSession).Run(); err != nil {
+			t.Fatalf("split-window %d: %v", i, err)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	// Get the active pane ID in the target session.
+	activeOut, err := tmuxCommand(socket, "display-message", "-t", targetSession, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get active pane: %v", err)
+	}
+	targetPaneID := strings.TrimSpace(string(activeOut))
+	t.Logf("active pane in %s: %s", targetSession, targetPaneID)
+
+	// Get the session ID for the target session.
+	sidOut, err := tmuxCommand(socket, "display-message", "-t", targetSession, "-p", "#{session_id}").Output()
+	if err != nil {
+		t.Fatalf("get session id: %v", err)
+	}
+	sessionID := strings.TrimSpace(string(sidOut))
+	t.Logf("target session ID: %s", sessionID)
+
+	// Launch the binary in a new session, rooted at the "pane" submenu.
+	// Pass env vars simulating the display-popup environment.
+	pane, exitFile := launchBinaryWithEnv(t, bin, socket, "capture-test", "pane",
+		[]string{
+			"export TMUX_POPUP_CONTROL_SESSION=" + targetSession,
+			"export TMUX_POPUP_CONTROL_SESSION_ID=" + strings.TrimPrefix(sessionID, "$"),
+			"export TMUX_POPUP_CONTROL_PANE_ID=" + targetPaneID,
+		})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Wait for the pane submenu to render.
+	WaitForContent(t, ctx, socket, pane, "capture")
+
+	// Navigate to "capture" — type to filter then Enter.
+	SendText(t, socket, pane, "capture")
+	WaitForContent(t, ctx, socket, pane, "capture")
+	SendKeys(t, socket, pane, "Enter")
+
+	// Wait for the capture form to render with the preview line.
+	// The preview contains the expanded path with the resolved pane ID.
+	// Give the async preview expansion time to complete.
+	WaitForContent(t, ctx, socket, pane, "tmux-")
+
+	// Capture the pane output and find the preview line containing the pane ID.
+	output, err := CapturePane(t, socket, pane)
+	if err != nil {
+		t.Fatalf("capture-pane: %v", err)
+	}
+	t.Logf("capture form output:\n%s", output)
+
+	// The preview line should contain the target pane ID (e.g. %4).
+	if !strings.Contains(output, "tmux-"+targetPaneID+".") {
+		t.Fatalf("expected preview to contain pane ID %s, got:\n%s", targetPaneID, output)
+	}
+
+	// Clean up: Escape from capture form → pane menu → root (exits binary).
+	SendKeys(t, socket, pane, "Escape")
+	time.Sleep(100 * time.Millisecond)
+	SendKeys(t, socket, pane, "Escape")
+	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer exitCancel()
+	_ = waitForExit(t, exitCtx, exitFile)
+	_ = tmuxCommand(socket, "kill-session", "-t", "capture-test").Run()
+	_ = tmuxCommand(socket, "kill-session", "-t", targetSession).Run()
+}
+
 // windowIndices returns the sorted window indices for the given session.
 func windowIndices(t *testing.T, socket, session string) []int {
 	t.Helper()

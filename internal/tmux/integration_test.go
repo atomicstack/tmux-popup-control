@@ -272,6 +272,256 @@ func TestGotmuxccConnectionDoesNotCreateSessionIntegration(t *testing.T) {
 	Shutdown()
 }
 
+// TestFetchPanesCurrentPaneMultiSessionIntegration verifies that FetchPanes
+// identifies the correct current pane when multiple sessions exist. This
+// reproduces a bug where, inside display-popup (TMUX_PANE empty), the current
+// pane resolves to a low-numbered pane (e.g. %0) from the wrong session
+// instead of the actual active pane (e.g. %4) in the host session.
+//
+// The bug occurs because: (1) currentSessionName falls back to the first
+// client from ListClients, which may belong to a different session, and
+// (2) the tmux format "session_attached" is false for all sessions in the
+// test env (no real TTY clients), so the Active fallback picks the first
+// active pane it finds — which is in whichever session appears first.
+func TestFetchPanesCurrentPaneMultiSessionIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	Shutdown()
+
+	// StartTmuxServer creates "tmux-popup-control-test" (%0) as the initial
+	// session. Create a second session — this will get higher pane IDs.
+	// We'll pretend the popup belongs to the SECOND session. The bug is
+	// that FetchPanes picks the first session's active pane instead.
+	//
+	// Name the target session so it sorts AFTER the initial session to
+	// ensure the initial session's panes appear first in list-panes output,
+	// reproducing the ordering the user sees in production.
+	targetSession := "zzz-target"
+	if err := exec.Command("tmux", "-S", socket, "new-session", "-d", "-s", targetSession).Run(); err != nil {
+		t.Fatalf("create target session: %v", err)
+	}
+	waitForSession(t, socket, targetSession)
+
+	// Split a few times to create panes with higher IDs.
+	for i := 0; i < 3; i++ {
+		if err := exec.Command("tmux", "-S", socket, "split-window", "-t", targetSession).Run(); err != nil {
+			t.Fatalf("split-window %d: %v", i, err)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	// Find the active pane ID in the target session via tmux directly.
+	activeOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", targetSession, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get active pane: %v", err)
+	}
+	targetPaneID := strings.TrimSpace(string(activeOut))
+	t.Logf("active pane in %s: %s", targetSession, targetPaneID)
+
+	// Also get the active pane in the initial session for comparison.
+	initialSession := "tmux-popup-control-test"
+	initialOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", initialSession, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get initial pane: %v", err)
+	}
+	initialPaneID := strings.TrimSpace(string(initialOut))
+	t.Logf("active pane in %s: %s", initialSession, initialPaneID)
+
+	if targetPaneID == initialPaneID {
+		t.Fatalf("expected different active panes in different sessions, both are %s", targetPaneID)
+	}
+
+	// Simulate the display-popup environment: TMUX_PANE is empty.
+	t.Setenv("TMUX_PANE", "")
+	// Set TMUX to point at the target session's ID.
+	sessionIDOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", targetSession, "-p", "#{session_id}").Output()
+	if err != nil {
+		t.Fatalf("get session id: %v", err)
+	}
+	sessionID := strings.TrimSpace(string(sessionIDOut))
+	t.Logf("target session ID: %s", sessionID)
+
+	pidOut, err := exec.Command("tmux", "-S", socket, "display-message", "-p", "#{pid}").Output()
+	if err != nil {
+		t.Fatalf("get pid: %v", err)
+	}
+	pid := strings.TrimSpace(string(pidOut))
+	tmuxEnv := fmt.Sprintf("%s,%s,%s", socket, pid, strings.TrimPrefix(sessionID, "$"))
+	t.Setenv("TMUX", tmuxEnv)
+	t.Logf("TMUX=%s", tmuxEnv)
+
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_FORMAT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_FILTER", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION", targetSession)
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_ID", strings.TrimPrefix(sessionID, "$"))
+
+	snap, err := FetchPanes(socket)
+	if err != nil {
+		t.Fatalf("FetchPanes: %v", err)
+	}
+
+	t.Logf("FetchPanes returned CurrentID=%q CurrentLabel=%q CurrentWindow=%q",
+		snap.CurrentID, snap.CurrentLabel, snap.CurrentWindow)
+	for _, p := range snap.Panes {
+		t.Logf("  pane: id=%q paneID=%q session=%q current=%v active=%v",
+			p.ID, p.PaneID, p.Session, p.Current, p.Active)
+	}
+
+	// Find the pane that FetchPanes considers "current" — either via the
+	// Current field or via snapshot.CurrentID (set by the Active fallback).
+	if snap.CurrentID == "" {
+		t.Fatalf("FetchPanes did not identify any current pane")
+	}
+
+	// Look up the pane entry matching CurrentID.
+	var currentPane *Pane
+	for i := range snap.Panes {
+		if snap.Panes[i].ID == snap.CurrentID {
+			currentPane = &snap.Panes[i]
+			break
+		}
+	}
+	if currentPane == nil {
+		t.Fatalf("CurrentID %q not found in pane entries", snap.CurrentID)
+	}
+
+	if currentPane.Session != targetSession {
+		t.Fatalf("current pane is in session %q, want %q (pane %s instead of one in %s)",
+			currentPane.Session, targetSession, currentPane.PaneID, targetSession)
+	}
+
+	if currentPane.PaneID != targetPaneID {
+		t.Fatalf("current pane is %s, want %s (the active pane in %s)",
+			currentPane.PaneID, targetPaneID, targetSession)
+	}
+
+	Shutdown()
+}
+
+// TestFetchPanesCurrentPaneMultiWindowIntegration verifies that FetchPanes
+// identifies the correct current pane when the host session has multiple
+// windows and the active window is NOT the first one.
+//
+// Reproduces a bug where pane_id always resolves to %1 regardless of which
+// window the popup is opened from, because FetchPanes infers the current
+// pane via window_active/pane_active tmux formats rather than using the
+// pane ID captured by main.sh before the popup opened.
+func TestFetchPanesCurrentPaneMultiWindowIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	Shutdown()
+
+	// StartTmuxServer creates "tmux-popup-control-test" as the initial
+	// session with one window (pane %0). Create additional windows so
+	// the session has three windows total.
+	session := "tmux-popup-control-test"
+	for i := 0; i < 2; i++ {
+		if err := exec.Command("tmux", "-S", socket, "new-window", "-t", session).Run(); err != nil {
+			t.Fatalf("new-window %d: %v", i, err)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	// Select the last window (index 2) so window 0 is NOT active.
+	if err := exec.Command("tmux", "-S", socket, "select-window", "-t", session+":2").Run(); err != nil {
+		t.Fatalf("select-window: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// Get the pane ID of the active pane in the now-active window.
+	activeOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", session, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get active pane: %v", err)
+	}
+	targetPaneID := strings.TrimSpace(string(activeOut))
+	t.Logf("active pane in %s (window 2): %s", session, targetPaneID)
+
+	// Also get the pane ID in window 0 — this is the WRONG pane that the
+	// old code would pick via the Active fallback.
+	wrongOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", session+":0", "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get window-0 pane: %v", err)
+	}
+	wrongPaneID := strings.TrimSpace(string(wrongOut))
+	t.Logf("pane in %s window 0 (wrong): %s", session, wrongPaneID)
+
+	if targetPaneID == wrongPaneID {
+		t.Fatalf("test setup error: target and wrong pane IDs are the same: %s", targetPaneID)
+	}
+
+	// Get the session ID.
+	sidOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", session, "-p", "#{session_id}").Output()
+	if err != nil {
+		t.Fatalf("get session id: %v", err)
+	}
+	sessionID := strings.TrimSpace(string(sidOut))
+	t.Logf("session ID: %s", sessionID)
+
+	// Simulate the display-popup environment.
+	t.Setenv("TMUX_PANE", "")
+	pidOut, err := exec.Command("tmux", "-S", socket, "display-message", "-p", "#{pid}").Output()
+	if err != nil {
+		t.Fatalf("get pid: %v", err)
+	}
+	pid := strings.TrimSpace(string(pidOut))
+	tmuxEnv := fmt.Sprintf("%s,%s,%s", socket, pid, strings.TrimPrefix(sessionID, "$"))
+	t.Setenv("TMUX", tmuxEnv)
+
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_FORMAT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_FILTER", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION", session)
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_ID", strings.TrimPrefix(sessionID, "$"))
+	// This is the key env var — main.sh captures the pane ID before the
+	// popup opens, so FetchPanes should use it directly.
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", targetPaneID)
+
+	snap, err := FetchPanes(socket)
+	if err != nil {
+		t.Fatalf("FetchPanes: %v", err)
+	}
+
+	t.Logf("FetchPanes returned CurrentID=%q CurrentLabel=%q CurrentWindow=%q",
+		snap.CurrentID, snap.CurrentLabel, snap.CurrentWindow)
+	for _, p := range snap.Panes {
+		t.Logf("  pane: id=%q paneID=%q session=%q current=%v active=%v",
+			p.ID, p.PaneID, p.Session, p.Current, p.Active)
+	}
+
+	if snap.CurrentID == "" {
+		t.Fatalf("FetchPanes did not identify any current pane")
+	}
+
+	var currentPane *Pane
+	for i := range snap.Panes {
+		if snap.Panes[i].ID == snap.CurrentID {
+			currentPane = &snap.Panes[i]
+			break
+		}
+	}
+	if currentPane == nil {
+		t.Fatalf("CurrentID %q not found in pane entries", snap.CurrentID)
+	}
+
+	if currentPane.PaneID != targetPaneID {
+		t.Fatalf("current pane is %s, want %s (the active pane in window 2, not window 0's %s)",
+			currentPane.PaneID, targetPaneID, wrongPaneID)
+	}
+
+	Shutdown()
+}
+
 // has no visible effect — but the command should not error.
 func TestSwitchClientWithoutClientIDIntegration(t *testing.T) {
 	testutil.RequireTmux(t)

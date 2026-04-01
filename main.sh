@@ -3,9 +3,13 @@
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CMD="$CURRENT_DIR/tmux-popup-control"
 
-POPUP_HINTS="$(tmux display-message -p '#{client_tty},#{session_name}')"
+POPUP_HINTS="$(tmux display-message -p '#{client_tty},#{session_name},#{session_id},#{pane_id}')"
 POPUP_CLIENT="${POPUP_HINTS%%,*}"
-POPUP_SESSION="${POPUP_HINTS#*,}"
+POPUP_REST="${POPUP_HINTS#*,}"
+POPUP_SESSION="${POPUP_REST%%,*}"
+POPUP_REST2="${POPUP_REST#*,}"
+POPUP_SESSION_ID="${POPUP_REST2%%,*}"
+POPUP_PANE_ID="${POPUP_REST2#*,}"
 
 # Options that the Go binary reads only from env vars (no ShowOption fallback)
 # need to be propagated from tmux options into the display-popup environment.
@@ -23,6 +27,8 @@ fi
 tmux display-popup -w 90% -h 80% \
   -e "TMUX_POPUP_CONTROL_CLIENT=$POPUP_CLIENT" \
   -e "TMUX_POPUP_CONTROL_SESSION=$POPUP_SESSION" \
+  -e "TMUX_POPUP_CONTROL_SESSION_ID=$POPUP_SESSION_ID" \
+  -e "TMUX_POPUP_CONTROL_PANE_ID=$POPUP_PANE_ID" \
   "${EXTRA_ENV[@]}" \
   `# -e GOTMUXCC_TRACE=1 -e GOTMUXCC_TRACE_FILE=$CURRENT_DIR/gotmuxcc_trace.log --trace` \
   -E $CMD "$@"
