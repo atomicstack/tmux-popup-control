@@ -392,10 +392,57 @@ the work is split into independently implementable and testable chunks:
 - verify styling across different terminal sizes
 - verify no regression in existing command-name completion
 
-## out of scope
+## out of scope (for this phase)
 
-- completion for `set-option`/`show-option` option names (separate data source)
+- completion for `set-option`/`show-option` option names and values
 - filesystem path completion for `working-directory`/`start-directory` types
 - command history-based completion
-- completion for nested command arguments (e.g. the `command` arg in `bind-key`)
-  beyond offering command names — the nested command's own args are not completed
+- recursive command completion (e.g. completing the args of a `command`
+  positional inside `bind-key`)
+
+## future extensibility
+
+two planned follow-ups informed the design of this phase:
+
+### option name and value completion
+
+commands like `set-option`, `show-option`, `set-hook`, etc. take option names
+as positional arguments and option values as subsequent arguments. adding this
+requires:
+
+1. a new data source: `tmux show-options` (or parsing `tmux show-options -A`)
+   to get option names and their current values
+2. a new argument type mapping: when the analyser sees a positional of type
+   `option` or detects a `set-option`/`show-option` command, it routes to an
+   option-specific resolver
+
+the current design supports this cleanly because:
+- `Resolver` is an interface — adding an option resolver is just a new
+  `Resolve()` case for `"option-name"` and `"option-value"` argument types
+- `PositionalDef` already captures positional arg names, so the analyser can
+  detect when a positional is an option name vs a generic value
+- the dropdown widget is type-agnostic — it renders whatever candidates the
+  resolver provides
+
+no structural changes needed; it's additive.
+
+### recursive command completion
+
+commands like `bind-key`, `if-shell`, `confirm-before`, and `run-shell` accept
+other tmux commands as arguments. recursive completion would let users complete
+the nested command's flags and arguments too.
+
+the current design supports this because:
+- `Analyse()` takes a schema and input text — calling it recursively on the
+  substring after the positional `command` argument is straightforward
+- the `CompletionContext` already distinguishes `ContextCommandName` from
+  `ContextFlagValue`/`ContextPositionalValue`, so the analyser can detect
+  "we're inside a nested command" by checking whether the current positional
+  has type `command` and the text after it looks like a new command invocation
+- the schema registry is a flat map, so looking up the nested command's schema
+  is the same operation as the outer one
+
+the main work for recursive completion is in the analyser (detecting the
+nesting boundary and recursing) and in the ghost hint system (showing hints
+for the nested command's arguments). the dropdown, resolver, and schema
+parser need no changes.
