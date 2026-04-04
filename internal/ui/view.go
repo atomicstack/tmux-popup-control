@@ -230,7 +230,7 @@ func (m *Model) viewVertical(header string) string {
 	}
 	bottomLines = applyWidth(bottomLines, m.width)
 	lines = append(lines, bottomLines...)
-	return renderLines(lines)
+	return m.overlayCompletion(renderLines(lines))
 }
 
 // viewSideBySide renders the menu on the left and a preview panel on the right.
@@ -341,7 +341,7 @@ func (m *Model) viewSideBySide(header string) string {
 	bottomLines = applyWidth(bottomLines, m.width)
 	bottomStr := renderLines(bottomLines)
 
-	return topSection + "\n" + bottomStr
+	return m.overlayCompletion(topSection + "\n" + bottomStr)
 }
 
 // buildItemLine constructs a single styledLine for a menu item.
@@ -711,10 +711,66 @@ func (m *Model) handleWindowSizeMsg(msg tea.Msg) tea.Cmd {
 	if !m.fixedHeight {
 		m.height = resize.Height
 	}
+	m.dismissCompletion()
 	if current := m.currentLevel(); current != nil {
 		m.syncViewport(current)
 	}
 	return nil
+}
+
+func (m *Model) overlayCompletion(rendered string) string {
+	if !m.completionVisible() {
+		return rendered
+	}
+
+	maxH := m.height - 4
+	if maxH < 3 {
+		maxH = 3
+	}
+	maxW := m.width - m.completion.anchorCol
+	if maxW < 20 {
+		maxW = 20
+	}
+	dropdown := m.completion.view(maxW, maxH)
+	if dropdown == "" {
+		return rendered
+	}
+
+	lines := strings.Split(rendered, "\n")
+	dropLines := strings.Split(dropdown, "\n")
+	insertEnd := len(lines) - 2
+	if insertEnd < 0 {
+		insertEnd = 0
+	}
+	insertStart := insertEnd - len(dropLines)
+	if insertStart < 0 {
+		insertStart = 0
+	}
+
+	for idx, line := range dropLines {
+		lineIdx := insertStart + idx
+		if lineIdx < 0 || lineIdx >= len(lines) {
+			continue
+		}
+		lines[lineIdx] = overlayAt(lines[lineIdx], line, m.completion.anchorCol, m.width)
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func overlayAt(baseLine, overlayStr string, col, maxWidth int) string {
+	if col < 0 {
+		col = 0
+	}
+	prefix := ansi.Truncate(baseLine, col, "")
+	if pad := col - lipgloss.Width(prefix); pad > 0 {
+		prefix += strings.Repeat(" ", pad)
+	}
+	line := prefix + overlayStr
+	if maxWidth > 0 && lipgloss.Width(line) > maxWidth {
+		line = ansi.Truncate(line, maxWidth, "")
+	}
+	return line
 }
 
 func (m *Model) maxVisibleItems() int {

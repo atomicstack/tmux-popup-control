@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -325,6 +326,23 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	if m.mode != ModeMenu {
 		return nil
 	}
+	if m.completionVisible() {
+		switch keyMsg.String() {
+		case "up":
+			m.completion.moveUp()
+			return nil
+		case "down":
+			m.completion.moveDown()
+			return nil
+		case "tab":
+			return m.acceptCompletion()
+		case "esc":
+			m.dismissCompletion()
+			return nil
+		case "enter":
+			return m.acceptCompletion()
+		}
+	}
 	if keyMsg.String() == "tab" {
 		if current := m.currentLevel(); current != nil {
 			if current.MultiSelect {
@@ -548,6 +566,11 @@ func (m *Model) applyRootMenuOverride(requested string) {
 			m.errMsg = ""
 			if node.FilterCommand {
 				m.commandItemsCache = items
+				labels := make([]string, 0, len(items))
+				for _, item := range items {
+					labels = append(labels, item.Label)
+				}
+				m.commandSchemas = cmdparse.BuildRegistry(labels)
 			}
 		}
 	} else {

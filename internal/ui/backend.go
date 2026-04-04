@@ -228,6 +228,9 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 				m.rebuildTreeItems(lvl, ts)
 			}
 		}
+		if currentLvl != nil && currentLvl.Node != nil && currentLvl.Node.FilterCommand {
+			m.triggerCompletion()
+		}
 	}
 
 	// Execute any deferred leaf action once pane data has arrived.

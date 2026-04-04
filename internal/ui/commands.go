@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -75,6 +76,11 @@ func (m *Model) handleCommandPreloadMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	m.commandItemsCache = preload.items
+	labels := make([]string, 0, len(preload.items))
+	for _, item := range preload.items {
+		labels = append(labels, item.Label)
+	}
+	m.commandSchemas = cmdparse.BuildRegistry(labels)
 	return nil
 }
 

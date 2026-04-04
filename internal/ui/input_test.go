@@ -57,3 +57,21 @@ func TestFilterPromptPlaceholder(t *testing.T) {
 		t.Fatalf("expected placeholder in prompt, got %q", prompt)
 	}
 }
+
+func TestAutoCompleteGhostStillUsesCommandNameForFirstToken(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+	current := newLevel("command", "command", []menu.Item{
+		{ID: "kill-session", Label: "kill-session [-aC] [-t target-session]"},
+	}, node)
+	current.Cursor = 0
+	current.SetFilter("kill-s", len([]rune("kill-s")))
+	m.stack = []*level{current}
+
+	if ghost := m.autoCompleteGhost(); ghost != "ession" {
+		t.Fatalf("expected command ghost 'ession', got %q", ghost)
+	}
+}

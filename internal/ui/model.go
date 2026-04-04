@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/cursor"
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
+	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/data/dispatcher"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -100,6 +101,8 @@ type Model struct {
 	pendingWindowSwap *menu.Item
 	pendingPaneSwap   *menu.Item
 	commandItemsCache []menu.Item
+	commandSchemas    map[string]*cmdparse.CommandSchema
+	completion        *completionState
 	noPreview         bool
 	filterCursor      cursor.Model
 	filterCursorDirty bool

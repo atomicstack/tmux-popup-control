@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 )
 
@@ -42,6 +43,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.noteFilterCursorChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
+		m.triggerCompletion()
 		events.Filter.Cleared(current.ID)
 		m.syncTreeFilter(current)
 		m.syncFilterViewport(current)
@@ -54,6 +56,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.noteFilterCursorChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
+		m.triggerCompletion()
 		events.Filter.WordBackspace(current.ID, current.Filter)
 		m.syncTreeFilter(current)
 		m.syncFilterViewport(current)
@@ -64,6 +67,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
+		m.triggerCompletion()
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	case "ctrl+e":
@@ -72,6 +76,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
+		m.triggerCompletion()
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	case "alt+b":
@@ -80,6 +85,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
+		m.triggerCompletion()
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
 		return true, nil
 	case "alt+f":
@@ -88,6 +94,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
+		m.triggerCompletion()
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
 		return true, nil
 	case "backspace":
@@ -106,6 +113,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
+		m.triggerCompletion()
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	case "right":
@@ -114,6 +122,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
+		m.triggerCompletion()
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	default:
@@ -153,6 +162,7 @@ func (m *Model) appendToFilter(text string) bool {
 	m.noteFilterCursorChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
+	m.triggerCompletion()
 	events.Filter.Append(current.ID, current.Filter)
 	m.syncTreeFilter(current)
 	m.syncFilterViewport(current)
@@ -171,6 +181,7 @@ func (m *Model) removeFilterRune() bool {
 	m.noteFilterCursorChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
+	m.triggerCompletion()
 	events.Filter.Backspace(current.ID, current.Filter)
 	m.syncTreeFilter(current)
 	m.syncFilterViewport(current)
@@ -274,6 +285,22 @@ func (m *Model) autoCompleteGhost() string {
 	if current.FilterCursorPos() != len([]rune(current.Filter)) {
 		return ""
 	}
+
+	if m.completion != nil {
+		if m.completion.visible && len(m.completion.filtered) > 0 {
+			return m.completion.ghostHint(m.completion.prefix)
+		}
+		if !m.completion.visible && m.completion.typeLabel != "" && m.completion.prefix == "" {
+			return m.completion.typeLabel
+		}
+	}
+
+	if current.Filter == "" {
+		return ""
+	}
+	if strings.Contains(current.Filter, " ") {
+		return ""
+	}
 	if current.Cursor < 0 || current.Cursor >= len(current.Items) {
 		return ""
 	}
@@ -284,6 +311,143 @@ func (m *Model) autoCompleteGhost() string {
 		return ""
 	}
 	return item.ID[len(current.Filter):]
+}
+
+// triggerCompletion analyses the current command input and updates the
+// completion dropdown or placeholder state.
+func (m *Model) triggerCompletion() {
+	current := m.currentLevel()
+	if current == nil || current.Node == nil || !current.Node.FilterCommand {
+		m.dismissCompletion()
+		return
+	}
+	if current.FilterCursorPos() != len([]rune(current.Filter)) {
+		m.dismissCompletion()
+		return
+	}
+	if m.commandSchemas == nil {
+		m.dismissCompletion()
+		return
+	}
+
+	ctx := cmdparse.Analyse(m.commandSchemas, current.Filter)
+	typeLabel := ctx.TypeLabel
+	if typeLabel == "" {
+		typeLabel = ctx.ArgType
+	}
+
+	switch ctx.Kind {
+	case cmdparse.ContextFlagName:
+		schema := m.lookupCommandSchema(current.Filter)
+		if schema == nil {
+			m.dismissCompletion()
+			return
+		}
+		candidates := cmdparse.FlagCandidates(schema, ctx.FlagsUsed)
+		if len(candidates) == 0 {
+			m.dismissCompletion()
+			return
+		}
+		values := make([]string, 0, len(candidates))
+		labels := make(map[string]string, len(candidates))
+		for _, candidate := range candidates {
+			value := "-" + string(candidate.Flag)
+			values = append(values, value)
+			labels[value] = candidate.Label
+		}
+		m.openLabeledCompletion(values, labels, "flag", "flag", ctx.Prefix)
+	case cmdparse.ContextFlagValue, cmdparse.ContextPositionalValue:
+		resolver := cmdparse.NewStoreResolver(&modelDataSource{
+			sessions: m.sessions,
+			windows:  m.windows,
+			panes:    m.panes,
+			schemas:  m.commandSchemas,
+		})
+		candidates := resolver.Resolve(ctx.ArgType)
+		if len(candidates) == 0 {
+			m.completion = &completionState{
+				typeLabel: typeLabel,
+				argType:   ctx.ArgType,
+				prefix:    ctx.Prefix,
+			}
+			return
+		}
+		m.openCompletion(candidates, ctx.ArgType, typeLabel, ctx.Prefix)
+	default:
+		m.dismissCompletion()
+	}
+}
+
+func (m *Model) openCompletion(items []string, argType, typeLabel, prefix string) {
+	m.openLabeledCompletion(items, nil, argType, typeLabel, prefix)
+}
+
+func (m *Model) openLabeledCompletion(items []string, labels map[string]string, argType, typeLabel, prefix string) {
+	current := m.currentLevel()
+	if current == nil {
+		m.dismissCompletion()
+		return
+	}
+
+	anchorCol := 2 + current.FilterCursorPos() - len([]rune(prefix))
+	if anchorCol < 0 {
+		anchorCol = 0
+	}
+
+	m.completion = newCompletionStateWithLabels(items, labels, argType, typeLabel, anchorCol)
+	if prefix != "" {
+		m.completion.applyFilter(prefix)
+	}
+	if len(m.completion.filtered) == 0 {
+		m.dismissCompletion()
+	}
+}
+
+func (m *Model) dismissCompletion() {
+	m.completion = nil
+}
+
+func (m *Model) lookupCommandSchema(input string) *cmdparse.CommandSchema {
+	fields := strings.Fields(input)
+	if len(fields) == 0 || m.commandSchemas == nil {
+		return nil
+	}
+	return m.commandSchemas[fields[0]]
+}
+
+func (m *Model) completionVisible() bool {
+	return m.completion != nil && m.completion.visible && len(m.completion.filtered) > 0
+}
+
+func (m *Model) acceptCompletion() tea.Cmd {
+	if m.completion == nil {
+		return nil
+	}
+	selected := m.completion.selected()
+	if selected == "" {
+		m.dismissCompletion()
+		return nil
+	}
+
+	current := m.currentLevel()
+	if current == nil {
+		m.dismissCompletion()
+		return nil
+	}
+
+	filter := current.Filter
+	prefix := m.completion.prefix
+	if prefix != "" && strings.HasSuffix(filter, prefix) {
+		filter = filter[:len(filter)-len(prefix)]
+	}
+	newFilter := filter + selected + " "
+	before := current.FilterCursorPos()
+	current.SetFilter(newFilter, len([]rune(newFilter)))
+	m.noteFilterCursorChange(current, before)
+	m.syncFilterViewport(current)
+	m.dismissCompletion()
+	m.triggerCompletion()
+	return nil
 }
 
 func (m *Model) renderFilterCursor(char string) string {
