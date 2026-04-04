@@ -723,30 +723,67 @@ func (m *Model) overlayCompletion(rendered string) string {
 		return rendered
 	}
 
-	maxH := m.height - 4
-	if maxH < 3 {
-		maxH = 3
+	lines := strings.Split(rendered, "\n")
+	statusIdx := len(lines) - 2
+	if statusIdx < 0 {
+		statusIdx = 0
 	}
+	spaceAbove := statusIdx
+	spaceBelow := 0
+	if m.height > len(lines) {
+		spaceBelow = m.height - len(lines)
+	}
+
 	maxW := m.width - m.completion.anchorCol
 	if maxW < 20 {
 		maxW = 20
 	}
-	dropdown := m.completion.view(maxW, maxH)
-	if dropdown == "" {
+
+	maxH := m.height - 4
+	if maxH < 3 {
+		maxH = 3
+	}
+	naturalDropdown := m.completion.view(maxW, maxH)
+	if naturalDropdown == "" {
 		return rendered
 	}
 
-	lines := strings.Split(rendered, "\n")
-	dropLines := strings.Split(dropdown, "\n")
-	insertEnd := len(lines) - 2
-	if insertEnd < 0 {
-		insertEnd = 0
+	dropLines := strings.Split(naturalDropdown, "\n")
+	placeBelow := spaceBelow > 0 && len(dropLines) > spaceAbove
+
+	if placeBelow {
+		dropdown := m.completion.view(maxW, spaceBelow)
+		if dropdown == "" {
+			return rendered
+		}
+		dropLines = strings.Split(dropdown, "\n")
+		insertStart := len(lines)
+		for len(lines) < insertStart+len(dropLines) {
+			lines = append(lines, "")
+		}
+		for idx, line := range dropLines {
+			lineIdx := insertStart + idx
+			if lineIdx >= len(lines) {
+				break
+			}
+			lines[lineIdx] = overlayAt(lines[lineIdx], line, m.completion.anchorCol, m.width)
+		}
+		return strings.Join(lines, "\n")
 	}
+
+	if spaceAbove > 0 {
+		dropdown := m.completion.view(maxW, spaceAbove)
+		if dropdown == "" {
+			return rendered
+		}
+		dropLines = strings.Split(dropdown, "\n")
+	}
+
+	insertEnd := statusIdx
 	insertStart := insertEnd - len(dropLines)
 	if insertStart < 0 {
 		insertStart = 0
 	}
-
 	for idx, line := range dropLines {
 		lineIdx := insertStart + idx
 		if lineIdx < 0 || lineIdx >= len(lines) {

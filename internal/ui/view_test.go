@@ -48,3 +48,45 @@ func TestViewOverlaysCompletionAbovePrompt(t *testing.T) {
 		t.Fatalf("expected prompt to remain visible, got:\n%s", view)
 	}
 }
+
+func TestViewOverlaysCompletionBelowPromptWhenInsufficientRoomAbove(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 60, Height: 12})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+	lvl := newLevel("command", "command", []menu.Item{
+		{ID: "move-window", Label: "move-window [-dr] [-s src-window] [-t dst-window]"},
+	}, node)
+	lvl.SetFilter("move-window -t ", len([]rune("move-window -t ")))
+	m.stack = []*level{lvl}
+	m.completion = newCompletionState([]string{
+		"main:0",
+		"main:1",
+		"work:0",
+		"work:1",
+		"scratch:0",
+	}, "dst-window", "dst-window", 18)
+
+	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
+	promptIdx := -1
+	dropdownIdx := -1
+	for i, line := range lines {
+		if strings.Contains(line, "» move-window -t ") {
+			promptIdx = i
+		}
+		if strings.Contains(line, "main:0") {
+			dropdownIdx = i
+			break
+		}
+	}
+	if promptIdx == -1 {
+		t.Fatalf("expected prompt line in view, got:\n%s", strings.Join(lines, "\n"))
+	}
+	if dropdownIdx == -1 {
+		t.Fatalf("expected dropdown line in view, got:\n%s", strings.Join(lines, "\n"))
+	}
+	if dropdownIdx <= promptIdx {
+		t.Fatalf("expected dropdown below prompt when space above is insufficient, got:\n%s", strings.Join(lines, "\n"))
+	}
+}
