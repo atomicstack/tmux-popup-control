@@ -469,7 +469,7 @@ func (m *Model) openLabeledCompletion(items []string, labels, descriptions map[s
 			}
 		}
 	}
-	if prefix != "" && m.completion.hasExactMatch(prefix) {
+	if prefix != "" && shouldDismissExactMatchCompletion(argType) && m.completion.hasExactMatch(prefix) {
 		m.dismissCompletion()
 		return
 	}
@@ -539,6 +539,10 @@ func runeInSlice(target rune, values []rune) bool {
 		}
 	}
 	return false
+}
+
+func shouldDismissExactMatchCompletion(argType string) bool {
+	return argType != "flag"
 }
 
 func (m *Model) completionVisible() bool {

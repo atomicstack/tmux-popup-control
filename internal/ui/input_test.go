@@ -205,3 +205,28 @@ func TestExactMatchValueCompletionDismissesDropdown(t *testing.T) {
 		t.Fatal("expected exact match value completion to dismiss the dropdown")
 	}
 }
+
+func TestExactMatchFlagCompletionStaysVisibleUntilCommitted(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "move-window", Label: "move-window [-adpr] [-s src-window] [-t dst-window]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("move-window -r", len([]rune("move-window -r")))
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if !m.completionVisible() {
+		t.Fatal("expected exact match flag completion to stay visible")
+	}
+	if got := m.completion.selected(); got != "-r" {
+		t.Fatalf("expected selected flag -r, got %q", got)
+	}
+}
