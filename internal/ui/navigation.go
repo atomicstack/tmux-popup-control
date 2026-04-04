@@ -85,10 +85,7 @@ func (m *Model) handleEnterKey() tea.Cmd {
 		m.pendingLabel = filterText
 		m.errMsg = ""
 		m.forceClearInfo()
-		target := m.sessionName
-		if target == "" {
-			target = m.sessions.Current()
-		}
+		target := m.defaultTargetForCommand(filterText)
 		return menu.RunCommand(m.socketPath, filterText, target)
 	}
 	if current == nil || len(current.Items) == 0 {
@@ -215,6 +212,33 @@ func (m *Model) moveCursorUp() bool {
 		if old != current.Cursor {
 			events.UI.MenuCursor(current.ID, current.Cursor)
 			m.syncViewport(current)
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Model) defaultTargetForCommand(input string) string {
+	schema := m.lookupCommandSchema(input)
+	if !supportsDefaultSessionTarget(schema) {
+		return ""
+	}
+	target := m.sessionName
+	if target == "" {
+		target = m.sessions.Current()
+	}
+	return target
+}
+
+func supportsDefaultSessionTarget(schema *cmdparse.CommandSchema) bool {
+	if schema == nil {
+		return false
+	}
+	for _, flag := range schema.ArgFlags {
+		if flag.Short != 't' {
+			continue
+		}
+		if flag.ArgType == "target-session" || flag.ArgType == "session-name" {
 			return true
 		}
 	}
@@ -482,7 +506,7 @@ func (m *Model) replaceCommandTokenUnderCursor() bool {
 	}
 
 	replacement := []rune(current.Items[current.Cursor].ID)
-	updated := make([]rune, 0, len(filterRunes)-((end-start))+len(replacement))
+	updated := make([]rune, 0, len(filterRunes)-(end-start)+len(replacement))
 	updated = append(updated, filterRunes[:start]...)
 	updated = append(updated, replacement...)
 	updated = append(updated, filterRunes[end:]...)
