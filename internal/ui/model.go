@@ -103,6 +103,7 @@ type Model struct {
 	commandItemsCache []menu.Item
 	commandSchemas    map[string]*cmdparse.CommandSchema
 	completion        *completionState
+	completionSuppressedFilter string
 	noPreview         bool
 	filterCursor      cursor.Model
 	filterCursorDirty bool

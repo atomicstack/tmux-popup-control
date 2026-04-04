@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 func TestHandleCommandPreloadBuildsSchemas(t *testing.T) {
@@ -155,6 +157,83 @@ func TestCompletionDismissesOnResize(t *testing.T) {
 	h.Send(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if h.model.completionVisible() {
 		t.Fatal("expected dropdown dismissed after resize")
+	}
+}
+
+func TestCompletionSelectionPersistsAcrossBackendRefresh(t *testing.T) {
+	h := setupCommandHarness(t)
+
+	sendKeys(h, "kill-session")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	sendKeys(h, "-t")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	h.Send(tea.KeyPressMsg{Code: tea.KeyDown})
+
+	before := h.model.completion.selected()
+	if before != "work" {
+		t.Fatalf("expected selected candidate 'work', got %q", before)
+	}
+
+	h.Send(backendEventMsg{event: backend.Event{
+		Kind: backend.KindSessions,
+		Data: tmux.SessionSnapshot{
+			Sessions: []tmux.Session{
+				{Name: "main"},
+				{Name: "work"},
+				{Name: "scratch"},
+			},
+			Current:        "main",
+			IncludeCurrent: true,
+		},
+	}})
+
+	after := h.model.completion.selected()
+	if after != before {
+		t.Fatalf("expected selection to remain %q after backend refresh, got %q", before, after)
+	}
+}
+
+func TestCompletionDismissedByEscapeStaysDismissedUntilInputChanges(t *testing.T) {
+	h := setupCommandHarness(t)
+
+	sendKeys(h, "kill-session")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	sendKeys(h, "-t")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	if !h.model.completionVisible() {
+		t.Fatal("expected dropdown visible")
+	}
+
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if h.model.completionVisible() {
+		t.Fatal("expected dropdown dismissed after escape")
+	}
+
+	h.Send(backendEventMsg{event: backend.Event{
+		Kind: backend.KindSessions,
+		Data: tmux.SessionSnapshot{
+			Sessions: []tmux.Session{
+				{Name: "main"},
+				{Name: "work"},
+				{Name: "scratch"},
+			},
+			Current:        "main",
+			IncludeCurrent: true,
+		},
+	}})
+	if h.model.completionVisible() {
+		t.Fatal("expected dropdown to stay dismissed across backend refresh")
+	}
+
+	h.Send(tea.KeyPressMsg{Code: tea.KeyLeft})
+	h.Send(tea.KeyPressMsg{Code: tea.KeyRight})
+	if h.model.completionVisible() {
+		t.Fatal("expected cursor movement not to re-trigger dismissed completion")
+	}
+
+	sendKeys(h, "m")
+	if !h.model.completionVisible() {
+		t.Fatal("expected input modification to re-trigger completion")
 	}
 }
 

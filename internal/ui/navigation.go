@@ -337,7 +337,7 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		case "tab":
 			return m.acceptCompletion()
 		case "esc":
-			m.dismissCompletion()
+			m.dismissCompletionUntilInputChanges()
 			return nil
 		case "enter":
 			return m.acceptCompletion()

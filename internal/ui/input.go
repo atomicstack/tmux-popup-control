@@ -43,6 +43,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.noteFilterCursorChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
+		m.clearCompletionSuppression()
 		m.triggerCompletion()
 		events.Filter.Cleared(current.ID)
 		m.syncTreeFilter(current)
@@ -56,6 +57,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		m.noteFilterCursorChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
+		m.clearCompletionSuppression()
 		m.triggerCompletion()
 		events.Filter.WordBackspace(current.ID, current.Filter)
 		m.syncTreeFilter(current)
@@ -67,7 +69,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
-		m.triggerCompletion()
+		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	case "ctrl+e":
@@ -76,7 +78,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
-		m.triggerCompletion()
+		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	case "alt+b":
@@ -85,7 +87,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
-		m.triggerCompletion()
+		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
 		return true, nil
 	case "alt+f":
@@ -94,7 +96,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
-		m.triggerCompletion()
+		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
 		return true, nil
 	case "backspace":
@@ -113,7 +115,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
-		m.triggerCompletion()
+		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	case "right":
@@ -122,7 +124,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		m.noteFilterCursorChange(current, before)
-		m.triggerCompletion()
+		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
 	default:
@@ -162,6 +164,7 @@ func (m *Model) appendToFilter(text string) bool {
 	m.noteFilterCursorChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
+	m.clearCompletionSuppression()
 	m.triggerCompletion()
 	events.Filter.Append(current.ID, current.Filter)
 	m.syncTreeFilter(current)
@@ -181,6 +184,7 @@ func (m *Model) removeFilterRune() bool {
 	m.noteFilterCursorChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
+	m.clearCompletionSuppression()
 	m.triggerCompletion()
 	events.Filter.Backspace(current.ID, current.Filter)
 	m.syncTreeFilter(current)
@@ -329,6 +333,10 @@ func (m *Model) triggerCompletion() {
 		m.dismissCompletion()
 		return
 	}
+	if m.completionSuppressedFilter != "" && current.Filter == m.completionSuppressedFilter {
+		m.dismissCompletion()
+		return
+	}
 
 	ctx := cmdparse.Analyse(m.commandSchemas, current.Filter)
 	typeLabel := ctx.TypeLabel
@@ -388,6 +396,10 @@ func (m *Model) openLabeledCompletion(items []string, labels map[string]string, 
 		m.dismissCompletion()
 		return
 	}
+	previousSelected := ""
+	if m.completion != nil {
+		previousSelected = m.completion.selected()
+	}
 
 	anchorCol := 2 + current.FilterCursorPos() - len([]rune(prefix))
 	if anchorCol < 0 {
@@ -398,6 +410,14 @@ func (m *Model) openLabeledCompletion(items []string, labels map[string]string, 
 	if prefix != "" {
 		m.completion.applyFilter(prefix)
 	}
+	if previousSelected != "" {
+		for idx, item := range m.completion.filtered {
+			if item == previousSelected {
+				m.completion.cursor = idx
+				break
+			}
+		}
+	}
 	if len(m.completion.filtered) == 0 {
 		m.dismissCompletion()
 	}
@@ -405,6 +425,27 @@ func (m *Model) openLabeledCompletion(items []string, labels map[string]string, 
 
 func (m *Model) dismissCompletion() {
 	m.completion = nil
+}
+
+func (m *Model) dismissCompletionUntilInputChanges() {
+	current := m.currentLevel()
+	if current != nil {
+		m.completionSuppressedFilter = current.Filter
+	}
+	m.dismissCompletion()
+}
+
+func (m *Model) clearCompletionSuppression() {
+	m.completionSuppressedFilter = ""
+}
+
+func (m *Model) dismissCompletionIfCursorMovedAway(current *level) {
+	if current == nil {
+		return
+	}
+	if current.FilterCursorPos() != len([]rune(current.Filter)) {
+		m.dismissCompletion()
+	}
 }
 
 func (m *Model) lookupCommandSchema(input string) *cmdparse.CommandSchema {
@@ -445,6 +486,7 @@ func (m *Model) acceptCompletion() tea.Cmd {
 	current.SetFilter(newFilter, len([]rune(newFilter)))
 	m.noteFilterCursorChange(current, before)
 	m.syncFilterViewport(current)
+	m.clearCompletionSuppression()
 	m.dismissCompletion()
 	m.triggerCompletion()
 	return nil
