@@ -378,6 +378,8 @@ func (m *Model) triggerCompletion() {
 	}
 
 	ctx := cmdparse.Analyse(m.commandSchemas, current.Filter)
+	schema := m.lookupCommandSchema(current.Filter)
+	ctx.ArgType = m.adjustCompletionArgType(schema, ctx)
 	typeLabel := ctx.TypeLabel
 	if typeLabel == "" {
 		typeLabel = ctx.ArgType
@@ -385,7 +387,6 @@ func (m *Model) triggerCompletion() {
 
 	switch ctx.Kind {
 	case cmdparse.ContextFlagName:
-		schema := m.lookupCommandSchema(current.Filter)
 		if schema == nil {
 			m.dismissCompletion()
 			return
@@ -468,6 +469,10 @@ func (m *Model) openLabeledCompletion(items []string, labels, descriptions map[s
 			}
 		}
 	}
+	if prefix != "" && m.completion.hasExactMatch(prefix) {
+		m.dismissCompletion()
+		return
+	}
 	if len(m.completion.filtered) == 0 {
 		m.dismissCompletion()
 	}
@@ -512,6 +517,28 @@ func (m *Model) commandHelpForSchema(schema *cmdparse.CommandSchema) cmdhelp.Com
 	}
 	help, _ := m.lookupCommandHelp(schema.Name)
 	return help
+}
+
+func (m *Model) adjustCompletionArgType(schema *cmdparse.CommandSchema, ctx cmdparse.CompletionContext) string {
+	if schema == nil {
+		return ctx.ArgType
+	}
+	if schema.Name == "move-window" &&
+		ctx.Kind == cmdparse.ContextFlagValue &&
+		ctx.ArgType == "dst-window" &&
+		runeInSlice('r', ctx.FlagsUsed) {
+		return "target-session"
+	}
+	return ctx.ArgType
+}
+
+func runeInSlice(target rune, values []rune) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Model) completionVisible() bool {

@@ -123,6 +123,18 @@ func (cs *completionState) selected() string {
 	return cs.filtered[cs.cursor].Value
 }
 
+func (cs *completionState) hasExactMatch(prefix string) bool {
+	if cs == nil || prefix == "" {
+		return false
+	}
+	for _, item := range cs.filtered {
+		if strings.EqualFold(item.Value, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (cs *completionState) selectedLabel() string {
 	if cs == nil || len(cs.filtered) == 0 || cs.cursor < 0 || cs.cursor >= len(cs.filtered) {
 		return ""

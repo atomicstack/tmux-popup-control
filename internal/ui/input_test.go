@@ -146,3 +146,62 @@ func TestTriggerCompletionIncludesFlagDescriptions(t *testing.T) {
 		t.Fatalf("expected flag description in view, got:\n%s", view)
 	}
 }
+
+func TestMoveWindowRenumberTargetsSessionCompletion(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "move-window", Label: "move-window [-adpr] [-s src-window] [-t dst-window]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+	m.sessions.SetEntries([]menu.SessionEntry{
+		{Name: "renumber-target"},
+		{Name: "work"},
+	})
+	m.windows.SetEntries([]menu.WindowEntry{
+		{Name: "0", Session: "renumber-target"},
+		{Name: "2", Session: "renumber-target"},
+	})
+
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("move-window -r -t ", len([]rune("move-window -r -t ")))
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if m.completion == nil || len(m.completion.filtered) == 0 {
+		t.Fatal("expected completion state")
+	}
+	if got := m.completion.filtered[0].Value; got != "renumber-target" {
+		t.Fatalf("expected session completion for move-window -r, got %q", got)
+	}
+}
+
+func TestExactMatchValueCompletionDismissesDropdown(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "kill-session", Label: "kill-session [-aC] [-t target-session]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+	m.sessions.SetEntries([]menu.SessionEntry{
+		{Name: "main"},
+		{Name: "work"},
+	})
+
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("kill-session -t main", len([]rune("kill-session -t main")))
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if m.completionVisible() {
+		t.Fatal("expected exact match value completion to dismiss the dropdown")
+	}
+}
