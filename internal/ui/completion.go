@@ -99,21 +99,25 @@ func (cs *completionState) applyFilter(prefix string) {
 }
 
 func (cs *completionState) moveDown() {
-	if cs == nil {
+	if cs == nil || len(cs.filtered) == 0 {
 		return
 	}
 	if cs.cursor < len(cs.filtered)-1 {
 		cs.cursor++
+		return
 	}
+	cs.cursor = 0
 }
 
 func (cs *completionState) moveUp() {
-	if cs == nil {
+	if cs == nil || len(cs.filtered) == 0 {
 		return
 	}
 	if cs.cursor > 0 {
 		cs.cursor--
+		return
 	}
+	cs.cursor = len(cs.filtered) - 1
 }
 
 func (cs *completionState) selected() string {

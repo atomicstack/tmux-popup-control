@@ -29,7 +29,6 @@ func TestCompletionCursorBounds(t *testing.T) {
 		t.Fatalf("expected cursor 1, got %d", cs.cursor)
 	}
 	cs.moveDown()
-	cs.moveDown()
 	if cs.cursor != 2 {
 		t.Fatalf("expected cursor 2, got %d", cs.cursor)
 	}
@@ -37,7 +36,6 @@ func TestCompletionCursorBounds(t *testing.T) {
 	if cs.cursor != 1 {
 		t.Fatalf("expected cursor 1, got %d", cs.cursor)
 	}
-	cs.moveUp()
 	cs.moveUp()
 	if cs.cursor != 0 {
 		t.Fatalf("expected cursor 0, got %d", cs.cursor)
@@ -59,6 +57,23 @@ func TestCompletionSelectedEmpty(t *testing.T) {
 	cs := newCompletionState(nil, "", "", 0)
 	if cs.selected() != "" {
 		t.Fatalf("expected empty, got %q", cs.selected())
+	}
+}
+
+func TestCompletionCursorWrapsUpFromFirstItem(t *testing.T) {
+	cs := newCompletionState([]string{"a", "b", "c"}, "", "", 0)
+	cs.moveUp()
+	if cs.cursor != 2 {
+		t.Fatalf("expected cursor to wrap to last item, got %d", cs.cursor)
+	}
+}
+
+func TestCompletionCursorWrapsDownFromLastItem(t *testing.T) {
+	cs := newCompletionState([]string{"a", "b", "c"}, "", "", 0)
+	cs.cursor = 2
+	cs.moveDown()
+	if cs.cursor != 0 {
+		t.Fatalf("expected cursor to wrap to first item, got %d", cs.cursor)
 	}
 }
 
