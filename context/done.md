@@ -4,6 +4,10 @@ Here’s what’s happened so far:
 
 - Command argument tab completion (completed on `feature/cmd-completion`):
   - Task 14 complete and feature implementation finished.
+  - Follow-up user-testing fixes landed after the main feature commit:
+    - `c0ddb85` — dropdown now renders below the prompt when there is insufficient room above it.
+    - `6877b8b` — backend refreshes no longer reset the completion selection or re-open an `Esc`-dismissed dropdown; dismissal now persists until text changes.
+    - `d8942e2` — command-menu filtering now matches only the command token, so arguments do not empty the command list, and `Tab` replaces the current command token under the cursor.
   - Design spec written: `docs/superpowers/specs/2026-04-02-command-argument-completion-design.md`
   - Implementation plan written: `docs/superpowers/plans/2026-04-02-command-argument-completion.md` (14 tasks)
   - Task 1 complete: `internal/cmdparse/schema.go` — type definitions (CommandSchema, ArgFlagDef, PositionalDef, CompletionContext, ContextKind)
