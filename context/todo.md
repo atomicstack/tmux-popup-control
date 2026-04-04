@@ -1,11 +1,17 @@
-# TODO
+## Command argument tab completion (feature/cmd-completion branch)
 
-- (TBD) Identify further UI cleanups or feature work once the refactor settles.
-- Review whether remaining tmux helpers (e.g., LinkWindow/MoveWindow/SwapWindows, pane move/break flows) need similar handle abstractions or expanded fake scenarios.
-- Consider extending integration coverage to cover pane moves/swaps and multi-session client interactions if gaps surface during manual testing.
-- Evaluate whether additional message handlers in model.go (e.g., handler registry management) should be decomposed further or covered with focused tests now that structural pieces live in dedicated files.
-- Consider adding reconnection logic to the shared control-mode connection: if the cached client's transport dies mid-session, `newTmux` could detect the error and transparently reconnect. Low priority since the popup runs inside `tmux display-popup` and a dead tmux server means the popup is closing anyway.
-- The `previewMaxDisplayLines = 20` constant in `view.go` is now unused by the side-by-side layout but remains for the inline (vertical) preview fallback. Review whether the vertical preview path is still needed or can be removed/simplified.
-- Consider adding automatic save pruning / rotation to limit the number of save files in the storage directory.
-- Consider adding process restoration strategies (save full command line, restart commands on restore).
-- Add integration tests for save/restore that exercise the full flow against a live tmux server.
+Remaining tasks from `docs/superpowers/plans/2026-04-02-command-argument-completion.md`:
+
+- **Task 4**: Value Resolver — create `internal/cmdparse/resolve.go` + `resolve_test.go`. DataSource interface, StoreResolver mapping arg types to live data, FlagCandidates for unused flag listing. (not started)
+- **Task 6**: Completion Dropdown Widget — create `internal/ui/completion.go` + `completion_test.go`. completionState struct with filtering, cursor, selection, ghost hints, dropdown rendering. (not started)
+- **Task 7**: Wire Schema Registry into Model — add `commandSchemas` and `completion` fields to Model, build registry in `handleCommandPreloadMsg`. (not started)
+- **Task 8**: Data Source Implementation — create `internal/ui/completion_datasource.go` adapting state stores to the cmdparse.DataSource interface. (not started)
+- **Task 9**: Completion Triggering — modify `input.go` + `navigation.go` to trigger completion analysis on keystrokes and route keys through dropdown when visible. (not started)
+- **Task 10**: Ghost Hint Extension — extend `autoCompleteGhost()` in `input.go` for argument hints (dropdown selection, type label, unique prefix match). (not started)
+- **Task 11**: Dropdown Overlay Rendering — modify `view.go` to render dropdown above prompt in both layout modes. (not started)
+- **Task 12**: Harness Tests — end-to-end key sequences through the test harness. (not started)
+- **Task 13**: Polish and Edge Cases — backspace through completed values, window resize, regression check. (not started)
+- **Task 14**: Integration Test — live tmux test of full completion flow. (not started)
+
+Completed tasks: 1 (schema types), 2 (synopsis parser), 3 (input analyser), 5 (completion styles).
+Full spec: `docs/superpowers/specs/2026-04-02-command-argument-completion-design.md`
