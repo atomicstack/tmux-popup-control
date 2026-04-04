@@ -9,12 +9,17 @@ import (
 
 const completionMaxVisible = 10
 
+type completionItem struct {
+	Value       string
+	Label       string
+	Description string
+}
+
 // completionState tracks the argument completion dropdown state.
 type completionState struct {
 	visible   bool
-	items     []string
-	labels    map[string]string
-	filtered  []string
+	items     []completionItem
+	filtered  []completionItem
 	cursor    int
 	prefix    string
 	anchorCol int
@@ -27,21 +32,43 @@ func newCompletionState(items []string, argType, typeLabel string, anchorCol int
 }
 
 func newCompletionStateWithLabels(items []string, labels map[string]string, argType, typeLabel string, anchorCol int) *completionState {
+	return newCompletionStateWithMetadata(items, labels, nil, argType, typeLabel, anchorCol)
+}
+
+func newCompletionStateWithMetadata(items []string, labels, descriptions map[string]string, argType, typeLabel string, anchorCol int) *completionState {
+	detailedItems := make([]completionItem, 0, len(items))
+	for _, item := range items {
+		label := item
+		if labels != nil && labels[item] != "" {
+			label = labels[item]
+		}
+		description := ""
+		if descriptions != nil {
+			description = descriptions[item]
+		}
+		detailedItems = append(detailedItems, completionItem{
+			Value:       item,
+			Label:       label,
+			Description: description,
+		})
+	}
+	return newCompletionStateWithItems(detailedItems, argType, typeLabel, anchorCol)
+}
+
+func newCompletionStateWithItems(items []completionItem, argType, typeLabel string, anchorCol int) *completionState {
 	cs := &completionState{
 		visible:   len(items) > 0,
-		items:     append([]string(nil), items...),
-		labels:    make(map[string]string, len(items)),
+		items:     append([]completionItem(nil), items...),
 		anchorCol: anchorCol,
 		argType:   argType,
 		typeLabel: typeLabel,
 	}
-	for _, item := range items {
-		cs.labels[item] = item
+	for idx := range cs.items {
+		if cs.items[idx].Label == "" {
+			cs.items[idx].Label = cs.items[idx].Value
+		}
 	}
-	for value, label := range labels {
-		cs.labels[value] = label
-	}
-	cs.filtered = append([]string(nil), cs.items...)
+	cs.filtered = append([]completionItem(nil), cs.items...)
 	return cs
 }
 
@@ -61,7 +88,7 @@ func (cs *completionState) applyFilter(prefix string) {
 
 	lower := strings.ToLower(prefix)
 	for _, item := range cs.items {
-		if strings.HasPrefix(strings.ToLower(item), lower) {
+		if strings.HasPrefix(strings.ToLower(item.Value), lower) {
 			cs.filtered = append(cs.filtered, item)
 		}
 	}
@@ -93,23 +120,27 @@ func (cs *completionState) selected() string {
 	if cs == nil || len(cs.filtered) == 0 || cs.cursor < 0 || cs.cursor >= len(cs.filtered) {
 		return ""
 	}
-	return cs.filtered[cs.cursor]
+	return cs.filtered[cs.cursor].Value
 }
 
 func (cs *completionState) selectedLabel() string {
-	value := cs.selected()
-	if value == "" {
+	if cs == nil || len(cs.filtered) == 0 || cs.cursor < 0 || cs.cursor >= len(cs.filtered) {
 		return ""
 	}
-	return cs.labelFor(value)
+	return cs.filtered[cs.cursor].Label
 }
 
 func (cs *completionState) labelFor(value string) string {
 	if cs == nil {
 		return value
 	}
-	if label, ok := cs.labels[value]; ok && label != "" {
-		return label
+	for _, item := range cs.items {
+		if item.Value == value {
+			if item.Label != "" {
+				return item.Label
+			}
+			return value
+		}
 	}
 	return value
 }
@@ -166,15 +197,44 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 	}
 	visible := cs.filtered[start:end]
 
-	contentWidth := 1
+	leftWidth := 1
+	rightWidth := 0
+	hasDescriptions := false
 	for _, item := range visible {
-		if w := lipgloss.Width(cs.labelFor(item)); w > contentWidth {
-			contentWidth = w
+		if w := lipgloss.Width(item.Label); w > leftWidth {
+			leftWidth = w
 		}
+		if item.Description != "" {
+			hasDescriptions = true
+			if w := lipgloss.Width(item.Description); w > rightWidth {
+				rightWidth = w
+			}
+		}
+	}
+
+	contentWidth := leftWidth
+	if hasDescriptions {
+		contentWidth += 2 + rightWidth
 	}
 	if maxWidth > 0 {
 		if capWidth := maxWidth - 4; capWidth > 0 && contentWidth > capWidth {
-			contentWidth = capWidth
+			if !hasDescriptions {
+				contentWidth = capWidth
+				leftWidth = capWidth
+			} else if leftWidth >= capWidth {
+				leftWidth = capWidth
+				rightWidth = 0
+				contentWidth = capWidth
+			} else {
+				rightWidth = capWidth - leftWidth - 2
+				if rightWidth < 0 {
+					rightWidth = 0
+				}
+				contentWidth = leftWidth
+				if rightWidth > 0 {
+					contentWidth += 2 + rightWidth
+				}
+			}
 		}
 	}
 
@@ -191,11 +251,22 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 
 	lines := make([]string, 0, len(visible))
 	for idx, item := range visible {
-		label := ansi.Truncate(cs.labelFor(item), contentWidth, "…")
-		if pad := contentWidth - lipgloss.Width(label); pad > 0 {
+		label := ansi.Truncate(item.Label, leftWidth, "…")
+		if pad := leftWidth - lipgloss.Width(label); pad > 0 {
 			label += strings.Repeat(" ", pad)
 		}
-		line := " " + label + " "
+		content := label
+		if hasDescriptions && rightWidth > 0 {
+			description := ""
+			if item.Description != "" {
+				description = ansi.Truncate(item.Description, rightWidth, "…")
+			}
+			content += "  " + description
+		}
+		if pad := contentWidth - lipgloss.Width(content); pad > 0 {
+			content += strings.Repeat(" ", pad)
+		}
+		line := " " + content + " "
 		if start+idx == cs.cursor {
 			lines = append(lines, selectedStyle.Render(line))
 		} else {

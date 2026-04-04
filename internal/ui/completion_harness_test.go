@@ -124,8 +124,8 @@ func TestCompletionTypeToFilter(t *testing.T) {
 	if len(h.model.completion.filtered) != 1 {
 		t.Fatalf("expected 1 filtered candidate, got %d: %v", len(h.model.completion.filtered), h.model.completion.filtered)
 	}
-	if h.model.completion.filtered[0] != "main" {
-		t.Fatalf("expected 'main', got %q", h.model.completion.filtered[0])
+	if h.model.completion.filtered[0].Value != "main" {
+		t.Fatalf("expected 'main', got %q", h.model.completion.filtered[0].Value)
 	}
 }
 

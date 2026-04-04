@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/cmdhelp"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 )
@@ -317,6 +319,43 @@ func (m *Model) autoCompleteGhost() string {
 	return item.ID[len(current.Filter):]
 }
 
+func (m *Model) currentCommandSummary() string {
+	current := m.currentLevel()
+	if current == nil || current.Node == nil || !current.Node.FilterCommand {
+		return ""
+	}
+
+	name := ""
+	if schema := m.lookupCommandSchema(current.Filter); schema != nil && schema.Name != "" {
+		name = schema.Name
+	} else if current.Filter != "" && !strings.Contains(current.Filter, " ") {
+		if current.Cursor >= 0 && current.Cursor < len(current.Items) {
+			name = current.Items[current.Cursor].ID
+		}
+	}
+
+	if name == "" && current.Cursor >= 0 && current.Cursor < len(current.Items) {
+		name = current.Items[current.Cursor].ID
+	}
+	if name == "" {
+		return ""
+	}
+
+	help, ok := m.lookupCommandHelp(name)
+	if !ok {
+		return ""
+	}
+	return help.Summary
+}
+
+func (m *Model) lookupCommandHelp(name string) (cmdhelp.CommandHelp, bool) {
+	if m == nil || m.commandHelp == nil || name == "" {
+		return cmdhelp.CommandHelp{}, false
+	}
+	help, ok := m.commandHelp[name]
+	return help, ok
+}
+
 // triggerCompletion analyses the current command input and updates the
 // completion dropdown or placeholder state.
 func (m *Model) triggerCompletion() {
@@ -358,12 +397,23 @@ func (m *Model) triggerCompletion() {
 		}
 		values := make([]string, 0, len(candidates))
 		labels := make(map[string]string, len(candidates))
+		descriptions := make(map[string]string, len(candidates))
+		help := m.commandHelpForSchema(schema)
+		helpDescriptions := make(map[string]string, len(help.Args))
+		for _, arg := range help.Args {
+			helpDescriptions[arg.Name] = arg.Description
+		}
 		for _, candidate := range candidates {
 			value := "-" + string(candidate.Flag)
 			values = append(values, value)
-			labels[value] = candidate.Label
+			if candidate.ArgType != "" {
+				labels[value] = fmt.Sprintf("-%c <%s>", candidate.Flag, candidate.ArgType)
+			} else {
+				labels[value] = value
+			}
+			descriptions[value] = helpDescriptions[value]
 		}
-		m.openLabeledCompletion(values, labels, "flag", "flag", ctx.Prefix)
+		m.openLabeledCompletion(values, labels, descriptions, "flag", "flag", ctx.Prefix)
 	case cmdparse.ContextFlagValue, cmdparse.ContextPositionalValue:
 		resolver := cmdparse.NewStoreResolver(&modelDataSource{
 			sessions: m.sessions,
@@ -387,10 +437,10 @@ func (m *Model) triggerCompletion() {
 }
 
 func (m *Model) openCompletion(items []string, argType, typeLabel, prefix string) {
-	m.openLabeledCompletion(items, nil, argType, typeLabel, prefix)
+	m.openLabeledCompletion(items, nil, nil, argType, typeLabel, prefix)
 }
 
-func (m *Model) openLabeledCompletion(items []string, labels map[string]string, argType, typeLabel, prefix string) {
+func (m *Model) openLabeledCompletion(items []string, labels, descriptions map[string]string, argType, typeLabel, prefix string) {
 	current := m.currentLevel()
 	if current == nil {
 		m.dismissCompletion()
@@ -406,13 +456,13 @@ func (m *Model) openLabeledCompletion(items []string, labels map[string]string, 
 		anchorCol = 0
 	}
 
-	m.completion = newCompletionStateWithLabels(items, labels, argType, typeLabel, anchorCol)
+	m.completion = newCompletionStateWithMetadata(items, labels, descriptions, argType, typeLabel, anchorCol)
 	if prefix != "" {
 		m.completion.applyFilter(prefix)
 	}
 	if previousSelected != "" {
 		for idx, item := range m.completion.filtered {
-			if item == previousSelected {
+			if item.Value == previousSelected {
 				m.completion.cursor = idx
 				break
 			}
@@ -454,6 +504,14 @@ func (m *Model) lookupCommandSchema(input string) *cmdparse.CommandSchema {
 		return nil
 	}
 	return m.commandSchemas[fields[0]]
+}
+
+func (m *Model) commandHelpForSchema(schema *cmdparse.CommandSchema) cmdhelp.CommandHelp {
+	if schema == nil || schema.Name == "" {
+		return cmdhelp.CommandHelp{}
+	}
+	help, _ := m.lookupCommandHelp(schema.Name)
+	return help
 }
 
 func (m *Model) completionVisible() bool {

@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/cursor"
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
+	"github.com/atomicstack/tmux-popup-control/internal/cmdhelp"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/data/dispatcher"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
@@ -77,36 +78,37 @@ func newLevel(id, title string, items []menu.Item, node *menu.Node) *level {
 
 // Model implements the Bubble Tea model for the tmux popup menu.
 type Model struct {
-	stack             []*level
-	loading           bool
-	pendingID         string
-	pendingLabel      string
-	errMsg            string
-	infoMsg           string
-	infoExpire        time.Time
-	width             int
-	height            int
-	fixedWidth        bool
-	fixedHeight       bool
-	backend           *backend.Watcher
-	backendState      map[backend.Kind]error
-	backendLastErr    string
-	showFooter        bool
-	verbose           bool
-	sessionForm       *menu.SessionForm
-	windowForm        *menu.WindowRenameForm
-	paneForm          *menu.PaneRenameForm
-	saveForm          *menu.SaveForm
-	paneCaptureForm   *menu.PaneCaptureForm
-	pendingWindowSwap *menu.Item
-	pendingPaneSwap   *menu.Item
-	commandItemsCache []menu.Item
-	commandSchemas    map[string]*cmdparse.CommandSchema
-	completion        *completionState
+	stack                      []*level
+	loading                    bool
+	pendingID                  string
+	pendingLabel               string
+	errMsg                     string
+	infoMsg                    string
+	infoExpire                 time.Time
+	width                      int
+	height                     int
+	fixedWidth                 bool
+	fixedHeight                bool
+	backend                    *backend.Watcher
+	backendState               map[backend.Kind]error
+	backendLastErr             string
+	showFooter                 bool
+	verbose                    bool
+	sessionForm                *menu.SessionForm
+	windowForm                 *menu.WindowRenameForm
+	paneForm                   *menu.PaneRenameForm
+	saveForm                   *menu.SaveForm
+	paneCaptureForm            *menu.PaneCaptureForm
+	pendingWindowSwap          *menu.Item
+	pendingPaneSwap            *menu.Item
+	commandItemsCache          []menu.Item
+	commandSchemas             map[string]*cmdparse.CommandSchema
+	commandHelp                map[string]cmdhelp.CommandHelp
+	completion                 *completionState
 	completionSuppressedFilter string
-	noPreview         bool
-	filterCursor      cursor.Model
-	filterCursorDirty bool
+	noPreview                  bool
+	filterCursor               cursor.Model
+	filterCursorDirty          bool
 
 	handlers map[reflect.Type]msgHandler
 
@@ -184,6 +186,7 @@ func NewModel(cfg ModelConfig) *Model {
 		panes:        panes,
 		dispatcher:   dispatcher.New(sessions, windows, panes),
 		preview:      make(map[string]*previewData),
+		commandHelp:  cmdhelp.Commands,
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)
@@ -300,32 +303,32 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 
 func (m *Model) registerHandlers() {
 	m.handlers = map[reflect.Type]msgHandler{
-		reflect.TypeOf(tea.KeyPressMsg{}):          m.handleKeyMsg,
-		reflect.TypeOf(tea.WindowSizeMsg{}):        m.handleWindowSizeMsg,
-		reflect.TypeOf(categoryLoadedMsg{}):        m.handleCategoryLoadedMsg,
-		reflect.TypeOf(menu.ActionResult{}):        m.handleActionResultMsg,
-		reflect.TypeOf(menu.WindowPrompt{}):        m.handleWindowPromptMsg,
-		reflect.TypeOf(menu.PanePrompt{}):          m.handlePanePromptMsg,
-		reflect.TypeOf(menu.WindowSwapPrompt{}):    m.handleWindowSwapPromptMsg,
-		reflect.TypeOf(menu.PaneSwapPrompt{}):      m.handlePaneSwapPromptMsg,
-		reflect.TypeOf(menu.SessionPrompt{}):       m.handleSessionPromptMsg,
-		reflect.TypeOf(backendEventMsg{}):          m.handleBackendEventMsg,
-		reflect.TypeOf(backendDoneMsg{}):           m.handleBackendDoneMsg,
-		reflect.TypeOf(commandPreloadMsg{}):        m.handleCommandPreloadMsg,
-		reflect.TypeOf(previewTickMsg{}):            m.handlePreviewTickMsg,
-		reflect.TypeOf(previewLoadedMsg{}):         m.handlePreviewLoadedMsg,
-		reflect.TypeOf(layoutAppliedMsg{}):         m.handleLayoutAppliedMsg,
-		reflect.TypeOf(tea.MouseWheelMsg{}):        m.handleMouseMsg,
-		reflect.TypeOf(menu.PluginConfirmPrompt{}): m.handlePluginConfirmPromptMsg,
-		reflect.TypeOf(pluginRemovalDoneMsg{}):     m.handlePluginRemovalDoneMsg,
-		reflect.TypeOf(menu.PluginInstallStart{}):  m.handlePluginInstallStartMsg,
-		reflect.TypeOf(menu.PluginUpdateStart{}):   m.handlePluginUpdateStartMsg,
-		reflect.TypeOf(pluginInstallDoneMsg{}):     m.handlePluginInstallDoneMsg,
-		reflect.TypeOf(menu.ResurrectStart{}):      m.handleResurrectStartMsg,
-		reflect.TypeOf(resurrectProgressMsg{}):     m.handleResurrectProgressMsg,
-		reflect.TypeOf(resurrectTickMsg{}):         m.handleResurrectTickMsg,
-		reflect.TypeOf(menu.SaveAsPrompt{}):        m.handleSaveAsPromptMsg,
-		reflect.TypeOf(menu.PaneCapturePrompt{}):    m.handlePaneCapturePromptMsg,
+		reflect.TypeOf(tea.KeyPressMsg{}):            m.handleKeyMsg,
+		reflect.TypeOf(tea.WindowSizeMsg{}):          m.handleWindowSizeMsg,
+		reflect.TypeOf(categoryLoadedMsg{}):          m.handleCategoryLoadedMsg,
+		reflect.TypeOf(menu.ActionResult{}):          m.handleActionResultMsg,
+		reflect.TypeOf(menu.WindowPrompt{}):          m.handleWindowPromptMsg,
+		reflect.TypeOf(menu.PanePrompt{}):            m.handlePanePromptMsg,
+		reflect.TypeOf(menu.WindowSwapPrompt{}):      m.handleWindowSwapPromptMsg,
+		reflect.TypeOf(menu.PaneSwapPrompt{}):        m.handlePaneSwapPromptMsg,
+		reflect.TypeOf(menu.SessionPrompt{}):         m.handleSessionPromptMsg,
+		reflect.TypeOf(backendEventMsg{}):            m.handleBackendEventMsg,
+		reflect.TypeOf(backendDoneMsg{}):             m.handleBackendDoneMsg,
+		reflect.TypeOf(commandPreloadMsg{}):          m.handleCommandPreloadMsg,
+		reflect.TypeOf(previewTickMsg{}):             m.handlePreviewTickMsg,
+		reflect.TypeOf(previewLoadedMsg{}):           m.handlePreviewLoadedMsg,
+		reflect.TypeOf(layoutAppliedMsg{}):           m.handleLayoutAppliedMsg,
+		reflect.TypeOf(tea.MouseWheelMsg{}):          m.handleMouseMsg,
+		reflect.TypeOf(menu.PluginConfirmPrompt{}):   m.handlePluginConfirmPromptMsg,
+		reflect.TypeOf(pluginRemovalDoneMsg{}):       m.handlePluginRemovalDoneMsg,
+		reflect.TypeOf(menu.PluginInstallStart{}):    m.handlePluginInstallStartMsg,
+		reflect.TypeOf(menu.PluginUpdateStart{}):     m.handlePluginUpdateStartMsg,
+		reflect.TypeOf(pluginInstallDoneMsg{}):       m.handlePluginInstallDoneMsg,
+		reflect.TypeOf(menu.ResurrectStart{}):        m.handleResurrectStartMsg,
+		reflect.TypeOf(resurrectProgressMsg{}):       m.handleResurrectProgressMsg,
+		reflect.TypeOf(resurrectTickMsg{}):           m.handleResurrectTickMsg,
+		reflect.TypeOf(menu.SaveAsPrompt{}):          m.handleSaveAsPromptMsg,
+		reflect.TypeOf(menu.PaneCapturePrompt{}):     m.handlePaneCapturePromptMsg,
 		reflect.TypeOf(menu.PaneCapturePreviewMsg{}): m.handlePaneCapturePreviewMsg,
 	}
 }

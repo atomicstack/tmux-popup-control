@@ -214,22 +214,11 @@ func (m *Model) viewVertical(header string) string {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: "↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit", style: styles.Footer})
 	}
-	// Reserve 3 rows for the bottom bar (blank + error/status + prompt).
-	lines = limitHeight(lines, m.height-2, m.width)
+	lines = limitHeight(lines, m.height-m.bottomBarRows(), m.width)
 	lines = applyWidth(lines, m.width)
 
 	// Bottom bar: error/status line + filter prompt.
-	var statusLine styledLine
-	if m.errMsg != "" {
-		statusLine = styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error}
-	}
-	promptText, _ := m.filterPrompt()
-	bottomLines := []styledLine{
-		statusLine,
-		{text: promptText},
-	}
-	bottomLines = applyWidth(bottomLines, m.width)
-	lines = append(lines, bottomLines...)
+	lines = append(lines, m.renderBottomBarLines()...)
 	return m.overlayCompletion(renderLines(lines))
 }
 
@@ -238,9 +227,8 @@ func (m *Model) viewSideBySide(header string) string {
 	menuW := m.menuColumnWidth()
 	prevW := m.previewPanelWidth()
 
-	// Bottom bar: status/error line + filter prompt.
-	// These span the full terminal width beneath both columns.
-	const bottomBarRows = 2
+	// Bottom bar spans the full terminal width beneath both columns.
+	bottomBarRows := m.bottomBarRows()
 
 	// --- Left column: menu items, info, footer ---
 	contentLines := make([]styledLine, 0, 16)
@@ -328,20 +316,39 @@ func (m *Model) viewSideBySide(header string) string {
 
 	topSection := lipgloss.JoinHorizontal(lipgloss.Top, leftStr, rightStr)
 
-	// --- Bottom bar: error/status + prompt (full width) ---
+	bottomStr := renderLines(m.renderBottomBarLines())
+
+	return m.overlayCompletion(topSection + "\n" + bottomStr)
+}
+
+func (m *Model) bottomBarRows() int {
+	rows := 2
+	if m.currentCommandSummary() != "" {
+		rows++
+	}
+	return rows
+}
+
+func (m *Model) renderBottomBarLines() []styledLine {
 	var statusLine styledLine
 	if m.errMsg != "" {
 		statusLine = styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error}
 	}
+
 	promptText, _ := m.filterPrompt()
-	bottomLines := []styledLine{
+	lines := []styledLine{
 		statusLine,
 		{text: promptText},
 	}
-	bottomLines = applyWidth(bottomLines, m.width)
-	bottomStr := renderLines(bottomLines)
-
-	return m.overlayCompletion(topSection + "\n" + bottomStr)
+	if summary := m.currentCommandSummary(); summary != "" {
+		summaryStyle := styles.FilterPlaceholder
+		if summaryStyle == nil {
+			fallback := lipgloss.NewStyle().Faint(true)
+			summaryStyle = &fallback
+		}
+		lines = append(lines, styledLine{text: summary, style: summaryStyle})
+	}
+	return applyWidth(lines, m.width)
 }
 
 // buildItemLine constructs a single styledLine for a menu item.
@@ -724,11 +731,11 @@ func (m *Model) overlayCompletion(rendered string) string {
 	}
 
 	lines := strings.Split(rendered, "\n")
-	statusIdx := len(lines) - 2
-	if statusIdx < 0 {
-		statusIdx = 0
+	barStart := len(lines) - m.bottomBarRows()
+	if barStart < 0 {
+		barStart = 0
 	}
-	spaceAbove := statusIdx
+	spaceAbove := barStart
 	spaceBelow := 0
 	if m.height > len(lines) {
 		spaceBelow = m.height - len(lines)
@@ -779,7 +786,7 @@ func (m *Model) overlayCompletion(rendered string) string {
 		dropLines = strings.Split(dropdown, "\n")
 	}
 
-	insertEnd := statusIdx
+	insertEnd := barStart
 	insertStart := insertEnd - len(dropLines)
 	if insertStart < 0 {
 		insertStart = 0
@@ -814,7 +821,7 @@ func (m *Model) maxVisibleItems() int {
 	if m.height <= 0 {
 		return -1
 	}
-	used := 2 // bottom bar: error/status + filter prompt
+	used := m.bottomBarRows()
 	if header := m.menuHeader(); header != "" {
 		used++
 	}

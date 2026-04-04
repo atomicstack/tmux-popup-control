@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestCompletionFilter(t *testing.T) {
@@ -15,8 +17,8 @@ func TestCompletionFilter(t *testing.T) {
 	if len(cs.filtered) != 1 {
 		t.Fatalf("expected 1 filtered item for 'ma', got %d: %v", len(cs.filtered), cs.filtered)
 	}
-	if cs.filtered[0] != "main" {
-		t.Fatalf("expected 'main', got %q", cs.filtered[0])
+	if cs.filtered[0].Value != "main" {
+		t.Fatalf("expected 'main', got %q", cs.filtered[0].Value)
 	}
 }
 
@@ -114,5 +116,36 @@ func TestCompletionView(t *testing.T) {
 		if !strings.Contains(view, name) {
 			t.Errorf("view should contain %q", name)
 		}
+	}
+}
+
+func TestCompletionViewAlignsDescriptions(t *testing.T) {
+	cs := newCompletionStateWithItems([]completionItem{
+		{Value: "-a", Label: "-a", Description: "insert after target window"},
+		{Value: "-s", Label: "-s <src-window>", Description: "source window"},
+		{Value: "-t", Label: "-t <dst-window>", Description: "destination window"},
+	}, "", "", 0)
+
+	view := ansi.Strip(cs.view(80, 10))
+	if !strings.Contains(view, "-s <src-window>") {
+		t.Fatalf("expected left column in view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "destination window") {
+		t.Fatalf("expected description in view, got:\n%s", view)
+	}
+}
+
+func TestCompletionViewLeavesPlainValuesUnchanged(t *testing.T) {
+	cs := newCompletionStateWithItems([]completionItem{
+		{Value: "main:0", Label: "main:0"},
+		{Value: "work:1", Label: "work:1"},
+	}, "", "", 0)
+
+	view := ansi.Strip(cs.view(40, 10))
+	if !strings.Contains(view, "main:0") || !strings.Contains(view, "work:1") {
+		t.Fatalf("expected plain completion values in view, got:\n%s", view)
+	}
+	if strings.Contains(view, "destination window") {
+		t.Fatalf("did not expect description text in plain value view, got:\n%s", view)
 	}
 }
