@@ -5,38 +5,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/backend"
-	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
-
-func TestDefaultTargetForCommandUsesCurrentSessionForTargetSessionCommands(t *testing.T) {
-	m := NewModel(ModelConfig{})
-	m.commandSchemas = cmdparse.BuildRegistry([]string{
-		"kill-session [-aC] [-t target-session]",
-	})
-	m.sessions.SetCurrent("shells")
-
-	if got := m.defaultTargetForCommand("kill-session"); got != "shells" {
-		t.Fatalf("expected current session target, got %q", got)
-	}
-}
-
-func TestDefaultTargetForCommandSkipsCommandsWithoutSessionTarget(t *testing.T) {
-	m := NewModel(ModelConfig{})
-	m.commandSchemas = cmdparse.BuildRegistry([]string{
-		"show-prompt-history [type]",
-		"rename-window [-t target-window] new-name",
-	})
-	m.sessions.SetCurrent("shells")
-
-	if got := m.defaultTargetForCommand("show-prompt-history"); got != "" {
-		t.Fatalf("expected no default target for show-prompt-history, got %q", got)
-	}
-	if got := m.defaultTargetForCommand("rename-window new-name"); got != "" {
-		t.Fatalf("expected no session target for target-window command, got %q", got)
-	}
-}
 
 func TestHandleEscapeKeyFromRootQuits(t *testing.T) {
 	m := NewModel(ModelConfig{})

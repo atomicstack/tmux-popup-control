@@ -46,15 +46,12 @@ func loadCommandMenu(ctx Context) ([]Item, error) {
 }
 
 // RunCommand executes an arbitrary tmux command given as a single string.
-// defaultTarget is injected as "-t defaultTarget" when the command does not
-// already contain a "-t" flag.
-func RunCommand(socketPath, command, defaultTarget string) tea.Cmd {
+func RunCommand(socketPath, command string) tea.Cmd {
 	return func() tea.Msg {
 		span := logging.StartSpan("menu", "tmux.run_command", logging.SpanOptions{
 			Target: command,
 			Attrs: map[string]interface{}{
-				"socket_path":    socketPath,
-				"default_target": defaultTarget,
+				"socket_path": socketPath,
 			},
 		})
 		args := strings.Fields(command)
@@ -62,9 +59,6 @@ func RunCommand(socketPath, command, defaultTarget string) tea.Cmd {
 			err := fmt.Errorf("empty command")
 			span.End(err)
 			return ActionResult{Err: err}
-		}
-		if defaultTarget != "" && !hasFlag(args, "-t") {
-			args = append(args[:1], append([]string{"-t", defaultTarget}, args[1:]...)...)
 		}
 		cmd := tmuxCmd(socketPath, args...)
 		out, err := cmd.CombinedOutput()
@@ -82,14 +76,4 @@ func RunCommand(socketPath, command, defaultTarget string) tea.Cmd {
 		span.End(nil)
 		return ActionResult{Info: fmt.Sprintf("Ran: %s", command)}
 	}
-}
-
-// hasFlag reports whether args contain the given flag.
-func hasFlag(args []string, flag string) bool {
-	for _, a := range args {
-		if a == flag {
-			return true
-		}
-	}
-	return false
 }

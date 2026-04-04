@@ -63,7 +63,7 @@ func TestLoadCommandMenuEmptyOutput(t *testing.T) {
 }
 
 func TestRunCommandReturnsActionResult(t *testing.T) {
-	cmd := RunCommand("/tmp/nonexistent.sock", "display-message hello", "")
+	cmd := RunCommand("/tmp/nonexistent.sock", "display-message hello")
 	if cmd == nil {
 		t.Fatal("expected command")
 	}
@@ -79,17 +79,8 @@ func TestRunCommandReturnsActionResult(t *testing.T) {
 	}
 }
 
-func TestHasFlag(t *testing.T) {
-	if hasFlag([]string{"next-window"}, "-t") {
-		t.Fatal("expected false for no -t flag")
-	}
-	if !hasFlag([]string{"next-window", "-t", "mysess"}, "-t") {
-		t.Fatal("expected true when -t present")
-	}
-}
-
 func TestRunCommandEmptyReturnsError(t *testing.T) {
-	cmd := RunCommand("/tmp/test.sock", "", "")
+	cmd := RunCommand("/tmp/test.sock", "")
 	if cmd == nil {
 		t.Fatal("expected command")
 	}
