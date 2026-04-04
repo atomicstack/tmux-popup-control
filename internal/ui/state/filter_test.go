@@ -177,3 +177,19 @@ func TestSetFilterSelectsFuzzyMatch(t *testing.T) {
 		t.Fatalf("expected filtered items to contain Alpha, got %#v", level.Items)
 	}
 }
+
+func TestCommandFilterUsesOnlyCommandToken(t *testing.T) {
+	items := []menu.Item{
+		{ID: "move-window", Label: "move-window [-dr] [-s src-window] [-t dst-window]"},
+		{ID: "kill-session", Label: "kill-session [-aC] [-t target-session]"},
+	}
+	level := NewLevel("command", "command", items, &menu.Node{FilterCommand: true})
+	level.SetFilter("move-window -r -a", len("move-window -r -a"))
+
+	if len(level.Items) != 1 {
+		t.Fatalf("expected one matching command item, got %#v", level.Items)
+	}
+	if level.Items[0].ID != "move-window" {
+		t.Fatalf("expected move-window to stay matched, got %#v", level.Items)
+	}
+}

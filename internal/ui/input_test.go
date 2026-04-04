@@ -75,3 +75,26 @@ func TestAutoCompleteGhostStillUsesCommandNameForFirstToken(t *testing.T) {
 		t.Fatalf("expected command ghost 'ession', got %q", ghost)
 	}
 }
+
+func TestTabReplacesCurrentCommandToken(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+	current := newLevel("command", "command", []menu.Item{
+		{ID: "move-window", Label: "move-window [-dr] [-s src-window] [-t dst-window]"},
+		{ID: "move-pane", Label: "move-pane [-bdhv] [-s source-pane] [-t target-pane]"},
+	}, node)
+	current.SetFilter("move-wnd -r", len([]rune("move-wnd")))
+	m.stack = []*level{current}
+
+	_ = m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	if current.Filter != "move-window -r" {
+		t.Fatalf("expected tab to replace current command token, got %q", current.Filter)
+	}
+	if current.FilterCursorPos() != len([]rune("move-window")) {
+		t.Fatalf("expected cursor after replaced token, got %d", current.FilterCursorPos())
+	}
+}

@@ -32,7 +32,7 @@ func (l *Level) SetFilter(query string, cursor int) {
 	}
 	l.applyFilter()
 	if trimmed != "" && len(l.Items) > 0 {
-		if idx := BestMatchIndex(l.Items, trimmed); idx >= 0 {
+		if idx := BestMatchIndex(l.Items, l.filterQuery()); idx >= 0 {
 			l.Cursor = idx
 		}
 	}
@@ -47,7 +47,7 @@ func (l *Level) SetFilter(query string, cursor int) {
 }
 
 func (l *Level) applyFilter() {
-	l.Items = FilterItems(l.Full, l.Filter)
+	l.Items = FilterItems(l.Full, l.filterQuery())
 	if len(l.Items) == 0 {
 		l.Cursor = 0
 		l.ViewportOffset = 0
@@ -64,6 +64,20 @@ func (l *Level) applyFilter() {
 	if l.ViewportOffset > len(l.Items)-1 {
 		l.ViewportOffset = 0
 	}
+}
+
+func (l *Level) filterQuery() string {
+	if l == nil {
+		return ""
+	}
+	if l.Node != nil && l.Node.FilterCommand {
+		fields := strings.Fields(l.Filter)
+		if len(fields) == 0 {
+			return ""
+		}
+		return fields[0]
+	}
+	return l.Filter
 }
 
 // FilterCursorPos returns the rune offset of the filter cursor.

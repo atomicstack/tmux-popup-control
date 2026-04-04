@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
@@ -368,6 +369,11 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 				}
 				return nil
 			}
+			if current.Node != nil && current.Node.FilterCommand {
+				if m.replaceCommandTokenUnderCursor() {
+					return nil
+				}
+			}
 			if ghost := m.autoCompleteGhost(); ghost != "" {
 				before := current.FilterCursorPos()
 				current.SetFilter(current.Filter+ghost, len([]rune(current.Filter+ghost)))
@@ -429,6 +435,65 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		}
 	}
 	return previewCmd
+}
+
+func (m *Model) replaceCommandTokenUnderCursor() bool {
+	current := m.currentLevel()
+	if current == nil || current.Node == nil || !current.Node.FilterCommand {
+		return false
+	}
+	if current.Cursor < 0 || current.Cursor >= len(current.Items) {
+		return false
+	}
+
+	filterRunes := []rune(current.Filter)
+	if len(filterRunes) == 0 {
+		replacement := current.Items[current.Cursor].ID
+		before := current.FilterCursorPos()
+		current.SetFilter(replacement, len([]rune(replacement)))
+		m.noteFilterCursorChange(current, before)
+		m.clearCompletionSuppression()
+		m.triggerCompletion()
+		m.syncFilterViewport(current)
+		return true
+	}
+
+	pos := current.FilterCursorPos()
+	if pos > len(filterRunes) {
+		pos = len(filterRunes)
+	}
+	if pos > 0 && (pos == len(filterRunes) || unicode.IsSpace(filterRunes[pos])) && !unicode.IsSpace(filterRunes[pos-1]) {
+		pos--
+	}
+	if pos >= len(filterRunes) || unicode.IsSpace(filterRunes[pos]) {
+		return false
+	}
+
+	start := pos
+	for start > 0 && !unicode.IsSpace(filterRunes[start-1]) {
+		start--
+	}
+	if start != 0 {
+		return false
+	}
+	end := pos + 1
+	for end < len(filterRunes) && !unicode.IsSpace(filterRunes[end]) {
+		end++
+	}
+
+	replacement := []rune(current.Items[current.Cursor].ID)
+	updated := make([]rune, 0, len(filterRunes)-((end-start))+len(replacement))
+	updated = append(updated, filterRunes[:start]...)
+	updated = append(updated, replacement...)
+	updated = append(updated, filterRunes[end:]...)
+
+	before := current.FilterCursorPos()
+	current.SetFilter(string(updated), start+len(replacement))
+	m.noteFilterCursorChange(current, before)
+	m.clearCompletionSuppression()
+	m.triggerCompletion()
+	m.syncFilterViewport(current)
+	return true
 }
 
 func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
