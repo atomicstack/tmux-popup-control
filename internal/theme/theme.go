@@ -28,6 +28,9 @@ type Styles struct {
 	ProgressEmpty         *lipgloss.Style
 	ProgressEmptyBg       *lipgloss.Style
 	HeaderItem            *lipgloss.Style
+	CompletionBorder      *lipgloss.Style
+	CompletionItem        *lipgloss.Style
+	CompletionSelected    *lipgloss.Style
 }
 
 var defaultStyles = Styles{
@@ -102,6 +105,15 @@ var defaultStyles = Styles{
 	),
 	HeaderItem: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
+	),
+	CompletionBorder: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
+	),
+	CompletionItem: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
+	),
+	CompletionSelected: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("33")),
 	),
 }
 
