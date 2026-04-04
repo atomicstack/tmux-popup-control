@@ -79,6 +79,28 @@ func TestRunCommandReturnsActionResult(t *testing.T) {
 	}
 }
 
+func TestRunCommandReturnsOutputOnSuccess(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	runCommandOutputFn = func(string, ...string) ([]byte, error) {
+		return []byte("bind-key -T root C-b send-prefix\nbind-key -T root C-o rotate-window\n"), nil
+	}
+
+	cmd := RunCommand("/tmp/test.sock", "list-keys")
+	msg := cmd()
+	result, ok := msg.(ActionResult)
+	if !ok {
+		t.Fatalf("expected ActionResult, got %T", msg)
+	}
+	if result.Err != nil {
+		t.Fatalf("unexpected error: %v", result.Err)
+	}
+	if result.Output != "bind-key -T root C-b send-prefix\nbind-key -T root C-o rotate-window" {
+		t.Fatalf("unexpected output %q", result.Output)
+	}
+}
+
 func TestRunCommandEmptyReturnsError(t *testing.T) {
 	cmd := RunCommand("/tmp/test.sock", "")
 	if cmd == nil {

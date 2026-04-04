@@ -320,6 +320,9 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if m.mode == ModeCommandOutput {
+		return m.handleCommandOutputKey(keyMsg)
+	}
 	if m.mode != ModeMenu {
 		return nil
 	}

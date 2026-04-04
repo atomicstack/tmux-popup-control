@@ -35,6 +35,7 @@ const (
 	ModeResurrect
 	ModeSessionSaveForm
 	ModePaneCaptureForm
+	ModeCommandOutput
 )
 
 const menuHeaderSeparator = "→"
@@ -65,6 +66,8 @@ func (m Mode) String() string {
 		return "session_save_form"
 	case ModePaneCaptureForm:
 		return "pane_capture_form"
+	case ModeCommandOutput:
+		return "command_output"
 	default:
 		return "unknown"
 	}
@@ -109,6 +112,9 @@ type Model struct {
 	noPreview                  bool
 	filterCursor               cursor.Model
 	filterCursorDirty          bool
+	commandOutputTitle         string
+	commandOutputLines         []string
+	commandOutputOffset        int
 
 	handlers map[reflect.Type]msgHandler
 

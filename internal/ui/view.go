@@ -99,6 +99,9 @@ func (m *Model) View() (view tea.View) {
 			content = m.viewPaneCaptureForm(header)
 			return m.wrapView(content)
 		}
+	case ModeCommandOutput:
+		content = m.viewCommandOutput(header)
+		return m.wrapView(content)
 	case ModeWindowForm:
 		if m.windowForm != nil {
 			content = m.viewWindowFormWithHeader(header)
@@ -319,6 +322,63 @@ func (m *Model) viewSideBySide(header string) string {
 	bottomStr := renderLines(m.renderBottomBarLines())
 
 	return m.overlayCompletion(topSection + "\n" + bottomStr)
+}
+
+func (m *Model) viewCommandOutput(header string) string {
+	lines := make([]styledLine, 0, len(m.commandOutputLines)+3)
+	title := "output"
+	if header != "" {
+		title = header + menuHeaderSeparator + title
+	}
+	lines = append(lines, styledLine{text: title, style: styles.Header})
+	if m.commandOutputTitle != "" {
+		subtitleStyle := styles.FilterPlaceholder
+		if subtitleStyle == nil {
+			fallback := lipgloss.NewStyle().Faint(true)
+			subtitleStyle = &fallback
+		}
+		lines = append(lines, styledLine{text: m.commandOutputTitle, style: subtitleStyle})
+	}
+
+	pageSize := m.commandOutputPageSize()
+	start := m.commandOutputOffset
+	if start < 0 {
+		start = 0
+	}
+	if maxOffset := m.maxCommandOutputOffset(); start > maxOffset {
+		start = maxOffset
+		m.commandOutputOffset = start
+	}
+	end := start + pageSize
+	if end > len(m.commandOutputLines) {
+		end = len(m.commandOutputLines)
+	}
+	if start >= end {
+		lines = append(lines, styledLine{text: "(no output)", style: styles.Info})
+	} else {
+		bodyStyle := styles.Info
+		if styles.PreviewBody != nil {
+			bodyStyle = styles.PreviewBody
+		}
+		for _, line := range m.commandOutputLines[start:end] {
+			lines = append(lines, styledLine{text: line, style: bodyStyle})
+		}
+	}
+
+	rangeStart := 0
+	if len(m.commandOutputLines) > 0 && start < end {
+		rangeStart = start + 1
+	}
+	footer := fmt.Sprintf(
+		"↑/↓ scroll  pgup/pgdown page  home/end jump  esc back  %d-%d/%d",
+		rangeStart,
+		end,
+		len(m.commandOutputLines),
+	)
+	lines = append(lines, styledLine{text: footer, style: styles.Footer})
+	lines = applyWidth(lines, m.width)
+	lines = limitHeight(lines, m.height, m.width)
+	return renderLines(lines)
 }
 
 func (m *Model) bottomBarRows() int {

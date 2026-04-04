@@ -25,6 +25,10 @@ var listCommandsFn = func(socket string) (string, error) {
 	return string(out), nil
 }
 
+var runCommandOutputFn = func(socket string, args ...string) ([]byte, error) {
+	return tmuxCmd(socket, args...).CombinedOutput()
+}
+
 func loadCommandMenu(ctx Context) ([]Item, error) {
 	output, err := listCommandsFn(ctx.SocketPath)
 	if err != nil {
@@ -60,8 +64,7 @@ func RunCommand(socketPath, command string) tea.Cmd {
 			span.End(err)
 			return ActionResult{Err: err}
 		}
-		cmd := tmuxCmd(socketPath, args...)
-		out, err := cmd.CombinedOutput()
+		out, err := runCommandOutputFn(socketPath, args...)
 		span.AddAttr("argv", args)
 		span.AddAttr("output_bytes", len(out))
 		if err != nil {
@@ -74,6 +77,10 @@ func RunCommand(socketPath, command string) tea.Cmd {
 			return ActionResult{Err: fmt.Errorf("%s: %w", ran, err)}
 		}
 		span.End(nil)
-		return ActionResult{Info: fmt.Sprintf("Ran: %s", command)}
+		result := ActionResult{Info: fmt.Sprintf("Ran: %s", command)}
+		if output := strings.TrimRight(string(out), "\r\n"); strings.TrimSpace(output) != "" {
+			result.Output = output
+		}
+		return result
 	}
 }

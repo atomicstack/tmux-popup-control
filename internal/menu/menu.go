@@ -83,6 +83,7 @@ type Action func(Context, Item) tea.Cmd
 // ActionResult communicates the outcome of executing a menu action.
 type ActionResult struct {
 	Info string
+	Output string
 	Err  error
 }
 

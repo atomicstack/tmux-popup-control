@@ -26,6 +26,7 @@ func (m *Model) handleActionResultMsg(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	title := m.pendingLabel
 	m.loading = false
 	m.pendingID = ""
 	m.pendingLabel = ""
@@ -35,6 +36,11 @@ func (m *Model) handleActionResultMsg(msg tea.Msg) tea.Cmd {
 		events.Action.Error(result.Err)
 		return nil
 	}
+	if strings.TrimSpace(result.Output) != "" {
+		m.showCommandOutput(title, result.Output)
+		events.Action.Success(result.Info)
+		return nil
+	}
 	if result.Info != "" && m.verbose {
 		m.setInfo(result.Info)
 	} else {
@@ -42,6 +48,81 @@ func (m *Model) handleActionResultMsg(msg tea.Msg) tea.Cmd {
 	}
 	events.Action.Success(result.Info)
 	return tea.Quit
+}
+
+func (m *Model) showCommandOutput(title, output string) {
+	normalized := strings.ReplaceAll(output, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = strings.TrimRight(normalized, "\n")
+	m.commandOutputTitle = strings.TrimSpace(title)
+	if normalized == "" {
+		m.commandOutputLines = []string{""}
+	} else {
+		m.commandOutputLines = strings.Split(normalized, "\n")
+	}
+	m.commandOutputOffset = 0
+	m.mode = ModeCommandOutput
+	m.errMsg = ""
+	m.forceClearInfo()
+}
+
+func (m *Model) clearCommandOutput() {
+	m.commandOutputTitle = ""
+	m.commandOutputLines = nil
+	m.commandOutputOffset = 0
+	m.mode = ModeMenu
+}
+
+func (m *Model) handleCommandOutputKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+c":
+		return tea.Quit
+	case "esc":
+		m.clearCommandOutput()
+	case "up":
+		m.scrollCommandOutput(-1)
+	case "down":
+		m.scrollCommandOutput(1)
+	case "pgup":
+		m.scrollCommandOutput(-m.commandOutputPageSize())
+	case "pgdown":
+		m.scrollCommandOutput(m.commandOutputPageSize())
+	case "home":
+		m.commandOutputOffset = 0
+	case "end":
+		m.commandOutputOffset = m.maxCommandOutputOffset()
+	}
+	return nil
+}
+
+func (m *Model) commandOutputPageSize() int {
+	rows := m.height - 2
+	if m.commandOutputTitle != "" {
+		rows--
+	}
+	if rows < 1 {
+		return 1
+	}
+	return rows
+}
+
+func (m *Model) maxCommandOutputOffset() int {
+	maxOffset := len(m.commandOutputLines) - m.commandOutputPageSize()
+	if maxOffset < 0 {
+		return 0
+	}
+	return maxOffset
+}
+
+func (m *Model) scrollCommandOutput(delta int) {
+	offset := m.commandOutputOffset + delta
+	if offset < 0 {
+		offset = 0
+	}
+	if maxOffset := m.maxCommandOutputOffset(); offset > maxOffset {
+		offset = maxOffset
+	}
+	m.commandOutputOffset = offset
 }
 
 // commandPreloadMsg delivers the pre-fetched command list items.

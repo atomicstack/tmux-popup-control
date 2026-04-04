@@ -124,3 +124,27 @@ func TestViewShowsCommandSummaryBelowPrompt(t *testing.T) {
 		t.Fatalf("expected summary below prompt, got:\n%s", strings.Join(lines, "\n"))
 	}
 }
+
+func TestViewShowsCommandOutputScreen(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 60, Height: 8})
+	m.mode = ModeCommandOutput
+	m.commandOutputTitle = "list-keys"
+	m.commandOutputLines = []string{
+		"bind-key -T root C-b send-prefix",
+		"bind-key -T root C-o rotate-window",
+	}
+
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "output") {
+		t.Fatalf("expected output header, got:\n%s", view)
+	}
+	if !strings.Contains(view, "list-keys") {
+		t.Fatalf("expected command title, got:\n%s", view)
+	}
+	if !strings.Contains(view, "bind-key -T root C-b send-prefix") {
+		t.Fatalf("expected output body, got:\n%s", view)
+	}
+	if !strings.Contains(view, "esc back") {
+		t.Fatalf("expected output footer, got:\n%s", view)
+	}
+}
