@@ -8,7 +8,14 @@ Here’s what’s happened so far:
     - `c0ddb85` — dropdown now renders below the prompt when there is insufficient room above it.
     - `6877b8b` — backend refreshes no longer reset the completion selection or re-open an `Esc`-dismissed dropdown; dismissal now persists until text changes.
     - `d8942e2` — command-menu filtering now matches only the command token, so arguments do not empty the command list, and `Tab` replaces the current command token under the cursor.
+  - Follow-up help-text work landed after the completion feature:
+    - `a03e194` — added a follow-up spec and implementation plan for checked-in command help text and popup descriptions.
+    - `c76301e` — added `cmd/gen_command_help` and generated `internal/cmdhelp/data.go` from `~/git_tree/tmux/command-summary.md`.
+    - `9317f12` — wired command summaries into the prompt view and rendered aligned description columns for command flag completion rows while keeping live value candidates plain.
+    - Additional uncommitted verification fix: `move-window -r -t` now completes sessions instead of window labels, and exact-match value completions dismiss the dropdown so `Enter` can execute the typed command in integration flows.
   - Design spec written: `docs/superpowers/specs/2026-04-02-command-argument-completion-design.md`
+  - Follow-up help-text spec written: `docs/superpowers/specs/2026-04-04-command-help-text-design.md`
+  - Follow-up help-text plan written: `docs/superpowers/plans/2026-04-04-command-help-text.md`
   - Implementation plan written: `docs/superpowers/plans/2026-04-02-command-argument-completion.md` (14 tasks)
   - Task 1 complete: `internal/cmdparse/schema.go` — type definitions (CommandSchema, ArgFlagDef, PositionalDef, CompletionContext, ContextKind)
   - Task 2 complete: `internal/cmdparse/parse.go` + `parse_test.go` + golden file — synopsis parser that handles bool flag clusters, arg flags, positional args (required/optional/variadic), aliases, nested optionals. BuildRegistry indexes by name+alias.
