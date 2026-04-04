@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 // TestEnsurePreviewForLevelFallsBackToWindowList covers the session preview
@@ -52,9 +53,15 @@ func TestSessionPreviewUsesPaneCaptureWhenPanesAvailable(t *testing.T) {
 
 	capturedTarget := ""
 	old := panePreviewFn
-	panePreviewFn = func(_, pane string) ([]string, error) {
+	panePreviewFn = func(_, pane string) (tmux.PanePreviewData, error) {
 		capturedTarget = pane
-		return []string{"line1", "line2"}, nil
+		return tmux.PanePreviewData{
+			Lines:         []string{"line1", "line2"},
+			RawANSI:       true,
+			CursorVisible: true,
+			CursorX:       1,
+			CursorY:       0,
+		}, nil
 	}
 	defer func() { panePreviewFn = old }()
 
@@ -78,6 +85,9 @@ func TestSessionPreviewUsesPaneCaptureWhenPanesAvailable(t *testing.T) {
 	if len(data.lines) != 2 {
 		t.Fatalf("expected 2 preview lines, got %d: %v", len(data.lines), data.lines)
 	}
+	if !data.cursorVisible || data.cursorX != 1 || data.cursorY != 0 {
+		t.Fatalf("expected preview cursor metadata, got %+v", data)
+	}
 }
 
 // TestWindowPreviewUsesPaneCaptureWhenPanesAvailable mirrors the session test
@@ -94,9 +104,15 @@ func TestWindowPreviewUsesPaneCaptureWhenPanesAvailable(t *testing.T) {
 
 	capturedTarget := ""
 	old := panePreviewFn
-	panePreviewFn = func(_, pane string) ([]string, error) {
+	panePreviewFn = func(_, pane string) (tmux.PanePreviewData, error) {
 		capturedTarget = pane
-		return []string{"vim output"}, nil
+		return tmux.PanePreviewData{
+			Lines:         []string{"vim output"},
+			RawANSI:       true,
+			CursorVisible: true,
+			CursorX:       2,
+			CursorY:       0,
+		}, nil
 	}
 	defer func() { panePreviewFn = old }()
 
@@ -132,6 +148,36 @@ func TestHandlePreviewLoadedMsgIgnoresStaleResponses(t *testing.T) {
 	data := m.activePreview()
 	if data.lines != nil {
 		t.Fatalf("expected stale message to be ignored, got %+v", data)
+	}
+}
+
+func TestHandlePreviewLoadedMsgAnchorsPaneScrollToLastContentRow(t *testing.T) {
+	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
+	m := &Model{
+		stack: []*level{lvl},
+		preview: map[string]*previewData{
+			"pane:switch": {target: "dev:1.0", seq: 1},
+		},
+	}
+	msg := previewLoadedMsg{
+		levelID:       "pane:switch",
+		kind:          previewKindPane,
+		target:        "dev:1.0",
+		seq:           1,
+		lines:         []string{"only-line", ""},
+		rawANSI:       true,
+		cursorVisible: true,
+		cursorX:       0,
+		cursorY:       1,
+	}
+
+	m.handlePreviewLoadedMsg(msg)
+	data := m.activePreview()
+	if data == nil {
+		t.Fatal("expected preview data")
+	}
+	if data.scrollOffset != 0 {
+		t.Fatalf("expected pane preview scroll anchored to last content row, got %+v", data)
 	}
 }
 

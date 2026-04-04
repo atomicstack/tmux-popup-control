@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -103,6 +104,52 @@ func TestFetchSnapshotsIntegration(t *testing.T) {
 	}
 	if err := exec.Command("tmux", "-S", socket, "has-session", "-t", detachedSession).Run(); err == nil {
 		t.Fatalf("expected session %q to be removed", detachedSession)
+	}
+}
+
+func TestPanePreviewCapturesLiveCursorIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	sessionName := "cursor-preview"
+	if err := exec.Command("tmux", "-S", socket, "new-session", "-d", "-s", sessionName, "cat").Run(); err != nil {
+		t.Fatalf("failed to create cursor preview session: %v", err)
+	}
+	waitForSession(t, socket, sessionName)
+
+	paneOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", sessionName, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get pane id: %v", err)
+	}
+	paneID := strings.TrimSpace(string(paneOut))
+	if paneID == "" {
+		t.Fatal("expected pane id")
+	}
+
+	testutil.SendText(t, socket, paneID, "abcd")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	testutil.WaitForContent(t, ctx, socket, paneID, "abcd")
+
+	data, err := PanePreview(socket, paneID)
+	if err != nil {
+		t.Fatalf("PanePreview failed: %v", err)
+	}
+	if !data.CursorVisible {
+		t.Fatalf("expected visible cursor, got %+v", data)
+	}
+	if data.CursorX != 4 {
+		t.Fatalf("expected cursor x=4 after typing abcd, got %+v", data)
+	}
+	if len(data.Lines) == 0 {
+		t.Fatalf("expected preview lines, got %+v", data)
+	}
+	if !strings.Contains(strings.Join(data.Lines, "\n"), "abcd") {
+		t.Fatalf("expected preview to contain typed text, got %+v", data)
 	}
 }
 

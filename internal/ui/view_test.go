@@ -148,3 +148,61 @@ func TestViewShowsCommandOutputScreen(t *testing.T) {
 		t.Fatalf("expected output footer, got:\n%s", view)
 	}
 }
+
+func TestViewDisplaysPreviewCursorBlock(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 16})
+	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
+	m.stack = []*level{lvl}
+	m.preview["pane:switch"] = &previewData{
+		target:        "dev:1.0",
+		lines:         []string{"abcd", "wxyz"},
+		rawANSI:       false,
+		cursorVisible: true,
+		cursorX:       2,
+		cursorY:       1,
+		seq:           1,
+	}
+
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "wx█z") {
+		t.Fatalf("expected cursor block overlay in preview, got:\n%s", view)
+	}
+}
+
+func TestViewOmitsPreviewCursorBlockWhenNotVisible(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 16})
+	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
+	m.stack = []*level{lvl}
+	m.preview["pane:switch"] = &previewData{
+		target:        "dev:1.0",
+		lines:         []string{"abcd"},
+		rawANSI:       false,
+		cursorVisible: false,
+		seq:           1,
+	}
+
+	view := ansi.Strip(m.View().Content)
+	if strings.Contains(view, "█") {
+		t.Fatalf("did not expect cursor block, got:\n%s", view)
+	}
+}
+
+func TestViewDisplaysPreviewCursorBlockPastLineEnd(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 16})
+	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
+	m.stack = []*level{lvl}
+	m.preview["pane:switch"] = &previewData{
+		target:        "dev:1.0",
+		lines:         []string{"abcd"},
+		rawANSI:       false,
+		cursorVisible: true,
+		cursorX:       4,
+		cursorY:       0,
+		seq:           1,
+	}
+
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "abcd█") {
+		t.Fatalf("expected cursor block after trimmed line end, got:\n%s", view)
+	}
+}

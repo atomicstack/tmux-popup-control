@@ -22,6 +22,7 @@ const (
 var (
 	previewBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	previewScrollStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	previewCursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
 )
 
 type styledLine struct {
@@ -200,11 +201,12 @@ func (m *Model) viewVertical(header string) string {
 			if styles.PreviewBody != nil {
 				bodyStyle = styles.PreviewBody
 			}
-			for _, line := range previewDisplayLines(preview) {
-				if preview.rawANSI {
-					lines = append(lines, styledLine{text: line, raw: true})
+			displayLines, displayStart := previewDisplayLines(preview)
+			for idx, line := range displayLines {
+				if rendered, raw := renderPreviewLine(preview, line, displayStart+idx, bodyStyle); raw {
+					lines = append(lines, styledLine{text: rendered, raw: true})
 				} else {
-					lines = append(lines, styledLine{text: line, style: bodyStyle})
+					lines = append(lines, styledLine{text: rendered, style: bodyStyle})
 				}
 			}
 		}
@@ -602,8 +604,15 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 	rows = append(rows, topLine)
 	for i := 0; i < innerH; i++ {
 		var content string
+		rawLine := rawANSI
 		if i < len(contentLines) {
 			content = contentLines[i]
+		}
+		if preview != nil && preview.err == "" && i < len(contentLines) {
+			if rendered, renderedRaw := renderPreviewLine(preview, content, preview.scrollOffset+i, bodyStyle); rendered != "" {
+				content = rendered
+				rawLine = renderedRaw
+			}
 		}
 		// Truncate and pad using ANSI-aware measurement when content
 		// may contain escape sequences from capture-pane -e.
@@ -616,7 +625,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 			content = content + strings.Repeat(" ", innerW-w)
 		}
 		var styledContent string
-		if rawANSI {
+		if rawLine {
 			styledContent = content
 		} else if bodyStyle != nil {
 			styledContent = bodyStyle.Render(content)
@@ -756,15 +765,46 @@ func previewTitleText(data *previewData) string {
 	return fmt.Sprintf("Preview: %s%s", label, status)
 }
 
-func previewDisplayLines(data *previewData) []string {
+func previewDisplayLines(data *previewData) ([]string, int) {
 	lines := data.lines
 	if len(lines) == 0 {
-		return []string{}
+		return []string{}, 0
 	}
+	start := 0
 	if previewMaxDisplayLines > 0 && len(lines) > previewMaxDisplayLines {
-		return lines[len(lines)-previewMaxDisplayLines:]
+		start = len(lines) - previewMaxDisplayLines
+		return lines[start:], start
 	}
-	return lines
+	return lines, start
+}
+
+func renderPreviewLine(preview *previewData, line string, absoluteRow int, bodyStyle *lipgloss.Style) (string, bool) {
+	if preview == nil || !preview.cursorVisible || preview.cursorY != absoluteRow {
+		return line, preview != nil && preview.rawANSI
+	}
+	lineWidth := lipgloss.Width(line)
+	if preview.cursorX < 0 {
+		return line, preview.rawANSI
+	}
+	if preview.cursorX > lineWidth {
+		line = line + strings.Repeat(" ", preview.cursorX-lineWidth)
+		lineWidth = preview.cursorX
+	}
+
+	left := ansi.Cut(line, 0, preview.cursorX)
+	right := ""
+	if preview.cursorX+1 < lineWidth {
+		right = ansi.Cut(line, preview.cursorX+1, lineWidth)
+	}
+	block := previewCursorStyle.Render("█")
+
+	if preview.rawANSI {
+		return left + block + right, true
+	}
+	if bodyStyle != nil {
+		return bodyStyle.Render(left) + block + bodyStyle.Render(right), true
+	}
+	return left + block + right, true
 }
 
 func (m *Model) handleWindowSizeMsg(msg tea.Msg) tea.Cmd {
@@ -899,7 +939,8 @@ func (m *Model) maxVisibleItems() int {
 			if preview.err != "" {
 				used++ // one line for the error text
 			} else {
-				used += len(previewDisplayLines(preview))
+				displayLines, _ := previewDisplayLines(preview)
+				used += len(displayLines)
 			}
 		} else if current := m.currentLevel(); current != nil {
 			kind := previewKindForLevel(current.ID)
