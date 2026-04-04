@@ -58,7 +58,8 @@ control-mode connection via
 
 ### Other menus
 - **Keybinding** browser — lists all tmux key bindings, filterable
-- **Command** browser — lists all tmux commands, filterable
+- **Command** browser — lists all tmux commands, filterable, with contextual
+  argument completion for flags, flag values, and positional parameters
 
 ### UI
 - Fuzzy-search filtering on every menu level
@@ -66,6 +67,9 @@ control-mode connection via
 - Side-by-side preview panel with ANSI rendering and mouse-wheel scrolling
 - Background polling keeps menu data in sync with tmux state
 - Multi-select with Tab for bulk operations
+- Command prompt help line with tmux command summaries under the input field
+- Command completion popup with ghost hints, aligned flag/parameter
+  descriptions, wraparound navigation, and live tmux-backed value candidates
 - Alt-screen with mouse cell-motion support
 - Hybrid progress bar with gradient blocks and background fill for
   save/restore operations
@@ -96,7 +100,10 @@ make tidy            # go mod tidy
 make clean-cache     # removes .gocache/ and .gomodcache/
 make update-gotmuxcc # fetches latest gotmuxcc + re-vendors (online)
 make release         # cross-compiles + creates GitHub release via gh
+make release VERSION=0.6.0 # release a specific version tag
 ```
+
+`make release` requires the GitHub CLI (`gh`) to be installed and authenticated.
 
 ## Configuration
 
@@ -178,6 +185,8 @@ internal/backend/         polls tmux state via goroutines
 internal/state/           thread-safe in-memory stores (sessions, windows, panes)
 internal/tmux/            tmux operations via gotmuxcc control-mode + exec fallback
 internal/menu/            menu tree definitions, loaders, action handlers
+internal/cmdparse/        tmux command synopsis parsing, completion analysis, and value resolution
+internal/cmdhelp/         checked-in tmux command summaries and flag/parameter help data
 internal/resurrect/       save/restore orchestration, storage, pane archives
 internal/ui/              Bubble Tea model, split across focused files
 internal/ui/state/        per-level items, cursor, filter, selection, viewport
