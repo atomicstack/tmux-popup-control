@@ -4,6 +4,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 )
 
 func TestSessionMenuIncludesTree(t *testing.T) {
@@ -157,4 +162,83 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+func TestLoadSessionRestoreFromMenuShowsNameBeforeTypeAndColoredRows(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR", dir)
+
+	saves := []struct {
+		name string
+		kind resurrect.SaveKind
+		ts   string
+	}{
+		{name: "manual-save", kind: resurrect.SaveKindManual, ts: "20260405T100000"},
+		{name: "auto-2026-04-05T11-00-00", kind: resurrect.SaveKindAuto, ts: "20260405T110000"},
+	}
+	for _, save := range saves {
+		path := dir + "/" + save.name + "_" + save.ts + ".json"
+		sf := &resurrect.SaveFile{
+			Version:   2,
+			Timestamp: mustParseRFC3339(t, save.ts),
+			Name:      save.name,
+			Kind:      save.kind,
+			Sessions:  []resurrect.Session{{Name: "main"}},
+		}
+		if err := resurrect.WriteSaveFile(path, sf); err != nil {
+			t.Fatalf("WriteSaveFile(%s): %v", save.name, err)
+		}
+	}
+
+	items, err := loadSessionRestoreFromMenu(Context{})
+	if err != nil {
+		t.Fatalf("loadSessionRestoreFromMenu: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("expected header + 2 items, got %d", len(items))
+	}
+	if !items[0].Header || !strings.Contains(items[0].Label, "name") || !strings.Contains(items[0].Label, "type") {
+		t.Fatalf("expected restore header with name and type columns, got %#v", items[0])
+	}
+	if nameIdx := indexOf(items[0].Label, "name"); nameIdx < 0 {
+		t.Fatalf("expected name column in header, got %#v", items[0])
+	} else if typeIdx := indexOf(items[0].Label, "type"); typeIdx < 0 {
+		t.Fatalf("expected type column in header, got %#v", items[0])
+	} else if nameIdx >= typeIdx {
+		t.Fatalf("expected name column before type column, got %q", items[0].Label)
+	}
+
+	var sawManual, sawAuto bool
+	for _, item := range items[1:] {
+		if ansi.Strip(item.Label) == item.Label {
+			if item.StyledLabel == "" {
+				t.Fatalf("expected styled restore row for %q", item.Label)
+			}
+		}
+		stripped := ansi.Strip(item.StyledLabel)
+		switch {
+		case strings.Contains(stripped, "manual"):
+			sawManual = true
+			if !strings.Contains(item.StyledLabel, "[38;5;33m") {
+				t.Fatalf("expected manual row colour33 styling, got %q", item.StyledLabel)
+			}
+		case strings.Contains(stripped, "auto"):
+			sawAuto = true
+			if !strings.Contains(item.StyledLabel, "[38;5;93m") {
+				t.Fatalf("expected auto row colour93 styling, got %q", item.StyledLabel)
+			}
+		}
+	}
+	if !sawManual || !sawAuto {
+		t.Fatalf("expected both manual and auto rows, got %#v", items)
+	}
+}
+
+func mustParseRFC3339(t *testing.T, basic string) (outTime time.Time) {
+	t.Helper()
+	outTime, err := time.Parse("20060102T150405", basic)
+	if err != nil {
+		t.Fatalf("time.Parse(%q): %v", basic, err)
+	}
+	return outTime
 }

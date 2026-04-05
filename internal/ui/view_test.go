@@ -187,6 +187,38 @@ func TestViewOmitsPreviewCursorBlockWhenNotVisible(t *testing.T) {
 	}
 }
 
+func TestViewUsesStyledLabelForNormalMenuItems(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	lvl := newLevel("session:restore-from", "restore-from", []menu.Item{
+		{ID: "plain", Label: "plain-label", StyledLabel: "\x1b[38;5;33mstyled-label\x1b[39m"},
+	}, nil)
+	m.stack = []*level{lvl}
+
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "styled-label") {
+		t.Fatalf("expected styled label content in view, got:\n%s", view)
+	}
+	if strings.Contains(view, "plain-label") {
+		t.Fatalf("did not expect plain label when StyledLabel is present, got:\n%s", view)
+	}
+}
+
+func TestViewDoesNotEllipsizeStyledLabelThatFitsVisibly(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 10, Height: 6})
+	lvl := newLevel("session:restore-from", "restore-from", []menu.Item{
+		{ID: "short", Label: "short", StyledLabel: "\x1b[38;5;33mshort\x1b[39m"},
+	}, nil)
+	m.stack = []*level{lvl}
+
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "short") {
+		t.Fatalf("expected styled label content in view, got:\n%s", view)
+	}
+	if strings.Contains(view, "▌ …") {
+		t.Fatalf("did not expect restore row to be ellipsized, got:\n%s", view)
+	}
+}
+
 func TestViewDisplaysPreviewCursorBlockPastLineEnd(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 16})
 	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)

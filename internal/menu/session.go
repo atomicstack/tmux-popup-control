@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/atomicstack/tmux-popup-control/internal/format/table"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
@@ -453,13 +454,17 @@ func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
 
 	now := time.Now()
 	alignments := []table.Alignment{
-		table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignLeft,
+		table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignLeft,
 	}
-	headerRow := []string{"name", "age", "date", "time", "info"}
+	headerRow := []string{"name", "type", "age", "date", "time", "info"}
 	rows := make([][]string, 1+len(entries))
 	rows[0] = headerRow
 	ids := make([]string, len(entries))
 	for i, e := range entries {
+		saveType := string(e.Kind)
+		if saveType == "" {
+			saveType = string(resurrect.SaveKindManual)
+		}
 		name := e.DisplayName()
 		age := resurrect.RelativeTime(e.Timestamp, now)
 		date := e.Timestamp.Format("2006-01-02")
@@ -468,16 +473,36 @@ func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
 		if e.HasPaneContents {
 			info += " +contents"
 		}
-		rows[1+i] = []string{name, age, date, timeStr, info}
+		rows[1+i] = []string{name, saveType, age, date, timeStr, info}
 		ids[i] = e.Path
 	}
 	aligned := table.Format(rows, alignments)
 	items := make([]Item, len(aligned))
 	items[0] = Item{Label: aligned[0], Header: true}
 	for i := 1; i < len(aligned); i++ {
-		items[i] = Item{ID: ids[i-1], Label: aligned[i]}
+		entry := entries[i-1]
+		items[i] = Item{
+			ID:          ids[i-1],
+			Label:       aligned[i],
+			StyledLabel: styleSaveEntryLine(aligned[i], entry.Kind),
+		}
 	}
 	return items, nil
+}
+
+var (
+	saveEntryFgManual = ansi.NewStyle().ForegroundColor(ansi.IndexedColor(33)).String()
+	saveEntryFgAuto   = ansi.NewStyle().ForegroundColor(ansi.IndexedColor(93)).String()
+	saveEntryFgReset  = ansi.NewStyle().ForegroundColor(nil).String()
+)
+
+func styleSaveEntryLine(line string, kind resurrect.SaveKind) string {
+	switch kind {
+	case resurrect.SaveKindAuto:
+		return saveEntryFgAuto + line + saveEntryFgReset
+	default:
+		return saveEntryFgManual + line + saveEntryFgReset
+	}
 }
 
 func loadSessionTreeMenu(ctx Context) ([]Item, error) {

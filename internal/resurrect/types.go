@@ -2,7 +2,14 @@ package resurrect
 
 import "time"
 
-const currentVersion = 1
+const currentVersion = 2
+
+type SaveKind string
+
+const (
+	SaveKindManual SaveKind = "manual"
+	SaveKindAuto   SaveKind = "auto"
+)
 
 // Config is passed to Save/Restore by the caller.
 type Config struct {
@@ -10,6 +17,7 @@ type Config struct {
 	SaveDir             string // resolved by caller via ResolveDir()
 	CapturePaneContents bool
 	Name                string // empty for auto-timestamped
+	Kind                SaveKind
 	ClientID            string // terminal client name for switch-client
 }
 
@@ -18,6 +26,7 @@ type SaveFile struct {
 	Version           int       `json:"version"`
 	Timestamp         time.Time `json:"timestamp"`
 	Name              string    `json:"name"`
+	Kind              SaveKind  `json:"kind"`
 	HasPaneContents   bool      `json:"has_pane_contents"`
 	ClientSession     string    `json:"client_session"`
 	ClientLastSession string    `json:"client_last_session"`
@@ -70,6 +79,7 @@ type ProgressEvent struct {
 type SaveEntry struct {
 	Path            string
 	Name            string // snapshot name or empty for auto
+	Kind            SaveKind
 	Timestamp       time.Time
 	HasPaneContents bool
 	Size            int64

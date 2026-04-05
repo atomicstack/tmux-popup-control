@@ -14,6 +14,8 @@ if [[ ! -x "$BINARY_PATH" ]]; then
   fi
 fi
 
+tmux set-option -gq @tmux-popup-control-binary-path "$BINARY_PATH"
+
 # if [ -x "$(command -v copyq)" ]; then
 #   copyq &>/dev/null &
 # fi

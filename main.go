@@ -16,12 +16,22 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/plugin"
+	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	"golang.org/x/term"
 )
 
 // Version is set at build time via ldflags.
 var Version = "dev"
+
+var resolveSocketPathFn = tmux.ResolveSocketPath
+var resolveSaveDirFn = resurrect.ResolveDir
+var resolvePaneContentsFn = resurrect.ResolvePaneContents
+var resolveAutosaveIntervalMinutesFn = resurrect.ResolveAutosaveIntervalMinutes
+var resolveAutosaveMaxFn = resurrect.ResolveAutosaveMax
+var resolveAutosaveIconFn = resurrect.ResolveAutosaveIcon
+var resolveAutosaveIconSecondsFn = resurrect.ResolveAutosaveIconSeconds
+var renderAutoSaveStatusFn = resurrect.AutoSaveStatus
 
 func main() {
 	os.Exit(run())
@@ -82,6 +92,16 @@ func run() (exitCode int) {
 	if subcommand(runtimeCfg) == "restore-sessions" {
 		if err := runRestoreSessions(runtimeCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "restore-sessions: %v\n", err)
+			exitStatus = "error"
+			exitErr = err
+			return 1
+		}
+		return 0
+	}
+
+	if subcommand(runtimeCfg) == "autosave-status" {
+		if err := runAutosaveStatus(runtimeCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "autosave-status: %v\n", err)
 			exitStatus = "error"
 			exitErr = err
 			return 1
@@ -438,4 +458,39 @@ func runRestoreSessions(cfg config.Config) error {
 	}
 	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
 	return err
+}
+
+func runAutosaveStatus(cfg config.Config) error {
+	output, err := autosaveStatusOutput(cfg)
+	if err != nil {
+		return err
+	}
+	fmt.Println(output)
+	return nil
+}
+
+func autosaveStatusOutput(cfg config.Config) (string, error) {
+	fs := flag.NewFlagSet("autosave-status", flag.ContinueOnError)
+	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
+	if err := fs.Parse(subcommandArgs(cfg)); err != nil {
+		return "", err
+	}
+
+	socketPath, err := resolveSocketPathFn(*socket)
+	if err != nil {
+		return "", fmt.Errorf("resolving socket: %w", err)
+	}
+	saveDir, err := resolveSaveDirFn(socketPath)
+	if err != nil {
+		return "", fmt.Errorf("resolving save dir: %w", err)
+	}
+	return renderAutoSaveStatusFn(resurrect.StatusConfig{
+		SocketPath:          socketPath,
+		SaveDir:             saveDir,
+		CapturePaneContents: resolvePaneContentsFn(socketPath),
+		IntervalMinutes:     resolveAutosaveIntervalMinutesFn(socketPath),
+		Max:                 resolveAutosaveMaxFn(socketPath),
+		Icon:                resolveAutosaveIconFn(socketPath),
+		IconSeconds:         resolveAutosaveIconSecondsFn(socketPath),
+	})
 }

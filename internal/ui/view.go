@@ -439,9 +439,14 @@ func (m *Model) buildItemLine(item menu.Item, idx int, current *level, width int
 	if current.MultiSelect {
 		return m.buildMultiSelectLine(item, indicator, lineStyle, indicatorStyle, current, width)
 	}
-	fullText := indicator + " " + item.Label
+	if item.StyledLabel != "" {
+		return buildStyledNormalLine(item, indicator, lineStyle, indicatorStyle, width)
+	}
+	displayLabel := item.Label
+	fullText := indicator + " " + displayLabel
 	if width > 0 {
-		if pad := width - lipgloss.Width(fullText); pad > 0 {
+		visibleText := indicator + " " + item.Label
+		if pad := width - lipgloss.Width(visibleText); pad > 0 {
 			fullText += strings.Repeat(" ", pad)
 		}
 	}
@@ -450,6 +455,31 @@ func (m *Model) buildItemLine(item menu.Item, idx int, current *level, width int
 		style:         lineStyle,
 		prefixStyle:   indicatorStyle,
 		highlightFrom: 1, // just the ▌ character
+	}
+}
+
+func buildStyledNormalLine(item menu.Item, indicator string, lineStyle, indicatorStyle *lipgloss.Style, width int) styledLine {
+	bodyContent := item.StyledLabel
+	if width > 0 {
+		visWidth := lipgloss.Width(indicator + " " + item.Label)
+		if pad := width - visWidth; pad > 0 {
+			bodyContent += strings.Repeat(" ", pad)
+		}
+	}
+
+	styledIndicator := indicator
+	if indicatorStyle != nil {
+		styledIndicator = indicatorStyle.Render(indicator)
+	}
+
+	styledBody := " " + bodyContent
+	if lineStyle != nil {
+		styledBody = lineStyle.Render(styledBody)
+	}
+
+	return styledLine{
+		text: styledIndicator + styledBody,
+		raw:  true,
 	}
 }
 

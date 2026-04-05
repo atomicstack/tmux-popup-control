@@ -173,6 +173,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 	saveFile.Version = currentVersion
 	saveFile.Timestamp = now
 	saveFile.Name = cfg.Name
+	saveFile.Kind = normalizeSaveKind(cfg.Kind)
 	saveFile.HasPaneContents = cfg.CapturePaneContents
 	saveFile.ClientSession = clientSess
 	saveFile.ClientLastSession = clientLastSess
@@ -297,7 +298,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 
 	// ── Phase 5: update last symlink ────────────────────────────────────────
 
-	if cfg.Name == "" {
+	if shouldUpdateLast(cfg) {
 		step++
 		ch <- ProgressEvent{
 			Step:    step,
@@ -328,4 +329,15 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 // return 0; the restore flow does not depend on this field.
 func parseCreated(_ tmux.Session) int64 {
 	return 0
+}
+
+func normalizeSaveKind(kind SaveKind) SaveKind {
+	if kind == SaveKindAuto {
+		return SaveKindAuto
+	}
+	return SaveKindManual
+}
+
+func shouldUpdateLast(cfg Config) bool {
+	return normalizeSaveKind(cfg.Kind) == SaveKindAuto || cfg.Name == ""
 }

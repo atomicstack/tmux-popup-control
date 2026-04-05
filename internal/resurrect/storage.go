@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -136,6 +137,9 @@ func ReadSaveFile(path string) (*SaveFile, error) {
 	if err := json.Unmarshal(data, &sf); err != nil {
 		return nil, fmt.Errorf("could not parse save file %q: %w", path, err)
 	}
+	if sf.Kind == "" {
+		sf.Kind = SaveKindManual
+	}
 	return &sf, nil
 }
 
@@ -187,6 +191,7 @@ func ListSaves(dir string) ([]SaveEntry, error) {
 		entries = append(entries, SaveEntry{
 			Path:            p,
 			Name:            sf.Name,
+			Kind:            sf.Kind,
 			Timestamp:       sf.Timestamp,
 			HasPaneContents: sf.HasPaneContents,
 			Size:            info.Size(),
@@ -200,6 +205,119 @@ func ListSaves(dir string) ([]SaveEntry, error) {
 		return entries[i].Timestamp.After(entries[j].Timestamp)
 	})
 	return entries, nil
+}
+
+const (
+	envAutosaveIntervalMinutes = "TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES"
+	envAutosaveMax             = "TMUX_POPUP_CONTROL_AUTOSAVE_MAX"
+	envAutosaveIcon            = "TMUX_POPUP_CONTROL_AUTOSAVE_ICON"
+	envAutosaveIconSeconds     = "TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS"
+	optAutosaveIntervalMinutes = "@tmux-popup-control-autosave-interval-minutes"
+	optAutosaveMax             = "@tmux-popup-control-autosave-max"
+	optAutosaveIcon            = "@tmux-popup-control-autosave-icon"
+	optAutosaveIconSeconds     = "@tmux-popup-control-autosave-icon-seconds"
+)
+
+func ResolveAutosaveIntervalMinutes(socketPath string) int {
+	if v := strings.TrimSpace(os.Getenv(envAutosaveIntervalMinutes)); v != "" {
+		return parseAutosaveInterval(v)
+	}
+	if v := strings.TrimSpace(tmuxOptionFn(socketPath, optAutosaveIntervalMinutes)); v != "" {
+		return parseAutosaveInterval(v)
+	}
+	return 0
+}
+
+func ResolveAutosaveMax(socketPath string) int {
+	if v := strings.TrimSpace(os.Getenv(envAutosaveMax)); v != "" {
+		return parseAutosaveMax(v)
+	}
+	if v := strings.TrimSpace(tmuxOptionFn(socketPath, optAutosaveMax)); v != "" {
+		return parseAutosaveMax(v)
+	}
+	return 5
+}
+
+func ResolveAutosaveIconSeconds(socketPath string) int {
+	if v := strings.TrimSpace(os.Getenv(envAutosaveIconSeconds)); v != "" {
+		return parseAutosaveIconSeconds(v)
+	}
+	if v := strings.TrimSpace(tmuxOptionFn(socketPath, optAutosaveIconSeconds)); v != "" {
+		return parseAutosaveIconSeconds(v)
+	}
+	return 0
+}
+
+func ResolveAutosaveIcon(socketPath string) string {
+	if v := os.Getenv(envAutosaveIcon); v != "" {
+		return v
+	}
+	if v := tmuxOptionFn(socketPath, optAutosaveIcon); v != "" {
+		return v
+	}
+	return defaultAutosaveStatusIcon
+}
+
+func parseAutosaveInterval(value string) int {
+	interval, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || interval <= 0 {
+		return 0
+	}
+	return interval
+}
+
+func parseAutosaveMax(value string) int {
+	max, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return 5
+	}
+	if max < 1 {
+		return 1
+	}
+	return max
+}
+
+func parseAutosaveIconSeconds(value string) int {
+	iconSeconds, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || iconSeconds <= 0 {
+		return 0
+	}
+	return iconSeconds
+}
+
+func AutoSaveName(ts time.Time) string {
+	return "auto-" + ts.Format("2006-01-02T15-04-05")
+}
+
+func PruneAutoSaves(dir string, max int) error {
+	if max < 1 {
+		max = 1
+	}
+	entries, err := ListSaves(dir)
+	if err != nil {
+		return err
+	}
+
+	autoEntries := make([]SaveEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Kind == SaveKindAuto {
+			autoEntries = append(autoEntries, entry)
+		}
+	}
+	if len(autoEntries) <= max {
+		return nil
+	}
+
+	for _, entry := range autoEntries[max:] {
+		if err := os.Remove(entry.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("removing autosave %q: %w", entry.Path, err)
+		}
+		archive := paneArchivePath(entry.Path)
+		if err := os.Remove(archive); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("removing autosave archive %q: %w", archive, err)
+		}
+	}
+	return nil
 }
 
 // ResolvePaneContents reports whether pane content capture is enabled.
