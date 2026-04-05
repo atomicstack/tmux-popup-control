@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"reflect"
 	"testing"
 
@@ -100,7 +101,7 @@ func TestSubcommandHelpersUseParsedCommandArgs(t *testing.T) {
 	}
 }
 
-func TestAutosaveStatusOutputUsesResolvedSettings(t *testing.T) {
+func TestAutoSaveOutputUsesResolvedSettings(t *testing.T) {
 	restoreSaveDir := withResolveSaveDirFn(func(string) (string, error) { return "/tmp/saves", nil })
 	defer restoreSaveDir()
 	restorePaneContents := withResolvePaneContentsFn(func(string) bool { return true })
@@ -117,25 +118,26 @@ func TestAutosaveStatusOutputUsesResolvedSettings(t *testing.T) {
 	defer restoreIcon()
 
 	var gotCfg resurrect.StatusConfig
-	restoreStatus := withRenderAutoSaveStatusFn(func(cfg resurrect.StatusConfig) (string, error) {
+	restoreAutosave := withRunAutoSaveCommandFn(func(cfg resurrect.StatusConfig, outputWriter io.Writer) error {
 		gotCfg = cfg
-		return "X ", nil
+		_, err := outputWriter.Write([]byte("X \n"))
+		return err
 	})
-	defer restoreStatus()
+	defer restoreAutosave()
 
-	output, err := autosaveStatusOutput(config.Config{
+	output, err := autoSaveOutput(config.Config{
 		App: app.Config{SocketPath: "app-socket"},
 		Command: []string{
-			"autosave-status",
+			"autosave",
 			"-socket", "flag-socket",
 		},
 	})
 	if err != nil {
-		t.Fatalf("autosaveStatusOutput: %v", err)
+		t.Fatalf("autoSaveOutput: %v", err)
 	}
 
-	if output != "X " {
-		t.Fatalf("expected autosave output %q, got %q", "X ", output)
+	if output != "X \n" {
+		t.Fatalf("expected autosave output %q, got %q", "X \n", output)
 	}
 	if gotCfg.SocketPath != "/tmp/tmux.sock" {
 		t.Fatalf("expected socket path %q, got %q", "/tmp/tmux.sock", gotCfg.SocketPath)
@@ -202,8 +204,8 @@ func withResolveAutosaveIconSecondsFn(fn func(string) int) func() {
 	return func() { resolveAutosaveIconSecondsFn = orig }
 }
 
-func withRenderAutoSaveStatusFn(fn func(resurrect.StatusConfig) (string, error)) func() {
-	orig := renderAutoSaveStatusFn
-	renderAutoSaveStatusFn = fn
-	return func() { renderAutoSaveStatusFn = orig }
+func withRunAutoSaveCommandFn(fn func(resurrect.StatusConfig, io.Writer) error) func() {
+	orig := runAutoSaveCommandFn
+	runAutoSaveCommandFn = fn
+	return func() { runAutoSaveCommandFn = orig }
 }

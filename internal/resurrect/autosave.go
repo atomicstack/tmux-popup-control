@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -30,6 +31,8 @@ type autoSaveState struct {
 
 var autosaveNowFn = time.Now
 
+var autosaveSleepFn = time.Sleep
+
 var withAutosaveLockFn = func(dir string, critical func() error) error {
 	lockPath := autosaveLockPath(dir)
 	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
@@ -55,6 +58,12 @@ func withAutosaveNowFn(fn func() time.Time) func() {
 	orig := autosaveNowFn
 	autosaveNowFn = fn
 	return func() { autosaveNowFn = orig }
+}
+
+func withAutosaveSleepFn(fn func(time.Duration)) func() {
+	orig := autosaveSleepFn
+	autosaveSleepFn = fn
+	return func() { autosaveSleepFn = orig }
 }
 
 func withWithAutosaveLockFn(fn func(string, func() error) error) func() {
@@ -96,51 +105,67 @@ func RunAutoSave(cfg Config, max int) error {
 	return nil
 }
 
-// AutoSaveStatus is intended for tmux status-right #() usage. It performs a
-// due autosave when needed and returns either the save icon or an empty string.
-func AutoSaveStatus(cfg StatusConfig) (string, error) {
+// RunAutoSaveCommand is intended for tmux status-right #() usage. It acquires
+// a singleton lifetime lock, waits until the next required event, writes
+// status-line output over time, and exits after clearing the icon.
+func RunAutoSaveCommand(cfg StatusConfig, output io.Writer) error {
 	if cfg.IntervalMinutes <= 0 {
-		return "", nil
+		return nil
 	}
 
+	err := withAutosaveLockFn(cfg.SaveDir, func() error {
+		return runAutoSaveCommandLocked(cfg, output)
+	})
+	if errors.Is(err, ErrAutoSaveLocked) {
+		return nil
+	}
+	return err
+}
+
+func runAutoSaveCommandLocked(cfg StatusConfig, output io.Writer) error {
 	now := autosaveNowFn()
 	lastSuccess, err := LastAutoSaveSuccess(cfg.SaveDir)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	if autoSaveDue(lastSuccess, now, cfg.IntervalMinutes) {
-		err = withAutosaveLockFn(cfg.SaveDir, func() error {
-			refreshedLastSuccess, err := LastAutoSaveSuccess(cfg.SaveDir)
-			if err != nil {
-				return err
-			}
-			if !autoSaveDue(refreshedLastSuccess, autosaveNowFn(), cfg.IntervalMinutes) {
-				return nil
-			}
-			return RunAutoSave(Config{
-				SocketPath:          cfg.SocketPath,
-				SaveDir:             cfg.SaveDir,
-				CapturePaneContents: cfg.CapturePaneContents,
-				Kind:                SaveKindAuto,
-			}, cfg.Max)
-		})
-		if err != nil && !errors.Is(err, ErrAutoSaveLocked) {
-			return "", err
-		}
-		lastSuccess, err = LastAutoSaveSuccess(cfg.SaveDir)
-		if err != nil {
-			return "", err
-		}
+	currentIcon := currentAutoSaveIcon(lastSuccess, now, cfg.IconSeconds, cfg.Icon)
+	if err := writeAutoSaveLine(output, currentIcon); err != nil {
+		return err
 	}
 
-	if cfg.IconSeconds <= 0 || lastSuccess.IsZero() {
-		return "", nil
+	if currentIcon != "" {
+		autosaveSleepFn(iconRemaining(lastSuccess, now, cfg.IconSeconds))
+		return writeAutoSaveLine(output, "")
 	}
-	if now.Sub(lastSuccess) <= time.Duration(cfg.IconSeconds)*time.Second {
-		return resolveAutoSaveStatusIcon(cfg.Icon), nil
+
+	if sleepFor := timeUntilNextAutoSave(lastSuccess, now, cfg.IntervalMinutes); sleepFor > 0 {
+		autosaveSleepFn(sleepFor)
 	}
-	return "", nil
+
+	if err := RunAutoSave(Config{
+		SocketPath:          cfg.SocketPath,
+		SaveDir:             cfg.SaveDir,
+		CapturePaneContents: cfg.CapturePaneContents,
+		Kind:                SaveKindAuto,
+	}, cfg.Max); err != nil {
+		return err
+	}
+
+	lastSuccess, err = LastAutoSaveSuccess(cfg.SaveDir)
+	if err != nil {
+		return err
+	}
+	now = autosaveNowFn()
+	iconAfterSave := currentAutoSaveIcon(lastSuccess, now, cfg.IconSeconds, cfg.Icon)
+	if iconAfterSave == "" {
+		return nil
+	}
+	if err := writeAutoSaveLine(output, iconAfterSave); err != nil {
+		return err
+	}
+	autosaveSleepFn(iconRemaining(lastSuccess, now, cfg.IconSeconds))
+	return writeAutoSaveLine(output, "")
 }
 
 func resolveAutoSaveStatusIcon(icon string) string {
@@ -210,4 +235,37 @@ func autoSaveDue(lastSuccess, now time.Time, intervalMinutes int) bool {
 		return true
 	}
 	return !now.Before(lastSuccess.Add(time.Duration(intervalMinutes) * time.Minute))
+}
+
+func currentAutoSaveIcon(lastSuccess, now time.Time, iconSeconds int, icon string) string {
+	if iconSeconds <= 0 || lastSuccess.IsZero() {
+		return ""
+	}
+	if now.Sub(lastSuccess) <= time.Duration(iconSeconds)*time.Second {
+		return resolveAutoSaveStatusIcon(icon)
+	}
+	return ""
+}
+
+func timeUntilNextAutoSave(lastSuccess, now time.Time, intervalMinutes int) time.Duration {
+	if autoSaveDue(lastSuccess, now, intervalMinutes) {
+		return 0
+	}
+	return lastSuccess.Add(time.Duration(intervalMinutes)*time.Minute).Sub(now)
+}
+
+func iconRemaining(lastSuccess, now time.Time, iconSeconds int) time.Duration {
+	if iconSeconds <= 0 || lastSuccess.IsZero() {
+		return 0
+	}
+	remaining := lastSuccess.Add(time.Duration(iconSeconds)*time.Second).Sub(now)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+func writeAutoSaveLine(output io.Writer, line string) error {
+	_, err := fmt.Fprintln(output, line)
+	return err
 }

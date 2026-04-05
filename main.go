@@ -31,7 +31,7 @@ var resolveAutosaveIntervalMinutesFn = resurrect.ResolveAutosaveIntervalMinutes
 var resolveAutosaveMaxFn = resurrect.ResolveAutosaveMax
 var resolveAutosaveIconFn = resurrect.ResolveAutosaveIcon
 var resolveAutosaveIconSecondsFn = resurrect.ResolveAutosaveIconSeconds
-var renderAutoSaveStatusFn = resurrect.AutoSaveStatus
+var runAutoSaveCommandFn = resurrect.RunAutoSaveCommand
 
 func main() {
 	os.Exit(run())
@@ -99,9 +99,9 @@ func run() (exitCode int) {
 		return 0
 	}
 
-	if subcommand(runtimeCfg) == "autosave-status" {
-		if err := runAutosaveStatus(runtimeCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "autosave-status: %v\n", err)
+	if subcommand(runtimeCfg) == "autosave" || subcommand(runtimeCfg) == "autosave-status" {
+		if err := runAutosave(runtimeCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "autosave: %v\n", err)
 			exitStatus = "error"
 			exitErr = err
 			return 1
@@ -460,37 +460,55 @@ func runRestoreSessions(cfg config.Config) error {
 	return err
 }
 
-func runAutosaveStatus(cfg config.Config) error {
-	output, err := autosaveStatusOutput(cfg)
+func runAutosave(cfg config.Config) error {
+	autoSaveCfg, err := buildAutoSaveConfig(cfg)
 	if err != nil {
 		return err
 	}
-	fmt.Println(output)
-	return nil
+	return runAutoSaveCommandFn(autoSaveCfg, os.Stdout)
 }
 
-func autosaveStatusOutput(cfg config.Config) (string, error) {
-	fs := flag.NewFlagSet("autosave-status", flag.ContinueOnError)
-	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
-	if err := fs.Parse(subcommandArgs(cfg)); err != nil {
+func autoSaveOutput(cfg config.Config) (string, error) {
+	autoSaveCfg, err := buildAutoSaveConfig(cfg)
+	if err != nil {
 		return "", err
 	}
+	var output strings.Builder
+	if err := runAutoSaveCommandFn(autoSaveCfg, &output); err != nil {
+		return "", err
+	}
+	return output.String(), nil
+}
 
-	socketPath, err := resolveSocketPathFn(*socket)
-	if err != nil {
-		return "", fmt.Errorf("resolving socket: %w", err)
+func buildAutoSaveConfig(cfg config.Config) (resurrect.StatusConfig, error) {
+	socketPath := cfg.App.SocketPath
+	if parsed := autoSaveSocketFlag(cfg); parsed != "" {
+		socketPath = parsed
 	}
-	saveDir, err := resolveSaveDirFn(socketPath)
+	resolvedSocketPath, err := resolveSocketPathFn(socketPath)
 	if err != nil {
-		return "", fmt.Errorf("resolving save dir: %w", err)
+		return resurrect.StatusConfig{}, fmt.Errorf("resolving socket: %w", err)
 	}
-	return renderAutoSaveStatusFn(resurrect.StatusConfig{
-		SocketPath:          socketPath,
+	saveDir, err := resolveSaveDirFn(resolvedSocketPath)
+	if err != nil {
+		return resurrect.StatusConfig{}, fmt.Errorf("resolving save dir: %w", err)
+	}
+	return resurrect.StatusConfig{
+		SocketPath:          resolvedSocketPath,
 		SaveDir:             saveDir,
-		CapturePaneContents: resolvePaneContentsFn(socketPath),
-		IntervalMinutes:     resolveAutosaveIntervalMinutesFn(socketPath),
-		Max:                 resolveAutosaveMaxFn(socketPath),
-		Icon:                resolveAutosaveIconFn(socketPath),
-		IconSeconds:         resolveAutosaveIconSecondsFn(socketPath),
-	})
+		CapturePaneContents: resolvePaneContentsFn(resolvedSocketPath),
+		IntervalMinutes:     resolveAutosaveIntervalMinutesFn(resolvedSocketPath),
+		Max:                 resolveAutosaveMaxFn(resolvedSocketPath),
+		Icon:                resolveAutosaveIconFn(resolvedSocketPath),
+		IconSeconds:         resolveAutosaveIconSecondsFn(resolvedSocketPath),
+	}, nil
+}
+
+func autoSaveSocketFlag(cfg config.Config) string {
+	fs := flag.NewFlagSet("autosave", flag.ContinueOnError)
+	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
+	if err := fs.Parse(subcommandArgs(cfg)); err != nil {
+		return cfg.App.SocketPath
+	}
+	return *socket
 }

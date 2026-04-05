@@ -1,6 +1,7 @@
 package resurrect
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -291,8 +292,11 @@ func TestRunAutoSavePrunesOlderAutoSavesButKeepsManualSaves(t *testing.T) {
 	}
 }
 
-func TestAutoSaveStatusRunsDueSaveAndReturnsIcon(t *testing.T) {
+func TestRunAutoSaveCommandSleepsUntilDueThenPrintsIconAndClears(t *testing.T) {
 	dir := t.TempDir()
+	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 3, 8, 0, time.UTC)); err != nil {
+		t.Fatalf("WriteAutoSaveState: %v", err)
+	}
 
 	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
 	defer restoreFetchSessions()
@@ -304,82 +308,112 @@ func TestAutoSaveStatusRunsDueSaveAndReturnsIcon(t *testing.T) {
 	defer restoreWindowOpts()
 	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
 	defer restoreClientInfo()
-	restoreNow := withAutosaveNowFn(func() time.Time {
-		return time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
-	})
+	now := time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
+	restoreNow := withAutosaveNowFn(func() time.Time { return now })
 	defer restoreNow()
 	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
 		return critical()
 	})
 	defer restoreLock()
+	var sleeps []time.Duration
+	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
+		sleeps = append(sleeps, d)
+		now = now.Add(d)
+	})
+	defer restoreSleep()
 
-	status, err := AutoSaveStatus(StatusConfig{
+	var out bytes.Buffer
+	err := RunAutoSaveCommand(StatusConfig{
 		SocketPath:      "/tmp/tmux.sock",
 		SaveDir:         dir,
 		IntervalMinutes: 5,
 		Max:             5,
 		IconSeconds:     10,
 		Icon:            "X ",
-	})
+	}, &out)
 	if err != nil {
-		t.Fatalf("AutoSaveStatus: %v", err)
+		t.Fatalf("RunAutoSaveCommand: %v", err)
 	}
-	if status != "X " {
-		t.Fatalf("expected autosave icon output, got %q", status)
+	if got := out.String(); got != "\nX \n\n" {
+		t.Fatalf("expected autosave output sequence %q, got %q", "\nX \n\n", got)
+	}
+	if len(sleeps) != 2 || sleeps[0] != 1*time.Minute || sleeps[1] != 10*time.Second {
+		t.Fatalf("expected sleep sequence [1m,10s], got %#v", sleeps)
 	}
 }
 
-func TestAutoSaveStatusFallsBackToDefaultIcon(t *testing.T) {
+func TestRunAutoSaveCommandFallsBackToDefaultIcon(t *testing.T) {
 	dir := t.TempDir()
 
 	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)); err != nil {
 		t.Fatalf("WriteAutoSaveState: %v", err)
 	}
-	restoreNow := withAutosaveNowFn(func() time.Time {
-		return time.Date(2026, 4, 5, 16, 7, 9, 0, time.UTC)
-	})
+	now := time.Date(2026, 4, 5, 16, 7, 9, 0, time.UTC)
+	restoreNow := withAutosaveNowFn(func() time.Time { return now })
 	defer restoreNow()
+	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
+		return critical()
+	})
+	defer restoreLock()
+	var sleeps []time.Duration
+	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
+		sleeps = append(sleeps, d)
+		now = now.Add(d)
+	})
+	defer restoreSleep()
 
-	status, err := AutoSaveStatus(StatusConfig{
+	var out bytes.Buffer
+	err := RunAutoSaveCommand(StatusConfig{
 		SaveDir:         dir,
 		IntervalMinutes: 5,
 		Max:             5,
 		IconSeconds:     10,
-	})
+	}, &out)
 	if err != nil {
-		t.Fatalf("AutoSaveStatus: %v", err)
+		t.Fatalf("RunAutoSaveCommand: %v", err)
 	}
-	if status != "💾" {
-		t.Fatalf("expected default autosave icon output, got %q", status)
+	if got := out.String(); got != "💾\n\n" {
+		t.Fatalf("expected default autosave icon output, got %q", got)
+	}
+	if len(sleeps) != 1 || sleeps[0] != 9*time.Second {
+		t.Fatalf("expected single icon-clear sleep of 9s, got %#v", sleeps)
 	}
 }
 
-func TestAutoSaveStatusReturnsBlankWhenIconDisabled(t *testing.T) {
+func TestRunAutoSaveCommandReturnsBlankWhenIconDisabled(t *testing.T) {
 	dir := t.TempDir()
 
 	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)); err != nil {
 		t.Fatalf("WriteAutoSaveState: %v", err)
 	}
-	restoreNow := withAutosaveNowFn(func() time.Time {
-		return time.Date(2026, 4, 5, 16, 7, 9, 0, time.UTC)
-	})
+	now := time.Date(2026, 4, 5, 16, 7, 9, 0, time.UTC)
+	restoreNow := withAutosaveNowFn(func() time.Time { return now })
 	defer restoreNow()
+	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
+		return critical()
+	})
+	defer restoreLock()
+	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
+		now = now.Add(d)
+	})
+	defer restoreSleep()
 
-	status, err := AutoSaveStatus(StatusConfig{
+	var out bytes.Buffer
+	err := RunAutoSaveCommand(StatusConfig{
 		SaveDir:         dir,
 		IntervalMinutes: 5,
 		Max:             5,
 		IconSeconds:     0,
-	})
+	}, &out)
 	if err != nil {
-		t.Fatalf("AutoSaveStatus: %v", err)
+		t.Fatalf("RunAutoSaveCommand: %v", err)
 	}
-	if status != "" {
-		t.Fatalf("expected blank autosave status, got %q", status)
+	if got := out.String(); got != "\n" {
+		t.Fatalf("expected blank autosave output, got %q", got)
 	}
 }
 
-func TestAutoSaveStatusSkipsDueSaveWhenLockBusy(t *testing.T) {
+func TestRunAutoSaveCommandExitsQuietlyWhenLockBusy(t *testing.T) {
 	dir := t.TempDir()
 
 	restoreNow := withAutosaveNowFn(func() time.Time {
@@ -391,17 +425,18 @@ func TestAutoSaveStatusSkipsDueSaveWhenLockBusy(t *testing.T) {
 	})
 	defer restoreLock()
 
-	status, err := AutoSaveStatus(StatusConfig{
+	var out bytes.Buffer
+	err := RunAutoSaveCommand(StatusConfig{
 		SaveDir:         dir,
 		IntervalMinutes: 5,
 		Max:             5,
 		IconSeconds:     10,
-	})
+	}, &out)
 	if err != nil {
-		t.Fatalf("AutoSaveStatus: %v", err)
+		t.Fatalf("RunAutoSaveCommand: %v", err)
 	}
-	if status != "" {
-		t.Fatalf("expected blank autosave status when lock busy, got %q", status)
+	if got := out.String(); got != "" {
+		t.Fatalf("expected no autosave output when lock busy, got %q", got)
 	}
 
 	entries, err := ListSaves(dir)
