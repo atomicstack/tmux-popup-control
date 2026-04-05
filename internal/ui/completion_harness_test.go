@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -86,8 +85,42 @@ func TestCompletionTabAccepts(t *testing.T) {
 	if current == nil {
 		t.Fatal("expected current level")
 	}
-	if !strings.Contains(current.Filter, selected) {
-		t.Fatalf("expected filter to contain %q, got %q", selected, current.Filter)
+	if current.Filter != "kill-session -t "+selected {
+		t.Fatalf("expected filter to contain accepted completion without trailing space, got %q", current.Filter)
+	}
+	if h.model.completionVisible() {
+		t.Fatal("expected dropdown to stay closed after tab acceptance")
+	}
+}
+
+func TestCompletionEnterExecutesInsteadOfAccepting(t *testing.T) {
+	h := setupCommandHarness(t)
+
+	sendKeys(h, "move-window")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	sendKeys(h, "-r")
+
+	if !h.model.completionVisible() {
+		t.Fatal("expected exact-match flag completion to be visible")
+	}
+
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	current := h.model.currentLevel()
+	if current == nil {
+		t.Fatal("expected current level")
+	}
+	if current.Filter != "" {
+		t.Fatalf("expected enter to submit and clear the filter, got %q", current.Filter)
+	}
+	if !h.model.loading {
+		t.Fatal("expected enter to start command execution")
+	}
+	if h.model.pendingID != "command" {
+		t.Fatalf("expected pendingID command, got %q", h.model.pendingID)
+	}
+	if h.model.pendingLabel != "move-window -r" {
+		t.Fatalf("expected pendingLabel to preserve typed command, got %q", h.model.pendingLabel)
 	}
 }
 
@@ -237,6 +270,51 @@ func TestCompletionDismissedByEscapeStaysDismissedUntilInputChanges(t *testing.T
 	}
 }
 
+func TestCompletionDismissedByTabStaysDismissedUntilInputChanges(t *testing.T) {
+	h := setupCommandHarness(t)
+
+	sendKeys(h, "move-window")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	sendKeys(h, "-r")
+	if !h.model.completionVisible() {
+		t.Fatal("expected dropdown visible for exact-match flag completion")
+	}
+
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	if h.model.completionVisible() {
+		t.Fatal("expected dropdown dismissed after tab acceptance")
+	}
+
+	current := h.model.currentLevel()
+	if current == nil {
+		t.Fatal("expected current level")
+	}
+	if current.Filter != "move-window -r" {
+		t.Fatalf("expected exact-match tab acceptance to leave filter unchanged, got %q", current.Filter)
+	}
+
+	h.Send(backendEventMsg{event: backend.Event{
+		Kind: backend.KindSessions,
+		Data: tmux.SessionSnapshot{
+			Sessions: []tmux.Session{
+				{Name: "main"},
+				{Name: "work"},
+				{Name: "scratch"},
+			},
+			Current:        "main",
+			IncludeCurrent: true,
+		},
+	}})
+	if h.model.completionVisible() {
+		t.Fatal("expected dropdown to stay dismissed across backend refresh after tab acceptance")
+	}
+
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	if !h.model.completionVisible() {
+		t.Fatal("expected input modification to re-trigger completion after tab dismissal")
+	}
+}
+
 func setupCommandHarness(t *testing.T) *Harness {
 	t.Helper()
 
@@ -260,12 +338,14 @@ func setupCommandHarness(t *testing.T) *Harness {
 		"kill-session [-aC] [-t target-session]",
 		"swap-window (swapw) [-d] [-s src-window] [-t target-window]",
 		"bind-key (bind) [-nr] [-T key-table] [-N note] key [command [argument ...]]",
+		"move-window (movew) [-abdkr] [-s src-window] [-t dst-window]",
 	}
 	model.commandSchemas = cmdparse.BuildRegistry(commandLines)
 	model.commandItemsCache = []menu.Item{
 		{ID: "kill-session", Label: commandLines[0]},
 		{ID: "swap-window", Label: commandLines[1]},
 		{ID: "bind-key", Label: commandLines[2]},
+		{ID: "move-window", Label: commandLines[3]},
 	}
 
 	node, ok := model.registry.Find("command")

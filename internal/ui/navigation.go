@@ -339,8 +339,6 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		case "esc":
 			m.dismissCompletionUntilInputChanges()
 			return nil
-		case "enter":
-			return m.acceptCompletion()
 		}
 	}
 	if keyMsg.String() == "tab" {

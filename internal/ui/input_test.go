@@ -203,6 +203,38 @@ func TestTriggerCompletionKeepsRepeatableFlagAfterUse(t *testing.T) {
 	}
 }
 
+func TestAcceptCompletionDoesNotAppendTrailingSpace(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "kill-session", Label: "kill-session [-aC] [-t target-session]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+	m.sessions.SetEntries([]menu.SessionEntry{{Name: "main"}, {Name: "work"}})
+
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("kill-session -t ", len([]rune("kill-session -t ")))
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if m.completion == nil {
+		t.Fatal("expected completion state")
+	}
+
+	_ = m.acceptCompletion()
+
+	if current.Filter != "kill-session -t main" {
+		t.Fatalf("expected completion without trailing space, got %q", current.Filter)
+	}
+	if m.completionVisible() {
+		t.Fatal("expected completion to stay closed after accepting an item")
+	}
+}
+
 func TestMoveWindowRenumberTargetsSessionCompletion(t *testing.T) {
 	m := NewModel(ModelConfig{})
 	node, ok := m.registry.Find("command")

@@ -570,14 +570,13 @@ func (m *Model) acceptCompletion() tea.Cmd {
 	if prefix != "" && strings.HasSuffix(filter, prefix) {
 		filter = filter[:len(filter)-len(prefix)]
 	}
-	newFilter := filter + selected + " "
+	newFilter := filter + selected
 	before := current.FilterCursorPos()
 	current.SetFilter(newFilter, len([]rune(newFilter)))
 	m.noteFilterCursorChange(current, before)
 	m.syncFilterViewport(current)
-	m.clearCompletionSuppression()
+	m.completionSuppressedFilter = current.Filter
 	m.dismissCompletion()
-	m.triggerCompletion()
 	return nil
 }
 
