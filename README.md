@@ -170,9 +170,18 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 ### Automatic session saves
 
 Autosaves are disabled by default. Enable them by setting an interval and
-adding the helper command to your `status-right`. The plugin publishes its
-resolved binary path in `@tmux-popup-control-binary-path` so the snippet does
-not need to guess where the binary lives.
+adding the helper command to a tmux format that is evaluated regularly,
+typically `status-right`. The plugin publishes its resolved binary path in
+`@tmux-popup-control-binary-path` so the snippet does not need to guess where
+the binary lives.
+
+The important part to add somewhere in your status line is:
+
+```tmux
+#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')
+```
+
+A reusable `.tmux.conf` setup looks like this:
 
 ```tmux
 set -g @tmux-popup-control-autosave-interval-minutes 5
@@ -181,6 +190,13 @@ set -g @tmux-popup-control-autosave-icon "💾 "
 set -g @tmux-popup-control-autosave-icon-seconds 5
 set -g @status-right-autosave "#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')"
 set -ag status-right "#{E:@status-right-autosave}"
+```
+
+If you do not want the extra `@status-right-autosave` helper option, you can
+append it directly instead:
+
+```tmux
+set -ag status-right "#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')"
 ```
 
 Autosaves are stored as `auto-YYYY-MM-DDTHH-MM-SS` snapshots, update the
