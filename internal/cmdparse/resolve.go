@@ -61,7 +61,7 @@ type FlagCandidate struct {
 }
 
 // FlagCandidates returns all flags from schema that are not already used,
-// preferring argument-taking flags before boolean flags.
+// preserving the synopsis order from tmux list-commands.
 func FlagCandidates(schema *CommandSchema, used []rune) []FlagCandidate {
 	if schema == nil {
 		return nil
@@ -72,25 +72,20 @@ func FlagCandidates(schema *CommandSchema, used []rune) []FlagCandidate {
 		usedSet[flag] = true
 	}
 
-	candidates := make([]FlagCandidate, 0, len(schema.ArgFlags)+len(schema.BoolFlags))
-	for _, argFlag := range schema.ArgFlags {
-		if usedSet[argFlag.Short] {
+	flags := schema.OrderedFlags()
+	candidates := make([]FlagCandidate, 0, len(flags))
+	for _, flag := range flags {
+		if usedSet[flag.Short] && !flag.Repeatable {
 			continue
 		}
-		candidates = append(candidates, FlagCandidate{
-			Flag:    argFlag.Short,
-			Label:   fmt.Sprintf("-%c %s", argFlag.Short, argFlag.ArgType),
-			ArgType: argFlag.ArgType,
-		})
-	}
-	for _, boolFlag := range schema.BoolFlags {
-		if usedSet[boolFlag] {
-			continue
+		candidate := FlagCandidate{Flag: flag.Short}
+		if flag.ArgType != "" {
+			candidate.Label = fmt.Sprintf("-%c %s", flag.Short, flag.ArgType)
+			candidate.ArgType = flag.ArgType
+		} else {
+			candidate.Label = fmt.Sprintf("-%c", flag.Short)
 		}
-		candidates = append(candidates, FlagCandidate{
-			Flag:  boolFlag,
-			Label: fmt.Sprintf("-%c", boolFlag),
-		})
+		candidates = append(candidates, candidate)
 	}
 
 	return candidates

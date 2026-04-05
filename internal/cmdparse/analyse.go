@@ -31,7 +31,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 
 	// walk tokens after the command name
 	var flagsUsed []rune
-	posIndex := 0    // how many positional args consumed
+	posIndex := 0          // how many positional args consumed
 	inPositionals := false // true once we've seen a non-flag token
 	i := 1
 	for i < len(tokens) {
@@ -180,13 +180,9 @@ func hasUnusedFlags(schema *CommandSchema, used []rune) bool {
 	for _, r := range used {
 		usedSet[r] = true
 	}
-	for _, r := range schema.BoolFlags {
-		if !usedSet[r] {
-			return true
-		}
-	}
-	for _, af := range schema.ArgFlags {
-		if !usedSet[af.Short] {
+
+	for _, flag := range schema.OrderedFlags() {
+		if flag.Repeatable || !usedSet[flag.Short] {
 			return true
 		}
 	}

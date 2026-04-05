@@ -173,3 +173,16 @@ func TestAnalyseAlias(t *testing.T) {
 		t.Errorf("expected ArgType %q, got %q", "target-session", ctx.ArgType)
 	}
 }
+
+func TestAnalyseAfterUsingAllFlagsStillSuggestsRepeatableFlag(t *testing.T) {
+	schema, err := ParseSynopsis("new-window (neww) [-abdkPS] [-c start-directory] [-e environment] [-F format] [-n window-name] [-t target-window] [shell-command [argument ...]]")
+	if err != nil {
+		t.Fatalf("ParseSynopsis failed: %v", err)
+	}
+
+	reg := buildTestRegistry(schema)
+	ctx := Analyse(reg, "new-window -a -b -d -k -P -S -c dir -e FOO=bar -F fmt -n name -t work:1 ")
+	if ctx.Kind != ContextFlagName {
+		t.Fatalf("expected ContextFlagName, got %d", ctx.Kind)
+	}
+}

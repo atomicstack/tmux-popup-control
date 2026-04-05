@@ -119,3 +119,36 @@ func TestResolveFlagCandidates(t *testing.T) {
 		}
 	}
 }
+
+func TestFlagCandidatesPreserveSynopsisOrder(t *testing.T) {
+	schema, err := ParseSynopsis("attach-session (attach) [-dErx] [-c working-directory] [-f flags] [-t target-session]")
+	if err != nil {
+		t.Fatalf("ParseSynopsis failed: %v", err)
+	}
+
+	got := FlagCandidates(schema, nil)
+	want := []rune{'d', 'E', 'r', 'x', 'c', 'f', 't'}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d candidates, got %d", len(want), len(got))
+	}
+	for i, flag := range want {
+		if got[i].Flag != flag {
+			t.Fatalf("candidate[%d] = %q, want %q", i, string(got[i].Flag), string(flag))
+		}
+	}
+}
+
+func TestFlagCandidatesKeepRepeatableFlagsAvailable(t *testing.T) {
+	schema, err := ParseSynopsis("new-window (neww) [-abdkPS] [-c start-directory] [-e environment] [-F format] [-n window-name] [-t target-window] [shell-command [argument ...]]")
+	if err != nil {
+		t.Fatalf("ParseSynopsis failed: %v", err)
+	}
+
+	got := FlagCandidates(schema, []rune{'a', 'b', 'd', 'k', 'P', 'S', 'c', 'e', 'F', 'n', 't'})
+	if len(got) != 1 {
+		t.Fatalf("expected only repeatable -e to remain, got %v", got)
+	}
+	if got[0].Flag != 'e' {
+		t.Fatalf("expected repeatable flag -e, got %q", string(got[0].Flag))
+	}
+}

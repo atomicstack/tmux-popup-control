@@ -38,6 +38,10 @@ func ParseSynopsis(line string) (*CommandSchema, error) {
 			// remove leading dash
 			for _, r := range inner[1:] {
 				s.BoolFlags = append(s.BoolFlags, r)
+				s.Flags = append(s.Flags, FlagDef{
+					Short:      r,
+					Repeatable: isRepeatableFlag(s.Name, r),
+				})
 			}
 			i++
 			continue
@@ -49,6 +53,11 @@ func ParseSynopsis(line string) (*CommandSchema, error) {
 		if isArgFlag(tok, tokens, i) {
 			short, argType, consumed := parseArgFlag(tok, tokens, i)
 			s.ArgFlags = append(s.ArgFlags, ArgFlagDef{Short: short, ArgType: argType})
+			s.Flags = append(s.Flags, FlagDef{
+				Short:      short,
+				ArgType:    argType,
+				Repeatable: isRepeatableFlag(s.Name, short),
+			})
 			i += consumed
 			continue
 		}

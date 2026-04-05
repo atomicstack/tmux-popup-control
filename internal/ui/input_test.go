@@ -147,6 +147,62 @@ func TestTriggerCompletionIncludesFlagDescriptions(t *testing.T) {
 	}
 }
 
+func TestTriggerCompletionPreservesSynopsisFlagOrder(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "attach-session", Label: "attach-session [-dErx] [-c working-directory] [-f flags] [-t target-session]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("attach-session ", len([]rune("attach-session ")))
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if m.completion == nil {
+		t.Fatal("expected completion state")
+	}
+
+	var got []string
+	for _, item := range m.completion.filtered {
+		got = append(got, item.Value)
+	}
+	want := []string{"-d", "-E", "-r", "-x", "-c", "-f", "-t"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("flag order = %v, want %v", got, want)
+	}
+}
+
+func TestTriggerCompletionKeepsRepeatableFlagAfterUse(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "new-window", Label: "new-window [-abdkPS] [-c start-directory] [-e environment] [-F format] [-n window-name] [-t target-window] [shell-command [argument ...]]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("new-window -a -b -d -k -P -S -c dir -e FOO=bar -F fmt -n name -t work:1 ", len([]rune("new-window -a -b -d -k -P -S -c dir -e FOO=bar -F fmt -n name -t work:1 ")))
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if m.completion == nil {
+		t.Fatal("expected completion state")
+	}
+	if got := m.completion.filtered[0].Value; got != "-e" {
+		t.Fatalf("expected repeatable flag -e to remain available, got %q", got)
+	}
+}
+
 func TestMoveWindowRenumberTargetsSessionCompletion(t *testing.T) {
 	m := NewModel(ModelConfig{})
 	node, ok := m.registry.Find("command")
