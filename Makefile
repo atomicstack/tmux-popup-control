@@ -46,6 +46,7 @@ cover:
 
 RELEASE_DIR := dist
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
+RELEASE_SUPPORT_FILES := README.md main.sh main.tmux
 
 release: ensure-dirs
 	rm -rf $(RELEASE_DIR)
@@ -58,7 +59,14 @@ release: ensure-dirs
 			go build $(LDFLAGS) -o $(RELEASE_DIR)/$(BINARY)-$(GOOS)-$(GOARCH) . && \
 	) true
 	chmod +x $(RELEASE_DIR)/$(BINARY)-*
-	cd $(RELEASE_DIR) && for f in $(BINARY)-*; do tar czf "$$f.tar.gz" "$$f" && rm "$$f"; done
+	cd $(RELEASE_DIR) && for f in $(BINARY)-*; do \
+		stage_dir="$$(mktemp -d ./release.XXXXXX)"; \
+		cp "$$f" "$$stage_dir/$(BINARY)"; \
+		cp $(addprefix ../,$(RELEASE_SUPPORT_FILES)) "$$stage_dir/"; \
+		chmod +x "$$stage_dir/$(BINARY)" "$$stage_dir/main.sh" "$$stage_dir/main.tmux"; \
+		COPYFILE_DISABLE=1 tar czf "$$f.tar.gz" -C "$$stage_dir" .; \
+		rm -rf "$$stage_dir" "$$f"; \
+	done
 	cd $(RELEASE_DIR) && shasum -a 256 *.tar.gz > checksums.txt
 	gh release create v$(VERSION) $(RELEASE_DIR)/* \
 		--title "v$(VERSION)" \
