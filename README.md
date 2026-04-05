@@ -14,9 +14,11 @@ control-mode connection via
 
 ### Session management
 - **Save** sessions — auto-timestamped or named snapshots of all sessions,
-  windows, panes, layouts, and optionally pane contents
+  windows, panes, layouts, and optionally pane contents; supports interval-based
+  autosaves with bounded retention
 - **Restore** sessions — from the most recent save or a picked snapshot,
-  with progress UI; merges windows into existing sessions idempotently
+  with progress UI; merges windows into existing sessions idempotently, and
+  distinguishes manual vs autosaved snapshots in the picker
 - **Switch** between sessions with live pane-capture preview
 - **New** session creation via inline form
 - **Rename** sessions via inline form
@@ -59,7 +61,9 @@ control-mode connection via
 ### Other menus
 - **Keybinding** browser — lists all tmux key bindings, filterable
 - **Command** browser — lists all tmux commands, filterable, with contextual
-  argument completion for flags, flag values, and positional parameters
+  argument completion for flags, flag values, and positional parameters;
+  preserves `tmux lscm` flag order, keeps repeatable flags available, and uses
+  Tab as the only completion accept key
 
 ### UI
 - Fuzzy-search filtering on every menu level
@@ -100,7 +104,7 @@ make tidy            # go mod tidy
 make clean-cache     # removes .gocache/ and .gomodcache/
 make update-gotmuxcc # fetches latest gotmuxcc + re-vendors (online)
 make release         # cross-compiles + creates GitHub release via gh
-make release VERSION=0.6.0 # release a specific version tag
+make release VERSION=0.7.0 # release a specific version tag
 ```
 
 `make release` requires the GitHub CLI (`gh`) to be installed and authenticated.
@@ -132,6 +136,10 @@ make release VERSION=0.6.0 # release a specific version tag
 | | `TMUX_POPUP_CONTROL_COLOR_PROFILE` | | force colour profile (`ansi256`, etc.) |
 | | `TMUX_POPUP_CONTROL_RESURRECT_NAME` | | snapshot name for save/restore CLI subcommands |
 | | `TMUX_POPUP_CONTROL_RESURRECT_FROM` | | snapshot name to restore from in CLI subcommand |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES` | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes; `0` or unset disables autosave |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` | `@tmux-popup-control-autosave-max` | maximum number of retained autosaves; manual saves are never pruned |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | status-right icon to show briefly after a successful autosave |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS` | `@tmux-popup-control-autosave-icon-seconds` | number of seconds to show the autosave icon; `0` or unset hides it |
 
 ### Keybindings
 
@@ -154,9 +162,31 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 |---|---|
 | `save-sessions [--name NAME]` | save all sessions to a snapshot; opens a progress popup |
 | `restore-sessions [--from NAME]` | restore sessions from a snapshot; opens a progress popup |
+| `autosave [--socket PATH]` | internal helper for tmux `#()` status snippets; runs the autosave cadence and optional status icon |
 | `install-and-init-plugins` | sources installed plugins at tmux startup; opens a deferred install popup for any missing plugins |
 | `deferred-install` | internal helper invoked via `run-shell -b`; waits for tmux startup, then opens the install UI in a `display-popup` |
 | `--version` | prints the version string and exits |
+
+### Automatic session saves
+
+Autosaves are disabled by default. Enable them by setting an interval and
+adding the helper command to your `status-right`. The plugin publishes its
+resolved binary path in `@tmux-popup-control-binary-path` so the snippet does
+not need to guess where the binary lives.
+
+```tmux
+set -g @tmux-popup-control-autosave-interval-minutes 5
+set -g @tmux-popup-control-autosave-max 5
+set -g @tmux-popup-control-autosave-icon "💾 "
+set -g @tmux-popup-control-autosave-icon-seconds 5
+set -g @status-right-autosave "#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')"
+set -ag status-right "#{E:@status-right-autosave}"
+```
+
+Autosaves are stored as `auto-YYYY-MM-DDTHH-MM-SS` snapshots, update the
+default restore target, and are pruned independently from manual saves. The
+restore-from picker shows both snapshot types and colors them differently so
+they are easy to distinguish at a glance.
 
 ### Migrating from tpm
 
