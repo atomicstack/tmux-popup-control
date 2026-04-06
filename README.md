@@ -186,7 +186,7 @@ A reusable `.tmux.conf` setup looks like this:
 ```tmux
 set -g @tmux-popup-control-autosave-interval-minutes 5
 set -g @tmux-popup-control-autosave-max 5
-set -g @tmux-popup-control-autosave-icon "💾 "
+set -g @tmux-popup-control-autosave-icon "💾"
 set -g @tmux-popup-control-autosave-icon-seconds 5
 set -g @status-right-autosave "#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')"
 set -ag status-right "#{E:@status-right-autosave}"
