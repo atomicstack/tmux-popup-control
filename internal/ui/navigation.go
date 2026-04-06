@@ -10,7 +10,6 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
-	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
 )
 
@@ -27,6 +26,9 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	}
 	if current.ID == "pane:swap-target" {
 		m.pendingPaneSwap = nil
+	}
+	if current.ID == "session:restore-from" {
+		m.stopRestoreRefresh()
 	}
 
 	// Revert layout preview on escape.
@@ -512,9 +514,7 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	node, _ := m.registry.Find(update.id)
 	level := newLevel(update.id, update.title, update.items, node)
 	if update.id == "session:restore-from" {
-		if dir, err := resurrect.ResolveDir(m.socketPath); err == nil {
-			level.Subtitle = dir
-		}
+		level.Subtitle = restoreRefreshDir(m.socketPath)
 	}
 	if update.id == "session:tree" {
 		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
@@ -533,6 +533,9 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	m.syncViewport(level)
 	m.stack = append(m.stack, level)
 	cmd := m.ensurePreviewForLevel(level)
+	if update.id == "session:restore-from" {
+		cmd = tea.Batch(cmd, m.startRestoreRefreshIfNeeded())
+	}
 	if len(level.Items) == 0 {
 		m.setInfo("No entries found.")
 	} else if m.infoMsg != "" {
@@ -642,6 +645,9 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	title := headerSegmentCleaner.Replace(node.ID)
 	title = strings.TrimSpace(title)
 	root := newLevel(node.ID, title, items, node)
+	if node.ID == "session:restore-from" {
+		root.Subtitle = restoreRefreshDir(m.socketPath)
+	}
 	if node.ID == "session:tree" {
 		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
 		root.Data = menu.NewTreeState(allExpanded)

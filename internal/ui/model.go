@@ -141,6 +141,7 @@ type Model struct {
 	pluginConfirmState *pluginConfirmState
 	pluginInstallState *pluginInstallState
 	resurrectState     *resurrectState
+	restoreRefresh     *restoreRefreshState
 	initCmd            tea.Cmd
 	deferredAction     *menu.Node
 	deferredRename     *menu.Node
@@ -236,6 +237,9 @@ func (m *Model) Init() tea.Cmd {
 		if node, ok := m.registry.Find("command"); ok && node.Loader != nil {
 			cmds = append(cmds, preloadCommandList(m.socketPath, node.Loader))
 		}
+	}
+	if cmd := m.startRestoreRefreshIfNeeded(); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	if len(cmds) == 0 {
 		return nil
@@ -333,6 +337,8 @@ func (m *Model) registerHandlers() {
 		reflect.TypeOf(menu.ResurrectStart{}):        m.handleResurrectStartMsg,
 		reflect.TypeOf(resurrectProgressMsg{}):       m.handleResurrectProgressMsg,
 		reflect.TypeOf(resurrectTickMsg{}):           m.handleResurrectTickMsg,
+		reflect.TypeOf(restoreRefreshTickMsg{}):      m.handleRestoreRefreshTickMsg,
+		reflect.TypeOf(restoreRefreshLoadedMsg{}):    m.handleRestoreRefreshLoadedMsg,
 		reflect.TypeOf(menu.SaveAsPrompt{}):          m.handleSaveAsPromptMsg,
 		reflect.TypeOf(menu.PaneCapturePrompt{}):     m.handlePaneCapturePromptMsg,
 		reflect.TypeOf(menu.PaneCapturePreviewMsg{}): m.handlePaneCapturePreviewMsg,
