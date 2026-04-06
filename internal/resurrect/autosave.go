@@ -251,14 +251,14 @@ func timeUntilNextAutoSave(lastSuccess, now time.Time, intervalMinutes int) time
 	if autoSaveDue(lastSuccess, now, intervalMinutes) {
 		return 0
 	}
-	return lastSuccess.Add(time.Duration(intervalMinutes)*time.Minute).Sub(now)
+	return lastSuccess.Add(time.Duration(intervalMinutes) * time.Minute).Sub(now)
 }
 
 func iconRemaining(lastSuccess, now time.Time, iconSeconds int) time.Duration {
 	if iconSeconds <= 0 || lastSuccess.IsZero() {
 		return 0
 	}
-	remaining := lastSuccess.Add(time.Duration(iconSeconds)*time.Second).Sub(now)
+	remaining := lastSuccess.Add(time.Duration(iconSeconds) * time.Second).Sub(now)
 	if remaining < 0 {
 		return 0
 	}

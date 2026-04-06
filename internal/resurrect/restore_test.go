@@ -36,16 +36,16 @@ func writeSaveFile(t *testing.T, dir string, name string, sf *SaveFile) string {
 }
 
 // stubNoOp returns a function that accepts any args and returns nil.
-func noopSession(_, _, _, _ string) error                    { return nil }
-func noopWindow(_, _ string, _ int, _, _, _ string) error    { return nil }
-func noopRename(_, _, _ string) error                        { return nil }
-func noopSplit(_, _, _, _ string) error                      { return nil }
-func noopLayout(_, _, _ string) error                        { return nil }
-func noopPane(_, _ string) error                             { return nil }
-func noopSelectWindow(_, _ string) error                     { return nil }
-func noopSwitch(_, _, _ string) error                        { return nil }
-func noopRespawn(_, _, _, _ string) error                     { return nil }
-func noopDefaultCommand(_ string) string                     { return "/bin/bash" }
+func noopSession(_, _, _, _ string) error                 { return nil }
+func noopWindow(_, _ string, _ int, _, _, _ string) error { return nil }
+func noopRename(_, _, _ string) error                     { return nil }
+func noopSplit(_, _, _, _ string) error                   { return nil }
+func noopLayout(_, _, _ string) error                     { return nil }
+func noopPane(_, _ string) error                          { return nil }
+func noopSelectWindow(_, _ string) error                  { return nil }
+func noopSwitch(_, _, _ string) error                     { return nil }
+func noopRespawn(_, _, _, _ string) error                 { return nil }
+func noopDefaultCommand(_ string) string                  { return "/bin/bash" }
 
 // collectRestoreEvents drains the channel returned by Restore.
 func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
@@ -683,14 +683,22 @@ func TestRestoreMergeIndexRemapping(t *testing.T) {
 	dir := t.TempDir()
 
 	createSessionCalled := false
-	var createdWindows []struct{ session string; index int; name string }
+	var createdWindows []struct {
+		session string
+		index   int
+		name    string
+	}
 	r1 := withCreateSessionFn(func(_, _, _, _ string) error {
 		createSessionCalled = true
 		return nil
 	})
 	defer r1()
 	r2 := withCreateWindowFn(func(_, session string, index int, name, _, _ string) error {
-		createdWindows = append(createdWindows, struct{ session string; index int; name string }{session, index, name})
+		createdWindows = append(createdWindows, struct {
+			session string
+			index   int
+			name    string
+		}{session, index, name})
 		return nil
 	})
 	defer r2()
@@ -777,20 +785,32 @@ func TestRestoreMergeIndexRemapping(t *testing.T) {
 func TestRestoreMergeWithPaneArchive(t *testing.T) {
 	dir := t.TempDir()
 
-	var windowCmds []struct{ index int; cmd string }
-	var splitCmds []struct{ target string; cmd string }
+	var windowCmds []struct {
+		index int
+		cmd   string
+	}
+	var splitCmds []struct {
+		target string
+		cmd    string
+	}
 
 	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return nil })
 	defer r1()
 	r2 := withCreateWindowFn(func(_, _ string, index int, _, _, cmd string) error {
-		windowCmds = append(windowCmds, struct{ index int; cmd string }{index, cmd})
+		windowCmds = append(windowCmds, struct {
+			index int
+			cmd   string
+		}{index, cmd})
 		return nil
 	})
 	defer r2()
 	r3 := withRenameWindowFn(noopRename)
 	defer r3()
 	r4 := withSplitPaneFn(func(_, target, _, cmd string) error {
-		splitCmds = append(splitCmds, struct{ target string; cmd string }{target, cmd})
+		splitCmds = append(splitCmds, struct {
+			target string
+			cmd    string
+		}{target, cmd})
 		return nil
 	})
 	defer r4()

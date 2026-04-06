@@ -82,9 +82,9 @@ type Action func(Context, Item) tea.Cmd
 
 // ActionResult communicates the outcome of executing a menu action.
 type ActionResult struct {
-	Info string
+	Info   string
 	Output string
-	Err  error
+	Err    error
 }
 
 // SessionPrompt requests interactive input for session operations.
@@ -126,72 +126,72 @@ func CategoryLoaders() map[string]Loader {
 // ActionHandlers maps submenu identifiers to their execution logic.
 func ActionHandlers() map[string]Action {
 	return map[string]Action{
-		"session:new":          SessionNewAction,
-		"session:switch":       SessionSwitchAction,
-		"session:rename":       SessionRenameAction,
-		"session:detach":       SessionDetachAction,
-		"session:kill":         SessionKillAction,
-		"session:tree":         SessionTreeAction,
-		"session:save":         SessionSaveAction,
-		"session:save-as":      SessionSaveAsAction,
-		"session:restore":      SessionRestoreAction,
-		"session:restore-from": SessionRestoreFromAction,
-		"window:switch":        WindowSwitchAction,
-		"window:link":          WindowLinkAction,
+		"session:new":              SessionNewAction,
+		"session:switch":           SessionSwitchAction,
+		"session:rename":           SessionRenameAction,
+		"session:detach":           SessionDetachAction,
+		"session:kill":             SessionKillAction,
+		"session:tree":             SessionTreeAction,
+		"session:save":             SessionSaveAction,
+		"session:save-as":          SessionSaveAsAction,
+		"session:restore":          SessionRestoreAction,
+		"session:restore-from":     SessionRestoreFromAction,
+		"window:switch":            WindowSwitchAction,
+		"window:link":              WindowLinkAction,
 		"window:pull-from-session": WindowPullFromSessionAction,
 		"window:push-to-session":   WindowPushToSessionAction,
-		"window:swap":          WindowSwapAction,
-		"window:rename":        WindowRenameAction,
-		"window:kill":          WindowKillAction,
-		"window:layout":        WindowLayoutAction,
-		"keybinding":           KeybindingAction,
-		"pane:switch":          PaneSwitchAction,
-		"pane:break":           PaneBreakAction,
-		"pane:join":            PaneJoinAction,
-		"pane:swap":            PaneSwapAction,
-		"pane:kill":            PaneKillAction,
-		"pane:rename":          PaneRenameAction,
-		"pane:capture":         PaneCaptureAction,
-		"pane:resize:left":     PaneResizeLeftAction,
-		"pane:resize:right":    PaneResizeRightAction,
-		"pane:resize:up":       PaneResizeUpAction,
-		"pane:resize:down":     PaneResizeDownAction,
-		"plugins:install":      PluginsInstallAction,
-		"plugins:update":       PluginsUpdateAction,
-		"plugins:uninstall":    PluginsUninstallAction,
+		"window:swap":              WindowSwapAction,
+		"window:rename":            WindowRenameAction,
+		"window:kill":              WindowKillAction,
+		"window:layout":            WindowLayoutAction,
+		"keybinding":               KeybindingAction,
+		"pane:switch":              PaneSwitchAction,
+		"pane:break":               PaneBreakAction,
+		"pane:join":                PaneJoinAction,
+		"pane:swap":                PaneSwapAction,
+		"pane:kill":                PaneKillAction,
+		"pane:rename":              PaneRenameAction,
+		"pane:capture":             PaneCaptureAction,
+		"pane:resize:left":         PaneResizeLeftAction,
+		"pane:resize:right":        PaneResizeRightAction,
+		"pane:resize:up":           PaneResizeUpAction,
+		"pane:resize:down":         PaneResizeDownAction,
+		"plugins:install":          PluginsInstallAction,
+		"plugins:update":           PluginsUpdateAction,
+		"plugins:uninstall":        PluginsUninstallAction,
 	}
 }
 
 // ActionLoaders enumerates loaders for nested submenu actions.
 func ActionLoaders() map[string]Loader {
 	return map[string]Loader{
-		"session:switch":       loadSessionSwitchMenu,
-		"session:rename":       loadSessionRenameMenu,
-		"session:detach":       loadSessionDetachMenu,
-		"session:kill":         loadSessionKillMenu,
-		"session:tree":         loadSessionTreeMenu,
-		"session:restore-from": loadSessionRestoreFromMenu,
-		"window:switch":        loadWindowSwitchMenu,
-		"window:link":          loadWindowLinkMenu,
+		"session:switch":           loadSessionSwitchMenu,
+		"session:rename":           loadSessionRenameMenu,
+		"session:detach":           loadSessionDetachMenu,
+		"session:kill":             loadSessionKillMenu,
+		"session:tree":             loadSessionTreeMenu,
+		"session:restore-from":     loadSessionRestoreFromMenu,
+		"window:switch":            loadWindowSwitchMenu,
+		"window:link":              loadWindowLinkMenu,
 		"window:pull-from-session": loadWindowPullFromSessionMenu,
 		"window:push-to-session":   loadWindowPushToSessionMenu,
-		"window:swap":          loadWindowSwapMenu,
-		"window:rename":        loadWindowRenameMenu,
-		"window:kill":          loadWindowKillMenu,
-		"window:layout":        loadWindowLayoutMenu,
-		"pane:switch":          loadPaneSwitchMenu,
-		"pane:break":           loadPaneBreakMenu,
-		"pane:join":            loadPaneJoinMenu,
-		"pane:swap":            loadPaneSwapMenu,
-		"pane:kill":            loadPaneKillMenu,
-		"pane:rename":          loadPaneRenameMenu,
-		"pane:resize":          loadPaneResizeMenu,
-		"pane:resize:left":     loadPaneResizeLeftMenu,
-		"pane:resize:right":    loadPaneResizeRightMenu,
-		"pane:resize:up":       loadPaneResizeUpMenu,
-		"pane:resize:down":     loadPaneResizeDownMenu,
-		"plugins:update":       loadPluginsUpdateMenu,
-		"plugins:uninstall":    loadPluginsUninstallMenu,
+		"window:swap":              loadWindowSwapMenu,
+		"window:rename":            loadWindowRenameMenu,
+		"window:kill":              loadWindowKillMenu,
+		"window:layout":            loadWindowLayoutMenu,
+		"pane:switch":              loadPaneSwitchMenu,
+		"pane:break":               loadPaneBreakMenu,
+		"pane:join":                loadPaneJoinMenu,
+		"pane:swap":                loadPaneSwapMenu,
+		"pane:kill":                loadPaneKillMenu,
+		"pane:rename":              loadPaneRenameMenu,
+		"pane:resize":              loadPaneResizeMenu,
+		"pane:resize:left":         loadPaneResizeLeftMenu,
+		"pane:resize:right":        loadPaneResizeRightMenu,
+		"pane:resize:up":           loadPaneResizeUpMenu,
+		"pane:resize:down":         loadPaneResizeDownMenu,
+		"plugins:update":           loadPluginsUpdateMenu,
+		"plugins:uninstall":        loadPluginsUninstallMenu,
 	}
 }
 
@@ -202,6 +202,7 @@ func WindowEntriesToItems(entries []WindowEntry) []Item {
 	}
 	return items
 }
+
 // menuItemsFromIDs builds menu items using each id as both the ID and
 // the display label. IDs must be strictly kebab-case (e.g. "push-to-session").
 func menuItemsFromIDs(ids []string) []Item {
