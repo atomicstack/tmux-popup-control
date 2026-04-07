@@ -31,7 +31,7 @@ func (b *Bus) Execute(ctx menu.Context, req Request) tea.Cmd {
 	return func() tea.Msg {
 		span := logging.StartSpan("ui", "command.execute", logging.SpanOptions{
 			Target: req.ID,
-			Attrs: map[string]interface{}{
+			Attrs: map[string]any{
 				"label": req.Label,
 			},
 		})

@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"sort"
+	"slices"
 
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/state"
@@ -56,7 +56,7 @@ func (ds *modelDataSource) Commands() []string {
 		seen[schema.Name] = true
 		names = append(names, schema.Name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

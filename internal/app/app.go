@@ -70,7 +70,7 @@ func Run(cfg Config) error {
 	program := tea.NewProgram(model, programOptions()...)
 	span := logging.StartSpan("app", "run", logging.SpanOptions{
 		Target: cfg.RootMenu,
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"socket_path":   socketPath,
 			"client_id":     clientID,
 			"resurrect_op":  cfg.ResurrectOp,

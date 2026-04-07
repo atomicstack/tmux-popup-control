@@ -196,9 +196,10 @@ func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, ex
 	if rootMenu != "" {
 		rootLine = fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shquote.Quote(rootMenu))
 	}
-	var extraLines string
+	var extraLines strings.Builder
 	for _, line := range extraEnv {
-		extraLines += line + "\n"
+		extraLines.WriteString(line)
+		extraLines.WriteByte('\n')
 	}
 	script := "#!/bin/sh\n" +
 		"POPUP_BIN=" + shquote.Quote(bin) + "\n" +
@@ -206,7 +207,7 @@ func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, ex
 		"POPUP_EXIT=" + shquote.Quote(exitFile) + "\n" +
 		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=ansi256\n" +
 		rootLine +
-		extraLines +
+		extraLines.String() +
 		"\"$POPUP_BIN\" -socket \"$POPUP_SOCKET\" -width 80 -height 24 2>/dev/null\n" +
 		"printf '%s' $? > \"$POPUP_EXIT\"\n" +
 		"sleep 300\n"

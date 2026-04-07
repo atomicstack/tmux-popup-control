@@ -21,7 +21,7 @@ const (
 // Event conveys updated data or an error from a backend poll.
 type Event struct {
 	Kind Kind
-	Data interface{}
+	Data any
 	Err  error
 }
 
@@ -93,7 +93,7 @@ func (w *Watcher) Wait() {
 func (w *Watcher) startSessionPoller() {
 	throttle := newThrottle(250 * time.Millisecond)
 	w.wg.Add(1)
-	go w.poll(KindSessions, func(ctx context.Context) (interface{}, error) {
+	go w.poll(KindSessions, func(context.Context) (any, error) {
 		throttle.wait()
 		return tmux.FetchSessions(w.socketPath)
 	})
@@ -102,7 +102,7 @@ func (w *Watcher) startSessionPoller() {
 func (w *Watcher) startWindowPoller() {
 	throttle := newThrottle(250 * time.Millisecond)
 	w.wg.Add(1)
-	go w.poll(KindWindows, func(ctx context.Context) (interface{}, error) {
+	go w.poll(KindWindows, func(context.Context) (any, error) {
 		throttle.wait()
 		return tmux.FetchWindows(w.socketPath)
 	})
@@ -111,19 +111,19 @@ func (w *Watcher) startWindowPoller() {
 func (w *Watcher) startPanePoller() {
 	throttle := newThrottle(250 * time.Millisecond)
 	w.wg.Add(1)
-	go w.poll(KindPanes, func(ctx context.Context) (interface{}, error) {
+	go w.poll(KindPanes, func(context.Context) (any, error) {
 		throttle.wait()
 		return tmux.FetchPanes(w.socketPath)
 	})
 }
 
-func (w *Watcher) poll(kind Kind, fetch func(context.Context) (interface{}, error)) {
+func (w *Watcher) poll(kind Kind, fetch func(context.Context) (any, error)) {
 	defer w.wg.Done()
 
 	emit := func() bool {
 		span := logging.StartSpan("backend", "poll", logging.SpanOptions{
 			Target: kind.String(),
-			Attrs: map[string]interface{}{
+			Attrs: map[string]any{
 				"socket_path": w.socketPath,
 				"interval_ms": w.interval.Milliseconds(),
 			},
@@ -161,7 +161,7 @@ func (w *Watcher) poll(kind Kind, fetch func(context.Context) (interface{}, erro
 	}
 }
 
-func watcherItemCount(data interface{}) int {
+func watcherItemCount(data any) int {
 	switch value := data.(type) {
 	case tmux.SessionSnapshot:
 		return len(value.Sessions)

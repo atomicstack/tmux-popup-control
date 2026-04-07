@@ -3,6 +3,7 @@ package resurrect
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -64,9 +65,7 @@ func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
 // Optionally, pre-populate the map to simulate pre-existing markers.
 func withStatefulSessionOptionFns(initial map[string]string) (func(), func()) {
 	store := make(map[string]string)
-	for k, v := range initial {
-		store[k] = v
-	}
+	maps.Copy(store, initial)
 	r1 := withSessionOptionFn(func(_, _, option string) string {
 		return store[option]
 	})

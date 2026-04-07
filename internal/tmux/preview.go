@@ -60,15 +60,9 @@ func PanePreview(socketPath, pane string) (PanePreviewData, error) {
 		rawLines = append(rawLines, padding...)
 	}
 	previewEnd := lastMeaningfulPreviewLine(rawLines) + 1
-	if cursorY+1 > previewEnd {
-		previewEnd = cursorY + 1
-	}
-	if previewEnd <= 0 {
-		previewEnd = 1
-	}
-	if previewEnd > len(rawLines) {
-		previewEnd = len(rawLines)
-	}
+	previewEnd = max(previewEnd, cursorY+1)
+	previewEnd = max(previewEnd, 1)
+	previewEnd = min(previewEnd, len(rawLines))
 	cursorRow := cursorY
 	if previewEnd > panePreviewDefaultLines {
 		previewStart := previewEnd - panePreviewDefaultLines

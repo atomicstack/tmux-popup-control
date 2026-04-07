@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -850,12 +851,7 @@ func TestFetchSessionLabelsFallback(t *testing.T) {
 }
 
 func containsArg(args []string, needle string) bool {
-	for _, arg := range args {
-		if arg == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(args, needle)
 }
 
 func TestFetchWindowsUsesFallbackLines(t *testing.T) {

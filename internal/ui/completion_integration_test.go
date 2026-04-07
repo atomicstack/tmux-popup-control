@@ -26,7 +26,7 @@ func TestCommandCompletionIntegration(t *testing.T) {
 	bin := buildCompletionBinary(t)
 	pane, exitFile := launchCompletionBinary(t, bin, socket, "ui-completion", "command")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 	defer cancel()
 
 	testutil.WaitForContent(t, ctx, socket, pane, "command")

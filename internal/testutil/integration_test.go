@@ -19,7 +19,7 @@ func TestRootMenuRendering(t *testing.T) {
 	})
 	session := "rootmenu"
 	pane, _ := launchBinary(t, bin, socket, session, "")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	output := WaitForContent(t, ctx, socket, pane, "process")
 	assertGolden(t, filepath.Join("capture", "root_menu.txt"), output)
@@ -37,7 +37,7 @@ func TestNavigationOpensSubmenuAndEscapeReturns(t *testing.T) {
 	// Launch at the root menu (no override).
 	pane, exitFile := launchBinary(t, bin, socket, "nav-session", "")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	// Wait for root menu to render; "session" is one of the top-level items.
@@ -87,7 +87,7 @@ func TestFilterNarrowsSessionList(t *testing.T) {
 
 	pane, exitFile := launchBinary(t, bin, socket, "filter-session", "session:switch")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	// Wait for both sessions to appear in the switch list.
@@ -130,7 +130,7 @@ func TestSessionSwitchExitsCleanly(t *testing.T) {
 
 	pane, exitFile := launchBinary(t, bin, socket, "switch-sess", "session:switch")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 	defer cancel()
 
 	// Wait for the switch menu to render with the target session visible.
@@ -148,7 +148,7 @@ func TestSessionSwitchExitsCleanly(t *testing.T) {
 	// If successful: ActionResult with no error → tea.Quit → exit 0.
 	// If error: error is displayed and binary stays alive.
 	// Give it a moment, then check.
-	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exitCancel()
 
 	code := waitForExit(t, exitCtx, exitFile)
@@ -175,7 +175,7 @@ func TestEscapeExitsFromRootMenu(t *testing.T) {
 
 	pane, exitFile := launchBinary(t, bin, socket, "escape-session", "")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 
 	// Wait for the root menu to render.
@@ -244,7 +244,7 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 	// Launch the binary in a separate session at the "command" root menu.
 	pane, exitFile := launchBinary(t, bin, socket, "cmd-runner", "command")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 	defer cancel()
 
 	// Wait for the command list to render (any command visible means it loaded).
@@ -266,7 +266,7 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 	SendKeys(t, socket, pane, "Enter")
 
 	// The binary should exit after execution.
-	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exitCancel()
 	code := waitForExit(t, exitCtx, exitFile)
 	t.Logf("binary exit code: %s", code)
@@ -328,7 +328,7 @@ func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
 			"export TMUX_POPUP_CONTROL_NO_PREVIEW=1",
 		})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	// Wait for the tree to render — both sessions should be visible.
@@ -371,7 +371,7 @@ func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
 
 	// Clean up: Escape exits the binary.
 	SendKeys(t, socket, pane, "Escape")
-	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exitCancel()
 	_ = waitForExit(t, exitCtx, exitFile)
 	_ = tmuxCommand(socket, "kill-session", "-t", "tree-filter").Run()
@@ -403,7 +403,7 @@ func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
 	pane, exitFile := launchBinaryWithEnv(t, bin, socket, "tree-child", "session:tree",
 		[]string{"export TMUX_POPUP_CONTROL_MENU_ARGS=expanded"})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
 	// Wait for tree to render with both windows visible.
@@ -432,7 +432,7 @@ func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
 	}
 
 	SendKeys(t, socket, pane, "Escape")
-	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exitCancel()
 	_ = waitForExit(t, exitCtx, exitFile)
 	_ = tmuxCommand(socket, "kill-session", "-t", "tree-child").Run()
@@ -457,7 +457,7 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 	if err := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", targetSession).Run(); err != nil {
 		t.Fatalf("create target session: %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := tmuxCommand(socket, "split-window", "-t", targetSession).Run(); err != nil {
 			t.Fatalf("split-window %d: %v", i, err)
 		}
@@ -495,7 +495,7 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 		_ = tmuxCommand(socket, "kill-session", "-t", targetSession).Run()
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	// Wait for the capture form's async preview to resolve with the
@@ -509,7 +509,7 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 	// Clean up: Escape quits directly since pane:capture was invoked
 	// via root menu override.
 	SendKeys(t, socket, pane, "Escape")
-	exitCtx, exitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exitCancel()
 	_ = waitForExit(t, exitCtx, exitFile)
 }
@@ -522,7 +522,7 @@ func windowIndices(t *testing.T, socket, session string) []int {
 		t.Fatalf("list-windows: %v", err)
 	}
 	var indices []int
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

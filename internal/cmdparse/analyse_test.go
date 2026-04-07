@@ -1,6 +1,7 @@
 package cmdparse
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -46,12 +47,7 @@ func buildTestRegistry(schemas ...*CommandSchema) map[string]*CommandSchema {
 }
 
 func containsRune(rs []rune, r rune) bool {
-	for _, v := range rs {
-		if v == r {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(rs, r)
 }
 
 func TestAnalyseEmptyInput(t *testing.T) {

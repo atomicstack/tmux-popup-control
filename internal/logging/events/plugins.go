@@ -9,21 +9,21 @@ type PluginTracer struct{}
 var Plugins = PluginTracer{}
 
 func (PluginTracer) Install(name string) {
-	logging.Trace("plugins.install", map[string]interface{}{"name": name})
+	logging.Trace("plugins.install", map[string]any{"name": name})
 }
 
 func (PluginTracer) Update(name string) {
-	logging.Trace("plugins.update", map[string]interface{}{"name": name})
+	logging.Trace("plugins.update", map[string]any{"name": name})
 }
 
 func (PluginTracer) Uninstall(name string) {
-	logging.Trace("plugins.uninstall", map[string]interface{}{"name": name})
+	logging.Trace("plugins.uninstall", map[string]any{"name": name})
 }
 
 func (PluginTracer) Source(name string) {
-	logging.Trace("plugins.source", map[string]interface{}{"name": name})
+	logging.Trace("plugins.source", map[string]any{"name": name})
 }
 
 func (PluginTracer) InitPlugins(count int) {
-	logging.Trace("plugins.init", map[string]interface{}{"count": count})
+	logging.Trace("plugins.init", map[string]any{"count": count})
 }

@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -169,8 +170,15 @@ func WindowSwitchItems(ctx Context) []Item {
 }
 
 func sortWindowEntries(entries []WindowEntry) {
-	sort.Slice(entries, func(i, j int) bool {
-		return windowEntryLess(entries[i], entries[j])
+	slices.SortFunc(entries, func(a, b WindowEntry) int {
+		switch {
+		case windowEntryLess(a, b):
+			return -1
+		case windowEntryLess(b, a):
+			return 1
+		default:
+			return 0
+		}
 	})
 }
 
@@ -457,8 +465,8 @@ func WindowPullFromSessionAction(ctx Context, item Item) tea.Cmd {
 	// Tree items have IDs like "tree:w:session:windowIndex".
 	// Extract the tmux window target (session:windowIndex).
 	source := strings.TrimSpace(item.ID)
-	if strings.HasPrefix(source, TreePrefixWindow) {
-		parts := strings.SplitN(strings.TrimPrefix(source, TreePrefixWindow), ":", 2)
+	if trimmed, ok := strings.CutPrefix(source, TreePrefixWindow); ok {
+		parts := strings.SplitN(trimmed, ":", 2)
 		if len(parts) == 2 {
 			source = parts[0] + ":" + parts[1]
 		}

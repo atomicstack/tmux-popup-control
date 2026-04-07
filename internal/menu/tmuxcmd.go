@@ -30,7 +30,7 @@ func tmuxCmd(socket string, extra ...string) *exec.Cmd {
 func runTmuxCommand(socket string, extra ...string) error {
 	span := logging.StartSpan("menu", "tmux.exec", logging.SpanOptions{
 		Target: strings.Join(extra, " "),
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"socket_path": socket,
 			"argv":        extra,
 		},

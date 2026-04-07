@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -149,10 +150,8 @@ func findWindow(client tmuxClient, target string) (windowHandle, error) {
 		if session != "" {
 			candidates = append(candidates, fmt.Sprintf("%s:%d", session, w.Index))
 		}
-		for _, c := range candidates {
-			if c == target {
-				return newWindowHandle(w), nil
-			}
+		if slices.Contains(candidates, target) {
+			return newWindowHandle(w), nil
 		}
 	}
 	return nil, nil

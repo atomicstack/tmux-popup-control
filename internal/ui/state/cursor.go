@@ -123,9 +123,7 @@ func (l *Level) EnsureCursorVisible(maxVisible int) {
 		return
 	}
 	maxOffset := len(l.Items) - maxVisible
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
+	maxOffset = max(maxOffset, 0)
 	if l.ViewportOffset > maxOffset {
 		l.ViewportOffset = maxOffset
 	}
@@ -138,12 +136,8 @@ func (l *Level) EnsureCursorVisible(maxVisible int) {
 	upper := l.ViewportOffset + maxVisible - 1
 	if l.Cursor > upper {
 		l.ViewportOffset = l.Cursor - maxVisible + 1
-		if l.ViewportOffset < 0 {
-			l.ViewportOffset = 0
-		}
-		if l.ViewportOffset > maxOffset {
-			l.ViewportOffset = maxOffset
-		}
+		l.ViewportOffset = max(l.ViewportOffset, 0)
+		l.ViewportOffset = min(l.ViewportOffset, maxOffset)
 	}
 }
 
@@ -166,9 +160,7 @@ func (l *Level) EnsureCursorVisibleWithAnchor(maxVisible int, anchorRow int) {
 		return
 	}
 	maxOffset := len(l.Items) - maxVisible
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
+	maxOffset = max(maxOffset, 0)
 	if anchorRow < 0 {
 		anchorRow = 0
 	}
@@ -176,11 +168,7 @@ func (l *Level) EnsureCursorVisibleWithAnchor(maxVisible int, anchorRow int) {
 		anchorRow = maxVisible - 1
 	}
 	offset := l.Cursor - anchorRow
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > maxOffset {
-		offset = maxOffset
-	}
+	offset = max(offset, 0)
+	offset = min(offset, maxOffset)
 	l.ViewportOffset = offset
 }

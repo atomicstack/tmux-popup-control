@@ -321,12 +321,8 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 	const indicator = "▌"
 	rawLines := strings.Split(rendered, "\n")
 	start := opts.ViewportOffset
-	if start < 0 {
-		start = 0
-	}
-	if start > len(rawLines) {
-		start = len(rawLines)
-	}
+	start = max(start, 0)
+	start = min(start, len(rawLines))
 	end := len(rawLines)
 	if opts.MaxVisible > 0 && start+opts.MaxVisible < end {
 		end = start + opts.MaxVisible

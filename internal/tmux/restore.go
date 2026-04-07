@@ -134,7 +134,7 @@ func WindowIndices(socketPath, sessionName string) (map[int]bool, error) {
 		return nil, err
 	}
 	indices := make(map[int]bool)
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

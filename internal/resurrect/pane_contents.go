@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -113,10 +114,8 @@ func validateEntryName(name string) error {
 	if filepath.IsAbs(name) {
 		return fmt.Errorf("invalid tar entry name %q: absolute paths are not allowed", name)
 	}
-	for _, part := range strings.Split(filepath.ToSlash(name), "/") {
-		if part == ".." {
-			return fmt.Errorf("invalid tar entry name %q: path traversal not allowed", name)
-		}
+	if slices.Contains(strings.Split(filepath.ToSlash(name), "/"), "..") {
+		return fmt.Errorf("invalid tar entry name %q: path traversal not allowed", name)
 	}
 	return nil
 }

@@ -18,7 +18,7 @@ type Level struct {
 	Cursor         int
 	MultiSelect    bool
 	Selected       map[string]struct{}
-	Data           interface{}
+	Data           any
 	LastCursor     int
 	Node           *menu.Node
 	ViewportOffset int

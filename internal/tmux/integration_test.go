@@ -131,7 +131,7 @@ func TestPanePreviewCapturesLiveCursorIntegration(t *testing.T) {
 	}
 
 	testutil.SendText(t, socket, paneID, "abcd")
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	testutil.WaitForContent(t, ctx, socket, paneID, "abcd")
 
@@ -155,7 +155,7 @@ func TestPanePreviewCapturesLiveCursorIntegration(t *testing.T) {
 
 func nonEmptyLines(s string) []string {
 	var out []string
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if strings.TrimSpace(line) != "" {
 			out = append(out, strings.TrimSpace(line))
 		}
@@ -355,7 +355,7 @@ func TestFetchPanesCurrentPaneMultiSessionIntegration(t *testing.T) {
 	waitForSession(t, socket, targetSession)
 
 	// Split a few times to create panes with higher IDs.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := exec.Command("tmux", "-S", socket, "split-window", "-t", targetSession).Run(); err != nil {
 			t.Fatalf("split-window %d: %v", i, err)
 		}
@@ -473,7 +473,7 @@ func TestFetchPanesCurrentPaneMultiWindowIntegration(t *testing.T) {
 	// session with one window (pane %0). Create additional windows so
 	// the session has three windows total.
 	session := "tmux-popup-control-test"
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := exec.Command("tmux", "-S", socket, "new-window", "-t", session).Run(); err != nil {
 			t.Fatalf("new-window %d: %v", i, err)
 		}

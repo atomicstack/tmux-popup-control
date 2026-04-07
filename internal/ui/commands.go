@@ -116,9 +116,7 @@ func (m *Model) maxCommandOutputOffset() int {
 
 func (m *Model) scrollCommandOutput(delta int) {
 	offset := m.commandOutputOffset + delta
-	if offset < 0 {
-		offset = 0
-	}
+	offset = max(offset, 0)
 	if maxOffset := m.maxCommandOutputOffset(); offset > maxOffset {
 		offset = maxOffset
 	}
@@ -136,7 +134,7 @@ func preloadCommandList(socketPath string, loader menu.Loader) tea.Cmd {
 	return func() tea.Msg {
 		span := logging.StartSpan("ui", "load.command_menu", logging.SpanOptions{
 			Target: "command",
-			Attrs: map[string]interface{}{
+			Attrs: map[string]any{
 				"socket_path": socketPath,
 			},
 		})
@@ -169,7 +167,7 @@ func (m *Model) loadMenuCmd(id, title string, loader menu.Loader) tea.Cmd {
 	return func() tea.Msg {
 		span := logging.StartSpan("ui", "load.menu", logging.SpanOptions{
 			Target: id,
-			Attrs: map[string]interface{}{
+			Attrs: map[string]any{
 				"title":       title,
 				"socket_path": m.socketPath,
 			},

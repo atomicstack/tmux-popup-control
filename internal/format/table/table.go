@@ -31,10 +31,7 @@ func Format(rows [][]string, alignments []Alignment) []string {
 			if c > 0 {
 				b.WriteString("  ")
 			}
-			width := widths[c] - cellWidth(cell)
-			if width < 0 {
-				width = 0
-			}
+			width := max(widths[c]-cellWidth(cell), 0)
 			if c < len(alignments) && alignments[c] == AlignRight {
 				writeSpaces(&b, width)
 				b.WriteString(cell)
@@ -56,7 +53,7 @@ func writeSpaces(b *strings.Builder, count int) {
 	if count <= 0 {
 		return
 	}
-	for i := 0; i < count; i++ {
+	for range count {
 		b.WriteByte(' ')
 	}
 }

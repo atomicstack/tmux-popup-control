@@ -256,10 +256,7 @@ func (m *Model) pluginInstallView() string {
 	var bar strings.Builder
 	bar.WriteString(filledStyle.Render(strings.Repeat("█", wholeFilled)))
 	if wholeFilled < barWidth {
-		idx := int(math.Round(frac * 8))
-		if idx > 7 {
-			idx = 7
-		}
+		idx := min(int(math.Round(frac*8)), 7)
 		if idx > 0 {
 			bar.WriteString(filledStyle.Inherit(bgStyle).Render(eighths[idx]))
 		} else {

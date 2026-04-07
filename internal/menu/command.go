@@ -12,7 +12,7 @@ import (
 var listCommandsFn = func(socket string) (string, error) {
 	span := logging.StartSpan("menu", "tmux.list_commands", logging.SpanOptions{
 		Target: "list-commands",
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"socket_path": socket,
 		},
 	})
@@ -54,7 +54,7 @@ func RunCommand(socketPath, command string) tea.Cmd {
 	return func() tea.Msg {
 		span := logging.StartSpan("menu", "tmux.run_command", logging.SpanOptions{
 			Target: command,
-			Attrs: map[string]interface{}{
+			Attrs: map[string]any{
 				"socket_path": socketPath,
 			},
 		})

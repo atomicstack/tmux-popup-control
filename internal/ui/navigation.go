@@ -457,10 +457,7 @@ func (m *Model) replaceCommandTokenUnderCursor() bool {
 		return true
 	}
 
-	pos := current.FilterCursorPos()
-	if pos > len(filterRunes) {
-		pos = len(filterRunes)
-	}
+	pos := min(current.FilterCursorPos(), len(filterRunes))
 	if pos > 0 && (pos == len(filterRunes) || unicode.IsSpace(filterRunes[pos])) && !unicode.IsSpace(filterRunes[pos-1]) {
 		pos--
 	}

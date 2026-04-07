@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -204,8 +204,8 @@ func ListSaves(dir string) ([]SaveEntry, error) {
 		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Timestamp.After(entries[j].Timestamp)
+	slices.SortFunc(entries, func(a, b SaveEntry) int {
+		return b.Timestamp.Compare(a.Timestamp)
 	})
 	return entries, nil
 }
@@ -365,10 +365,7 @@ func SaveFileExists(dir, name string) bool {
 // RelativeTime returns a concise human-readable relative timestamp like
 // "just now", "5m ago", "2h ago", "yesterday", or "3 days ago".
 func RelativeTime(t, now time.Time) string {
-	d := now.Sub(t)
-	if d < 0 {
-		d = 0
-	}
+	d := max(now.Sub(t), time.Duration(0))
 	switch {
 	case d < time.Minute:
 		return "just now"

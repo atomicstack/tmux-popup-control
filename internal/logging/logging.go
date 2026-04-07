@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,7 @@ var (
 // SpanOptions configures a traced span.
 type SpanOptions struct {
 	Target string
-	Attrs  map[string]interface{}
+	Attrs  map[string]any
 	Parent *Span
 }
 
@@ -37,7 +38,7 @@ type Span struct {
 	component string
 	operation string
 	target    string
-	attrs     map[string]interface{}
+	attrs     map[string]any
 }
 
 // Error writes errors to the shared log file, mirroring the previous behaviour.
@@ -67,7 +68,7 @@ func Error(err error) {
 			Component: "app",
 			EventName: "error",
 			Message:   err.Error(),
-			Attrs: map[string]interface{}{
+			Attrs: map[string]any{
 				"error": err.Error(),
 			},
 		})
@@ -122,7 +123,7 @@ func Close(result RunResult) {
 
 // Trace appends a structured JSON entry to the shared log when tracing is enabled
 // and mirrors it into the SQLite debug sink when that is active.
-func Trace(event string, payload interface{}) {
+func Trace(event string, payload any) {
 	traceMu.RLock()
 	enabled := traceEnabled
 	path := logPath
@@ -133,9 +134,9 @@ func Trace(event string, payload interface{}) {
 	}
 
 	entry := struct {
-		Time    time.Time   `json:"time"`
-		Event   string      `json:"event"`
-		Payload interface{} `json:"payload,omitempty"`
+		Time    time.Time `json:"time"`
+		Event   string    `json:"event"`
+		Payload any       `json:"payload,omitempty"`
 	}{
 		Time:    time.Now().UTC(),
 		Event:   event,
@@ -192,18 +193,18 @@ func StartSpan(component, operation string, opts SpanOptions) *Span {
 }
 
 // AddAttr appends a key/value pair to the span payload.
-func (s *Span) AddAttr(key string, value interface{}) {
+func (s *Span) AddAttr(key string, value any) {
 	if s == nil || !s.enabled || strings.TrimSpace(key) == "" {
 		return
 	}
 	if s.attrs == nil {
-		s.attrs = map[string]interface{}{}
+		s.attrs = map[string]any{}
 	}
 	s.attrs[key] = value
 }
 
 // AddAttrs appends multiple key/value pairs to the span payload.
-func (s *Span) AddAttrs(attrs map[string]interface{}) {
+func (s *Span) AddAttrs(attrs map[string]any) {
 	if s == nil || !s.enabled {
 		return
 	}
@@ -268,14 +269,12 @@ func Configure(path string) {
 	logPath = path
 }
 
-func cloneAttrs(attrs map[string]interface{}) map[string]interface{} {
+func cloneAttrs(attrs map[string]any) map[string]any {
 	if len(attrs) == 0 {
 		return nil
 	}
-	cloned := make(map[string]interface{}, len(attrs))
-	for key, value := range attrs {
-		cloned[key] = value
-	}
+	cloned := make(map[string]any, len(attrs))
+	maps.Copy(cloned, attrs)
 	return cloned
 }
 
@@ -290,16 +289,16 @@ func eventComponent(event string) string {
 	return event
 }
 
-func payloadToAttrs(payload interface{}) map[string]interface{} {
+func payloadToAttrs(payload any) map[string]any {
 	if payload == nil {
 		return nil
 	}
 
 	switch value := payload.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		return cloneAttrs(value)
 	case map[string]string:
-		attrs := make(map[string]interface{}, len(value))
+		attrs := make(map[string]any, len(value))
 		for key, inner := range value {
 			attrs[key] = inner
 		}
@@ -308,24 +307,24 @@ func payloadToAttrs(payload interface{}) map[string]interface{} {
 
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return map[string]interface{}{
+		return map[string]any{
 			"value":        fmt.Sprintf("%v", payload),
 			"marshalError": err.Error(),
 		}
 	}
 
-	var decoded interface{}
+	var decoded any
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		return map[string]interface{}{
+		return map[string]any{
 			"value":          string(encoded),
 			"unmarshalError": err.Error(),
 		}
 	}
 
-	if attrs, ok := decoded.(map[string]interface{}); ok {
+	if attrs, ok := decoded.(map[string]any); ok {
 		return attrs
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"value": decoded,
 	}
 }

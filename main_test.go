@@ -50,7 +50,7 @@ func TestStartupTracePayloadIncludesFlags(t *testing.T) {
 
 	payload := startupTracePayload(cfg)
 
-	flagsValue, ok := payload["flags"].(map[string]interface{})
+	flagsValue, ok := payload["flags"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected flags map in payload")
 	}

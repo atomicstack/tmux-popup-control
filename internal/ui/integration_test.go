@@ -63,7 +63,7 @@ func TestWindowSwitchPaginationRespectsViewport(t *testing.T) {
 		t.Fatalf("expected win-07 to be outside initial viewport, view =\n%s", view)
 	}
 
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		harness.Send(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	view = harness.View()

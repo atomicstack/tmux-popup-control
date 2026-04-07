@@ -75,7 +75,7 @@ func (m *Model) wrapView(content string) tea.View {
 // View implements tea.Model.
 func (m *Model) View() (view tea.View) {
 	span := logging.StartSpan("ui", "view", logging.SpanOptions{
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"mode":        m.mode.String(),
 			"stack_depth": len(m.stack),
 			"width":       m.width,
@@ -154,14 +154,10 @@ func (m *Model) viewVertical(header string) string {
 		displayItems := current.Items
 		if maxItems := m.maxVisibleItems(); maxItems > 0 && len(displayItems) > maxItems {
 			start = current.ViewportOffset
-			if start < 0 {
-				start = 0
-			}
+			start = max(start, 0)
 			if start+maxItems > len(displayItems) {
 				start = len(displayItems) - maxItems
-				if start < 0 {
-					start = 0
-				}
+				start = max(start, 0)
 				current.ViewportOffset = start
 			}
 			displayItems = displayItems[start : start+maxItems]
@@ -254,14 +250,10 @@ func (m *Model) viewSideBySide(header string) string {
 		displayItems := current.Items
 		if maxItems := m.maxVisibleItems(); maxItems > 0 && len(displayItems) > maxItems {
 			start = current.ViewportOffset
-			if start < 0 {
-				start = 0
-			}
+			start = max(start, 0)
 			if start+maxItems > len(displayItems) {
 				start = len(displayItems) - maxItems
-				if start < 0 {
-					start = 0
-				}
+				start = max(start, 0)
 				current.ViewportOffset = start
 			}
 			displayItems = displayItems[start : start+maxItems]
@@ -301,9 +293,7 @@ func (m *Model) viewSideBySide(header string) string {
 
 	// Pad content lines so the columns fill the space above the bottom bar.
 	panelH := m.height - bottomBarRows
-	if panelH < 1 {
-		panelH = 1
-	}
+	panelH = max(panelH, 1)
 	if len(contentLines) > panelH {
 		contentLines = contentLines[:panelH]
 	}
@@ -360,17 +350,13 @@ func (m *Model) viewCommandOutput(header string) string {
 
 	pageSize := m.commandOutputPageSize()
 	start := m.commandOutputOffset
-	if start < 0 {
-		start = 0
-	}
+	start = max(start, 0)
 	if maxOffset := m.maxCommandOutputOffset(); start > maxOffset {
 		start = maxOffset
 		m.commandOutputOffset = start
 	}
 	end := start + pageSize
-	if end > len(m.commandOutputLines) {
-		end = len(m.commandOutputLines)
-	}
+	end = min(end, len(m.commandOutputLines))
 	if start >= end {
 		lines = append(lines, styledLine{text: "(no output)", style: styles.Info})
 	} else {
@@ -604,9 +590,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 		} else if len(preview.lines) > 0 {
 			// Clamp scroll offset.
 			maxOffset := len(preview.lines) - innerH
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset = max(maxOffset, 0)
 			if preview.scrollOffset > maxOffset {
 				preview.scrollOffset = maxOffset
 			}
@@ -614,9 +598,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 				preview.scrollOffset = 0
 			}
 			end := preview.scrollOffset + innerH
-			if end > len(preview.lines) {
-				end = len(preview.lines)
-			}
+			end = min(end, len(preview.lines))
 			contentLines = preview.lines[preview.scrollOffset:end]
 			lastVisible := preview.scrollOffset + len(contentLines)
 			scrollInfo = fmt.Sprintf(" %d/%d ", lastVisible, len(preview.lines))
@@ -716,9 +698,7 @@ func (m *Model) handleMouseMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	innerH := m.height - 2
-	if innerH < 1 {
-		innerH = 1
-	}
+	innerH = max(innerH, 1)
 	switch ev.Button {
 	case tea.MouseWheelUp:
 		preview.scrollOffset -= 3
@@ -727,9 +707,7 @@ func (m *Model) handleMouseMsg(msg tea.Msg) tea.Cmd {
 		}
 	case tea.MouseWheelDown:
 		maxOffset := len(preview.lines) - innerH
-		if maxOffset < 0 {
-			maxOffset = 0
-		}
+		maxOffset = max(maxOffset, 0)
 		preview.scrollOffset += 3
 		if preview.scrollOffset > maxOffset {
 			preview.scrollOffset = maxOffset
@@ -896,9 +874,7 @@ func (m *Model) overlayCompletion(rendered string) string {
 
 	lines := strings.Split(rendered, "\n")
 	barStart := len(lines) - m.bottomBarRows()
-	if barStart < 0 {
-		barStart = 0
-	}
+	barStart = max(barStart, 0)
 	spaceAbove := barStart
 	spaceBelow := 0
 	if m.height > len(lines) {
@@ -906,14 +882,10 @@ func (m *Model) overlayCompletion(rendered string) string {
 	}
 
 	maxW := m.width - m.completion.anchorCol
-	if maxW < 20 {
-		maxW = 20
-	}
+	maxW = max(maxW, 20)
 
 	maxH := m.height - 4
-	if maxH < 3 {
-		maxH = 3
-	}
+	maxH = max(maxH, 3)
 	naturalDropdown := m.completion.view(maxW, maxH)
 	if naturalDropdown == "" {
 		return rendered
@@ -952,9 +924,7 @@ func (m *Model) overlayCompletion(rendered string) string {
 
 	insertEnd := barStart
 	insertStart := insertEnd - len(dropLines)
-	if insertStart < 0 {
-		insertStart = 0
-	}
+	insertStart = max(insertStart, 0)
 	for idx, line := range dropLines {
 		lineIdx := insertStart + idx
 		if lineIdx < 0 || lineIdx >= len(lines) {

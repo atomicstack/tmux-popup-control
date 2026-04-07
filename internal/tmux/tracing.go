@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -26,13 +27,13 @@ func newTracedTmuxClient(socketPath string, inner tmuxClient) tmuxClient {
 	return &tracedTmuxClient{socketPath: socketPath, inner: inner}
 }
 
-func (c *tracedTmuxClient) baseAttrs() map[string]interface{} {
-	return map[string]interface{}{
+func (c *tracedTmuxClient) baseAttrs() map[string]any {
+	return map[string]any{
 		"socket_path": c.socketPath,
 	}
 }
 
-func (c *tracedTmuxClient) traceErr(operation, target string, attrs map[string]interface{}, fn func() error) error {
+func (c *tracedTmuxClient) traceErr(operation, target string, attrs map[string]any, fn func() error) error {
 	span := logging.StartSpan("tmux.control", operation, logging.SpanOptions{
 		Target: target,
 		Attrs:  mergeTracingAttrs(c.baseAttrs(), attrs),
@@ -42,7 +43,7 @@ func (c *tracedTmuxClient) traceErr(operation, target string, attrs map[string]i
 	return err
 }
 
-func traceValue[T any](component, operation, target string, attrs map[string]interface{}, fn func() (T, error)) (T, error) {
+func traceValue[T any](component, operation, target string, attrs map[string]any, fn func() (T, error)) (T, error) {
 	span := logging.StartSpan(component, operation, logging.SpanOptions{
 		Target: target,
 		Attrs:  attrs,
@@ -103,31 +104,31 @@ func (c *tracedTmuxClient) Close() error {
 }
 
 func (c *tracedTmuxClient) RenamePane(target, title string) error {
-	return c.traceErr("rename_pane", target, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"title": title}), func() error {
+	return c.traceErr("rename_pane", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{"title": title}), func() error {
 		return c.inner.RenamePane(target, title)
 	})
 }
 
 func (c *tracedTmuxClient) SwapPanes(first, second string) error {
-	return c.traceErr("swap_panes", first, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"second": second}), func() error {
+	return c.traceErr("swap_panes", first, mergeTracingAttrs(c.baseAttrs(), map[string]any{"second": second}), func() error {
 		return c.inner.SwapPanes(first, second)
 	})
 }
 
 func (c *tracedTmuxClient) MovePane(source, target string) error {
-	return c.traceErr("move_pane", source, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"target": target}), func() error {
+	return c.traceErr("move_pane", source, mergeTracingAttrs(c.baseAttrs(), map[string]any{"target": target}), func() error {
 		return c.inner.MovePane(source, target)
 	})
 }
 
 func (c *tracedTmuxClient) BreakPane(source, destination string) error {
-	return c.traceErr("break_pane", source, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"destination": destination}), func() error {
+	return c.traceErr("break_pane", source, mergeTracingAttrs(c.baseAttrs(), map[string]any{"destination": destination}), func() error {
 		return c.inner.BreakPane(source, destination)
 	})
 }
 
 func (c *tracedTmuxClient) JoinPane(source, target string) error {
-	return c.traceErr("join_pane", source, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"target": target}), func() error {
+	return c.traceErr("join_pane", source, mergeTracingAttrs(c.baseAttrs(), map[string]any{"target": target}), func() error {
 		return c.inner.JoinPane(source, target)
 	})
 }
@@ -151,19 +152,19 @@ func (c *tracedTmuxClient) UnlinkWindow(target string) error {
 }
 
 func (c *tracedTmuxClient) LinkWindow(source, targetSession string) error {
-	return c.traceErr("link_window", source, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"target_session": targetSession}), func() error {
+	return c.traceErr("link_window", source, mergeTracingAttrs(c.baseAttrs(), map[string]any{"target_session": targetSession}), func() error {
 		return c.inner.LinkWindow(source, targetSession)
 	})
 }
 
 func (c *tracedTmuxClient) MoveWindowToSession(source, targetSession string) error {
-	return c.traceErr("move_window", source, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"target_session": targetSession}), func() error {
+	return c.traceErr("move_window", source, mergeTracingAttrs(c.baseAttrs(), map[string]any{"target_session": targetSession}), func() error {
 		return c.inner.MoveWindowToSession(source, targetSession)
 	})
 }
 
 func (c *tracedTmuxClient) SwapWindows(first, second string) error {
-	return c.traceErr("swap_windows", first, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"second": second}), func() error {
+	return c.traceErr("swap_windows", first, mergeTracingAttrs(c.baseAttrs(), map[string]any{"second": second}), func() error {
 		return c.inner.SwapWindows(first, second)
 	})
 }
@@ -175,7 +176,7 @@ func (c *tracedTmuxClient) SelectWindow(target string) error {
 }
 
 func (c *tracedTmuxClient) SelectLayout(target string, layout string) error {
-	return c.traceErr("select_layout", target, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"layout": layout}), func() error {
+	return c.traceErr("select_layout", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{"layout": layout}), func() error {
 		return c.inner.SelectLayout(target, layout)
 	})
 }
@@ -193,7 +194,7 @@ func (c *tracedTmuxClient) GlobalOption(key string) (string, error) {
 }
 
 func (c *tracedTmuxClient) DisplayMessage(target, format string) (string, error) {
-	return traceValue("tmux.control", "display_message", target, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{"format": format}), func() (string, error) {
+	return traceValue("tmux.control", "display_message", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{"format": format}), func() (string, error) {
 		return c.inner.DisplayMessage(target, format)
 	})
 }
@@ -205,7 +206,7 @@ func (c *tracedTmuxClient) ListSessionsFormat(format string) ([]string, error) {
 }
 
 func (c *tracedTmuxClient) ListWindowsFormat(target, filter, format string) ([]string, error) {
-	return traceValue("tmux.control", "list_windows_format", target, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{
+	return traceValue("tmux.control", "list_windows_format", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{
 		"filter": filter,
 		"format": format,
 	}), func() ([]string, error) {
@@ -214,7 +215,7 @@ func (c *tracedTmuxClient) ListWindowsFormat(target, filter, format string) ([]s
 }
 
 func (c *tracedTmuxClient) ListPanesFormat(target, filter, format string) ([]string, error) {
-	return traceValue("tmux.control", "list_panes_format", target, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{
+	return traceValue("tmux.control", "list_panes_format", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{
 		"filter": filter,
 		"format": format,
 	}), func() ([]string, error) {
@@ -227,7 +228,7 @@ func (c *tracedTmuxClient) Command(parts ...string) (string, error) {
 	if len(parts) > 0 {
 		target = parts[0]
 	}
-	return traceValue("tmux.control", "command", target, mergeTracingAttrs(c.baseAttrs(), map[string]interface{}{
+	return traceValue("tmux.control", "command", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{
 		"argv": append([]string(nil), parts...),
 	}), func() (string, error) {
 		return c.inner.Command(parts...)
@@ -237,7 +238,7 @@ func (c *tracedTmuxClient) Command(parts ...string) (string, error) {
 func (c tracedCommander) Run() error {
 	span := logging.StartSpan("tmux.exec", "run", logging.SpanOptions{
 		Target: commandTarget(c.name, c.args),
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"argv": append([]string(nil), c.args...),
 		},
 	})
@@ -249,7 +250,7 @@ func (c tracedCommander) Run() error {
 func (c tracedCommander) Output() ([]byte, error) {
 	span := logging.StartSpan("tmux.exec", "output", logging.SpanOptions{
 		Target: commandTarget(c.name, c.args),
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"argv": append([]string(nil), c.args...),
 		},
 	})
@@ -259,17 +260,13 @@ func (c tracedCommander) Output() ([]byte, error) {
 	return output, err
 }
 
-func mergeTracingAttrs(base, extra map[string]interface{}) map[string]interface{} {
+func mergeTracingAttrs(base, extra map[string]any) map[string]any {
 	if len(base) == 0 && len(extra) == 0 {
 		return nil
 	}
-	merged := make(map[string]interface{}, len(base)+len(extra))
-	for key, value := range base {
-		merged[key] = value
-	}
-	for key, value := range extra {
-		merged[key] = value
-	}
+	merged := make(map[string]any, len(base)+len(extra))
+	maps.Copy(merged, base)
+	maps.Copy(merged, extra)
 	return merged
 }
 

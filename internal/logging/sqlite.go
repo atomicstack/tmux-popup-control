@@ -48,7 +48,7 @@ type eventRecord struct {
 	Component string
 	EventName string
 	Message   string
-	Attrs     map[string]interface{}
+	Attrs     map[string]any
 }
 
 type spanRecord struct {
@@ -62,7 +62,7 @@ type spanRecord struct {
 	Operation     string
 	Outcome       string
 	Target        string
-	Attrs         map[string]interface{}
+	Attrs         map[string]any
 	ErrorText     string
 }
 
@@ -75,7 +75,7 @@ type sqliteSink struct {
 	path    string
 	db      *sql.DB
 	runID   int64
-	queue   chan interface{}
+	queue   chan any
 	seq     atomic.Int64
 	dropped atomic.Int64
 
@@ -134,7 +134,7 @@ func openSQLiteSink(info SQLiteRunInfo) (*sqliteSink, error) {
 		path:  dbPath,
 		db:    db,
 		runID: runID,
-		queue: make(chan interface{}, sqliteQueueSize),
+		queue: make(chan any, sqliteQueueSize),
 	}
 	sink.writerWG.Add(1)
 	go sink.writer()
@@ -309,7 +309,7 @@ func (s *sqliteSink) enqueueSpan(record spanRecord) {
 	s.enqueue(record)
 }
 
-func (s *sqliteSink) enqueue(op interface{}) {
+func (s *sqliteSink) enqueue(op any) {
 	select {
 	case s.queue <- op:
 	default:
@@ -377,7 +377,7 @@ func (s *sqliteSink) flushDropped() error {
 		Component: "logging",
 		EventName: "debug.drop",
 		Message:   "sqlite debug queue overflow",
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"dropped_records": dropped,
 		},
 	})
@@ -400,7 +400,7 @@ func (s *sqliteSink) writeEvent(record eventRecord) error {
 }
 
 func (s *sqliteSink) writeSpan(record spanRecord) error {
-	var parent interface{}
+	var parent any
 	if record.ParentSpanSeq > 0 {
 		parent = record.ParentSpanSeq
 	}
@@ -431,7 +431,7 @@ func (s *sqliteSink) finishRun(result RunResult) error {
 	if exitStatus == "" {
 		exitStatus = "ok"
 	}
-	var errorText interface{}
+	var errorText any
 	if result.Error != nil {
 		errorText = result.Error.Error()
 	}
@@ -462,13 +462,13 @@ func (s *sqliteSink) Close(result RunResult) {
 	})
 }
 
-func mustJSON(value interface{}) string {
+func mustJSON(value any) string {
 	if value == nil {
 		return "{}"
 	}
 	encoded, err := json.Marshal(value)
 	if err != nil {
-		fallback, _ := json.Marshal(map[string]interface{}{
+		fallback, _ := json.Marshal(map[string]any{
 			"marshalError": err.Error(),
 			"value":        fmt.Sprintf("%v", value),
 		})

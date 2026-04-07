@@ -19,19 +19,13 @@ func (m *Model) resurrectView() string {
 
 	// inner dimensions after 1-cell margin on each side
 	innerWidth := m.width - 2*margin
-	if innerWidth < 10 {
-		innerWidth = 10
-	}
+	innerWidth = max(innerWidth, 10)
 	innerHeight := m.height - 2*margin
-	if innerHeight < 3 {
-		innerHeight = 3
-	}
+	innerHeight = max(innerHeight, 3)
 
 	// last row is the progress bar; everything above is the log
 	logHeight := innerHeight - 1
-	if logHeight < 1 {
-		logHeight = 1
-	}
+	logHeight = max(logHeight, 1)
 
 	// ── log area ────────────────────────────────────────────────────────────
 
@@ -104,9 +98,7 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	// counter is " N/N" — reserve space for it
 	counterWidth := len(fmt.Sprintf(" %d/%d", s.step, s.total))
 	barWidth := availWidth - counterWidth
-	if barWidth < 10 {
-		barWidth = 10
-	}
+	barWidth = max(barWidth, 10)
 
 	// sub-cell precision: compute exact fill and fractional remainder
 	exactFilled := 0.0
@@ -152,14 +144,11 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	eighths := []string{" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
 
 	var bar strings.Builder
-	for i := 0; i < wholeFilled; i++ {
+	for i := range wholeFilled {
 		bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(i))).Render("█"))
 	}
 	if wholeFilled < barWidth {
-		idx := int(math.Round(frac * 8))
-		if idx > 7 {
-			idx = 7
-		}
+		idx := min(int(math.Round(frac*8)), 7)
 		if idx > 0 {
 			bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(wholeFilled))).Inherit(bgStyle).Render(eighths[idx]))
 		} else {

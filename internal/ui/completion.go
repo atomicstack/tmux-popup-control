@@ -209,10 +209,7 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 			start = cs.cursor
 		}
 	}
-	end := start + maxRows
-	if end > len(cs.filtered) {
-		end = len(cs.filtered)
-	}
+	end := min(start+maxRows, len(cs.filtered))
 	visible := cs.filtered[start:end]
 
 	leftWidth := 1
@@ -245,9 +242,7 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 				contentWidth = capWidth
 			} else {
 				rightWidth = capWidth - leftWidth - 2
-				if rightWidth < 0 {
-					rightWidth = 0
-				}
+				rightWidth = max(rightWidth, 0)
 				contentWidth = leftWidth
 				if rightWidth > 0 {
 					contentWidth += 2 + rightWidth

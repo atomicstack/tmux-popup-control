@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -263,15 +264,15 @@ func traceStartup(cfg config.Config) {
 }
 
 // startupTracePayload bundles runtime context for trace logging.
-func startupTracePayload(cfg config.Config) map[string]interface{} {
-	flags := make(map[string]interface{}, len(cfg.Flags))
+func startupTracePayload(cfg config.Config) map[string]any {
+	flags := make(map[string]any, len(cfg.Flags))
 	for k, v := range cfg.Flags {
 		flags[k] = v
 	}
 	flags["trace"] = cfg.Logging.Trace
 	flags["logFile"] = cfg.Logging.FilePath
 	flags["debugToSQLite"] = cfg.Logging.DebugToSQLite
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"argv":   cfg.Args,
 		"flags":  flags,
 		"config": cfg,
@@ -315,9 +316,7 @@ func cloneStringMap(values map[string]string) map[string]string {
 		return nil
 	}
 	cloned := make(map[string]string, len(values))
-	for key, value := range values {
-		cloned[key] = value
-	}
+	maps.Copy(cloned, values)
 	return cloned
 }
 

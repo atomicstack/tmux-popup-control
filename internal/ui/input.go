@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -235,12 +236,8 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	}
 	runes := []rune(text)
 	pos := current.FilterCursorPos()
-	if pos < 0 {
-		pos = 0
-	}
-	if pos > len(runes) {
-		pos = len(runes)
-	}
+	pos = max(pos, 0)
+	pos = min(pos, len(runes))
 	before := render(styles.Filter, string(runes[:pos]))
 	ghost := m.autoCompleteGhost()
 	var caretRune string
@@ -461,9 +458,7 @@ func (m *Model) openCompletion(opts CompletionOptions) {
 	}
 
 	anchorCol := 2 + current.FilterCursorPos() - len([]rune(opts.Prefix))
-	if anchorCol < 0 {
-		anchorCol = 0
-	}
+	anchorCol = max(anchorCol, 0)
 
 	opts.AnchorCol = anchorCol
 	m.completion = newCompletionState(opts)
@@ -542,12 +537,7 @@ func (m *Model) adjustCompletionArgType(schema *cmdparse.CommandSchema, ctx cmdp
 }
 
 func runeInSlice(target rune, values []rune) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(values, target)
 }
 
 func shouldDismissExactMatchCompletion(argType string) bool {

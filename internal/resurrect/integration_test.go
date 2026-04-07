@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -38,7 +39,7 @@ func listSessionNames(t *testing.T, socket string) []string {
 		t.Fatalf("list-sessions: %v", err)
 	}
 	var names []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if s := strings.TrimSpace(line); s != "" {
 			names = append(names, s)
 		}
@@ -55,7 +56,7 @@ func listWindows(t *testing.T, socket, session string) []string {
 		t.Fatalf("list-windows %s: %v", session, err)
 	}
 	var names []string
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if s := strings.TrimSpace(line); s != "" {
 			names = append(names, s)
 		}
@@ -72,7 +73,7 @@ func countPanes(t *testing.T, socket, target string) int {
 		t.Fatalf("list-panes %s: %v", target, err)
 	}
 	n := 0
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if strings.TrimSpace(line) != "" {
 			n++
 		}
@@ -236,14 +237,7 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 
 	// the restored sessions should exist
 	for _, name := range srcSessions {
-		found := false
-		for _, s := range afterSessions {
-			if s == name {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(afterSessions, name) {
 			t.Errorf("restored server missing session %q; has: %v", name, afterSessions)
 		}
 	}
@@ -351,7 +345,7 @@ func countWindows(t *testing.T, socket, session string) int {
 		t.Fatalf("list-windows %s: %v", session, err)
 	}
 	n := 0
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if strings.TrimSpace(line) != "" {
 			n++
 		}

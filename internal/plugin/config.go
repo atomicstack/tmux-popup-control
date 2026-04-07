@@ -42,7 +42,7 @@ func defaultOptionsFn(socketPath string) ([]optionPair, error) {
 		return nil, err
 	}
 	var allPairs []optionPair
-	for _, cfgPath := range strings.Split(raw, ",") {
+	for cfgPath := range strings.SplitSeq(raw, ",") {
 		cfgPath = strings.TrimSpace(cfgPath)
 		if cfgPath == "" {
 			continue
@@ -69,7 +69,7 @@ func parseConfigFile(path string) ([]optionPair, error) {
 // Matches lines like: set -g @plugin 'user/repo' or set-option -g @plugin "user/repo#branch"
 func parseConfigLines(content string) []optionPair {
 	var pairs []optionPair
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

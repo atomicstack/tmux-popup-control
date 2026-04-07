@@ -41,11 +41,11 @@ func TestSQLiteDebugCapturesRunEventsAndSpans(t *testing.T) {
 		t.Fatalf("EnableSQLiteDebug failed: %v", err)
 	}
 
-	Trace("menu.enter", map[string]interface{}{"level": "root", "item": "pane"})
+	Trace("menu.enter", map[string]any{"level": "root", "item": "pane"})
 	Error(runErr)
 	span := StartSpan("tmux.control", "command", SpanOptions{
 		Target: "list-sessions",
-		Attrs: map[string]interface{}{
+		Attrs: map[string]any{
 			"socket_path": "/tmp/test.sock",
 		},
 	})

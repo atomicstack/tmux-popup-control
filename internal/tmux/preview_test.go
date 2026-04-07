@@ -10,7 +10,7 @@ import (
 
 func TestPanePreviewLimitsLines(t *testing.T) {
 	var buf strings.Builder
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		fmt.Fprintf(&buf, "line %03d\n", i)
 	}
 	captured := buf.String()
@@ -103,7 +103,7 @@ func TestPanePreviewReturnsVisibleCursorCoordinates(t *testing.T) {
 
 func TestPanePreviewHidesCursorWhenOutsideVisibleTail(t *testing.T) {
 	var buf strings.Builder
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		fmt.Fprintf(&buf, "line %03d\n", i)
 	}
 	fake := &fakeClient{
@@ -135,7 +135,7 @@ func TestPanePreviewMapsCursorWithinTrimmedVisiblePane(t *testing.T) {
 				t.Fatalf("unexpected options %#v", op)
 			}
 			var buf strings.Builder
-			for i := 0; i < 60; i++ {
+			for i := range 60 {
 				fmt.Fprintf(&buf, "row %02d\n", i)
 			}
 			return buf.String(), nil
@@ -220,7 +220,7 @@ func TestPanePreviewUsesVisibleRowsNotHistoryTail(t *testing.T) {
 				t.Fatalf("unexpected options %#v", op)
 			}
 			var buf strings.Builder
-			for i := 0; i < 50; i++ {
+			for i := range 50 {
 				fmt.Fprintf(&buf, "visible %02d\n", i)
 			}
 			return buf.String(), nil
@@ -254,7 +254,7 @@ func TestPanePreviewKeepsSingleVisibleLineWithBlankRowsBelow(t *testing.T) {
 			}
 			var buf strings.Builder
 			buf.WriteString("only-line\n")
-			for i := 0; i < 64; i++ {
+			for range 64 {
 				buf.WriteString("\n")
 			}
 			return buf.String(), nil

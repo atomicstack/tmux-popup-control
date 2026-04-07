@@ -9,7 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -119,7 +119,7 @@ func renderDataFile(commands map[string]commandHelp) ([]byte, error) {
 	for key := range commands {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	for _, key := range keys {
 		cmd := commands[key]
@@ -137,7 +137,7 @@ func renderDataFile(commands map[string]commandHelp) ([]byte, error) {
 	return format.Source(buf.Bytes())
 }
 
-func exitf(format string, args ...interface{}) {
+func exitf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
 }

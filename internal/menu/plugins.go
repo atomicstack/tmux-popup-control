@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -126,13 +127,7 @@ func PluginsUpdateAction(ctx Context, item Item) tea.Cmd {
 		}
 
 		selected := parseMultiSelectIDs(item.ID)
-		updateAll := false
-		for _, id := range selected {
-			if id == AllPluginsSentinel {
-				updateAll = true
-				break
-			}
-		}
+		updateAll := slices.Contains(selected, AllPluginsSentinel)
 
 		var toUpdate []plugin.Plugin
 		if updateAll {
@@ -168,13 +163,7 @@ func PluginsUninstallAction(ctx Context, item Item) tea.Cmd {
 		}
 
 		selected := parseMultiSelectIDs(item.ID)
-		uninstallAll := false
-		for _, id := range selected {
-			if id == AllPluginsSentinel {
-				uninstallAll = true
-				break
-			}
-		}
+		uninstallAll := slices.Contains(selected, AllPluginsSentinel)
 
 		var toRemove []plugin.Plugin
 		if uninstallAll {
@@ -207,7 +196,7 @@ func parseMultiSelectIDs(id string) []string {
 		return nil
 	}
 	var ids []string
-	for _, s := range strings.Split(id, "\n") {
+	for s := range strings.SplitSeq(id, "\n") {
 		s = strings.TrimSpace(s)
 		if s != "" {
 			ids = append(ids, s)

@@ -311,7 +311,7 @@ func TestTreeFilterCursorNavigation(t *testing.T) {
 	}
 
 	// Navigate down through all items — cursor should wrap back to 0.
-	for i := 0; i < itemCount; i++ {
+	for range itemCount {
 		h.Send(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	current = h.Model().currentLevel()
@@ -399,7 +399,7 @@ func TestTreeFilterAllItemsSelectable(t *testing.T) {
 
 	// Verify every item is reachable by cursor navigation.
 	reachable := make(map[string]bool)
-	for i := 0; i < itemCount; i++ {
+	for range itemCount {
 		current = h.Model().currentLevel()
 		if current.Cursor >= 0 && current.Cursor < len(current.Items) {
 			reachable[current.Items[current.Cursor].ID] = true
