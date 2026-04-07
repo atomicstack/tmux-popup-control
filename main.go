@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/plugin"
 	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
+	"github.com/atomicstack/tmux-popup-control/internal/shquote"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	"golang.org/x/term"
 )
@@ -24,20 +26,42 @@ import (
 // Version is set at build time via ldflags.
 var Version = "dev"
 
-var resolveSocketPathFn = tmux.ResolveSocketPath
-var resolveSaveDirFn = resurrect.ResolveDir
-var resolvePaneContentsFn = resurrect.ResolvePaneContents
-var resolveAutosaveIntervalMinutesFn = resurrect.ResolveAutosaveIntervalMinutes
-var resolveAutosaveMaxFn = resurrect.ResolveAutosaveMax
-var resolveAutosaveIconFn = resurrect.ResolveAutosaveIcon
-var resolveAutosaveIconSecondsFn = resurrect.ResolveAutosaveIconSeconds
-var runAutoSaveCommandFn = resurrect.RunAutoSaveCommand
+type MainDeps struct {
+	ResolveSocketPath             func(string) (string, error)
+	ResolveSaveDir               func(string) (string, error)
+	ResolvePaneContents          func(string) bool
+	ResolveAutosaveIntervalMinutes func(string) int
+	ResolveAutosaveMax           func(string) int
+	ResolveAutosaveIcon          func(string) string
+	ResolveAutosaveIconSeconds   func(string) int
+	RunAutoSaveCommand           func(resurrect.StatusConfig, io.Writer) error
+}
+
+var mainDeps = MainDeps{
+	ResolveSocketPath:               tmux.ResolveSocketPath,
+	ResolveSaveDir:                  resurrect.ResolveDir,
+	ResolvePaneContents:             resurrect.ResolvePaneContents,
+	ResolveAutosaveIntervalMinutes:  resurrect.ResolveAutosaveIntervalMinutes,
+	ResolveAutosaveMax:              resurrect.ResolveAutosaveMax,
+	ResolveAutosaveIcon:             resurrect.ResolveAutosaveIcon,
+	ResolveAutosaveIconSeconds:      resurrect.ResolveAutosaveIconSeconds,
+	RunAutoSaveCommand:              resurrect.RunAutoSaveCommand,
+}
+
+type commandHandler struct {
+	ErrorLabel string
+	Run        func(config.Config, MainDeps) error
+}
 
 func main() {
 	os.Exit(run())
 }
 
 func run() (exitCode int) {
+	return runWithDeps(mainDeps)
+}
+
+func runWithDeps(deps MainDeps) (exitCode int) {
 	ensureZeroExitOnHangup()
 	var exitStatus = "ok"
 	var exitErr error
@@ -79,49 +103,10 @@ func run() (exitCode int) {
 
 	traceStartup(runtimeCfg)
 
-	if subcommand(runtimeCfg) == "save-sessions" {
-		if err := runSaveSessions(runtimeCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "save-sessions: %v\n", err)
-			exitStatus = "error"
-			exitErr = err
-			return 1
-		}
-		return 0
-	}
-
-	if subcommand(runtimeCfg) == "restore-sessions" {
-		if err := runRestoreSessions(runtimeCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "restore-sessions: %v\n", err)
-			exitStatus = "error"
-			exitErr = err
-			return 1
-		}
-		return 0
-	}
-
-	if subcommand(runtimeCfg) == "autosave" || subcommand(runtimeCfg) == "autosave-status" {
-		if err := runAutosave(runtimeCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "autosave: %v\n", err)
-			exitStatus = "error"
-			exitErr = err
-			return 1
-		}
-		return 0
-	}
-
-	if subcommand(runtimeCfg) == "install-and-init-plugins" {
-		if err := runInstallAndInitPlugins(runtimeCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			exitStatus = "error"
-			exitErr = err
-			return 1
-		}
-		return 0
-	}
-
-	if subcommand(runtimeCfg) == "deferred-install" {
-		if err := runDeferredInstall(runtimeCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	cmd := subcommand(runtimeCfg)
+	if handler, ok := commandHandlers()[cmd]; ok {
+		if err := handler.Run(runtimeCfg, deps); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: %v\n", handler.ErrorLabel, err)
 			exitStatus = "error"
 			exitErr = err
 			return 1
@@ -137,6 +122,43 @@ func run() (exitCode int) {
 		return 1
 	}
 	return 0
+}
+
+func commandHandlers() map[string]commandHandler {
+	return map[string]commandHandler{
+		"save-sessions": {
+			ErrorLabel: "save-sessions",
+			Run: func(cfg config.Config, _ MainDeps) error {
+				return runSaveSessions(cfg)
+			},
+		},
+		"restore-sessions": {
+			ErrorLabel: "restore-sessions",
+			Run: func(cfg config.Config, _ MainDeps) error {
+				return runRestoreSessions(cfg)
+			},
+		},
+		"autosave": {
+			ErrorLabel: "autosave",
+			Run:        runAutosave,
+		},
+		"autosave-status": {
+			ErrorLabel: "autosave",
+			Run:        runAutosave,
+		},
+		"install-and-init-plugins": {
+			ErrorLabel: "Error",
+			Run: func(cfg config.Config, _ MainDeps) error {
+				return runInstallAndInitPlugins(cfg)
+			},
+		},
+		"deferred-install": {
+			ErrorLabel: "Error",
+			Run: func(cfg config.Config, _ MainDeps) error {
+				return runDeferredInstall(cfg)
+			},
+		},
+	}
 }
 
 func runInstallAndInitPlugins(cfg config.Config) error {
@@ -173,12 +195,10 @@ func runInstallAndInitPlugins(cfg config.Config) error {
 // Uses a plain CLI call rather than gotmuxcc control-mode to avoid creating
 // phantom sessions during server startup.
 func deferPluginInstall(socketPath string) error {
-	binary, err := os.Executable()
+	cmd, err := buildSelfCommand("deferred-install", "-socket", socketPath)
 	if err != nil {
-		return fmt.Errorf("resolving executable: %w", err)
+		return err
 	}
-	cmd := fmt.Sprintf("%s deferred-install -socket %s",
-		shellQuote(binary), shellQuote(socketPath))
 	args := []string{"run-shell", "-b", cmd}
 	if socketPath != "" {
 		args = append([]string{"-S", socketPath}, args...)
@@ -221,19 +241,7 @@ func runDeferredInstall(cfg config.Config) error {
 		return fmt.Errorf("finding terminal client: %w", err)
 	}
 
-	binary, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolving executable: %w", err)
-	}
-	popupCmd := fmt.Sprintf("%s --root-menu plugins:install -socket %s",
-		shellQuote(binary), shellQuote(socketPath))
-	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
-	return err
-}
-
-// shellQuote wraps s in single quotes, escaping any embedded single quotes.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+	return showPopup(socketPath, clientName, "--root-menu", "plugins:install", "-socket", socketPath)
 }
 
 func ensureZeroExitOnHangup() {
@@ -408,17 +416,11 @@ func runSaveSessions(cfg config.Config) error {
 	if err != nil {
 		return fmt.Errorf("finding terminal client: %w", err)
 	}
-	binary, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolving executable: %w", err)
-	}
-	popupCmd := fmt.Sprintf("%s save-sessions --resurrect-popup -socket %s",
-		shellQuote(binary), shellQuote(socketPath))
+	args := []string{"save-sessions", "--resurrect-popup", "-socket", socketPath}
 	if *name != "" {
-		popupCmd += fmt.Sprintf(" -name %s", shellQuote(*name))
+		args = append(args, "-name", *name)
 	}
-	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
-	return err
+	return showPopup(socketPath, clientName, args...)
 }
 
 // runRestoreSessions handles the "restore-sessions" subcommand.
@@ -447,60 +449,58 @@ func runRestoreSessions(cfg config.Config) error {
 	if err != nil {
 		return fmt.Errorf("finding terminal client: %w", err)
 	}
-	binary, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("resolving executable: %w", err)
-	}
-	popupCmd := fmt.Sprintf("%s restore-sessions --resurrect-popup -socket %s",
-		shellQuote(binary), shellQuote(socketPath))
+	args := []string{"restore-sessions", "--resurrect-popup", "-socket", socketPath}
 	if *from != "" {
-		popupCmd += fmt.Sprintf(" -from %s", shellQuote(*from))
+		args = append(args, "-from", *from)
 	}
-	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
-	return err
+	return showPopup(socketPath, clientName, args...)
 }
 
-func runAutosave(cfg config.Config) error {
-	autoSaveCfg, err := buildAutoSaveConfig(cfg)
+func runAutosave(cfg config.Config, deps MainDeps) error {
+	autoSaveCfg, err := buildAutoSaveConfig(cfg, deps)
 	if err != nil {
 		return err
 	}
-	return runAutoSaveCommandFn(autoSaveCfg, os.Stdout)
+	return deps.RunAutoSaveCommand(autoSaveCfg, os.Stdout)
 }
 
 func autoSaveOutput(cfg config.Config) (string, error) {
-	autoSaveCfg, err := buildAutoSaveConfig(cfg)
+	return autoSaveOutputWithDeps(cfg, mainDeps)
+}
+
+func autoSaveOutputWithDeps(cfg config.Config, deps MainDeps) (string, error) {
+	autoSaveCfg, err := buildAutoSaveConfig(cfg, deps)
 	if err != nil {
 		return "", err
 	}
 	var output strings.Builder
-	if err := runAutoSaveCommandFn(autoSaveCfg, &output); err != nil {
+	if err := deps.RunAutoSaveCommand(autoSaveCfg, &output); err != nil {
 		return "", err
 	}
 	return output.String(), nil
 }
 
-func buildAutoSaveConfig(cfg config.Config) (resurrect.StatusConfig, error) {
+func buildAutoSaveConfig(cfg config.Config, deps MainDeps) (resurrect.StatusConfig, error) {
 	socketPath := cfg.App.SocketPath
 	if parsed := autoSaveSocketFlag(cfg); parsed != "" {
 		socketPath = parsed
 	}
-	resolvedSocketPath, err := resolveSocketPathFn(socketPath)
+	resolvedSocketPath, err := deps.ResolveSocketPath(socketPath)
 	if err != nil {
 		return resurrect.StatusConfig{}, fmt.Errorf("resolving socket: %w", err)
 	}
-	saveDir, err := resolveSaveDirFn(resolvedSocketPath)
+	saveDir, err := deps.ResolveSaveDir(resolvedSocketPath)
 	if err != nil {
 		return resurrect.StatusConfig{}, fmt.Errorf("resolving save dir: %w", err)
 	}
 	return resurrect.StatusConfig{
 		SocketPath:          resolvedSocketPath,
 		SaveDir:             saveDir,
-		CapturePaneContents: resolvePaneContentsFn(resolvedSocketPath),
-		IntervalMinutes:     resolveAutosaveIntervalMinutesFn(resolvedSocketPath),
-		Max:                 resolveAutosaveMaxFn(resolvedSocketPath),
-		Icon:                resolveAutosaveIconFn(resolvedSocketPath),
-		IconSeconds:         resolveAutosaveIconSecondsFn(resolvedSocketPath),
+		CapturePaneContents: deps.ResolvePaneContents(resolvedSocketPath),
+		IntervalMinutes:     deps.ResolveAutosaveIntervalMinutes(resolvedSocketPath),
+		Max:                 deps.ResolveAutosaveMax(resolvedSocketPath),
+		Icon:                deps.ResolveAutosaveIcon(resolvedSocketPath),
+		IconSeconds:         deps.ResolveAutosaveIconSeconds(resolvedSocketPath),
 	}, nil
 }
 
@@ -511,4 +511,21 @@ func autoSaveSocketFlag(cfg config.Config) string {
 		return cfg.App.SocketPath
 	}
 	return *socket
+}
+
+func buildSelfCommand(args ...string) (string, error) {
+	binary, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("resolving executable: %w", err)
+	}
+	return shquote.JoinCommand(append([]string{binary}, args...)...), nil
+}
+
+func showPopup(socketPath, clientName string, args ...string) error {
+	popupCmd, err := buildSelfCommand(args...)
+	if err != nil {
+		return err
+	}
+	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
+	return err
 }

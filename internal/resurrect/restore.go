@@ -9,65 +9,42 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/atomicstack/tmux-popup-control/internal/shquote"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-// injectable functions — defaults call the real tmux package functions.
-
-var createSessionFn = func(socketPath, name, dir, command string) error {
-	return tmux.CreateSession(socketPath, name, dir, command)
+type RestoreDeps struct {
+	CreateSession        func(tmux.SessionSpec) error
+	CreateWindow         func(tmux.WindowSpec) error
+	RenameWindow         func(socketPath, target, newName string) error
+	SplitPane            func(tmux.PaneSpec) error
+	SelectLayoutTarget   func(socketPath, target, layout string) error
+	RespawnPane          func(tmux.PaneSpec) error
+	SelectPane           func(socketPath, target string) error
+	SelectWindow         func(socketPath, target string) error
+	SwitchClient         func(socketPath, clientID, target string) error
+	ExistingSessions     func(socketPath string) (tmux.SessionSnapshot, error)
+	DefaultCommand       func(socketPath string) string
+	ExistingWindowIndices func(socketPath, sessionName string) (map[int]bool, error)
+	SessionOption        func(socketPath, session, option string) string
+	SetSessionOption     func(socketPath, session, option, value string) error
 }
 
-var createWindowFn = func(socketPath, session string, index int, name, dir, command string) error {
-	return tmux.CreateWindow(socketPath, session, index, name, dir, command)
-}
-
-var renameWindowFn = func(socketPath, target, newName string) error {
-	return tmux.RenameWindow(socketPath, target, newName)
-}
-
-var splitPaneFn = func(socketPath, target, dir, command string) error {
-	return tmux.SplitPane(socketPath, target, dir, command)
-}
-
-var selectLayoutTargetFn = func(socketPath, target, layout string) error {
-	return tmux.SelectLayoutTarget(socketPath, target, layout)
-}
-
-var respawnPaneFn = func(socketPath, target, dir, command string) error {
-	return tmux.RespawnPane(socketPath, target, dir, command)
-}
-
-var selectPaneFn = func(socketPath, target string) error {
-	return tmux.SelectPane(socketPath, target)
-}
-
-var selectWindowFn = func(socketPath, target string) error {
-	return tmux.SelectWindow(socketPath, target)
-}
-
-var switchClientFn = func(socketPath, clientID, target string) error {
-	return tmux.SwitchClient(socketPath, clientID, target)
-}
-
-var existingSessionsFn = func(socketPath string) (tmux.SessionSnapshot, error) {
-	return tmux.FetchSessions(socketPath)
-}
-
-var defaultCommandFn = func(socketPath string) string {
-	return tmux.DefaultCommand(socketPath)
-}
-
-var existingWindowIndicesFn = func(socketPath, sessionName string) (map[int]bool, error) {
-	return tmux.WindowIndices(socketPath, sessionName)
-}
-
-var sessionOptionFn = func(socketPath, session, option string) string {
-	return tmux.SessionOption(socketPath, session, option)
-}
-
-var setSessionOptionFn = func(socketPath, session, option, value string) error {
-	return tmux.SetSessionOption(socketPath, session, option, value)
+var restoreDeps = RestoreDeps{
+	CreateSession:         tmux.CreateSession,
+	CreateWindow:          tmux.CreateWindow,
+	RenameWindow:          tmux.RenameWindow,
+	SplitPane:             tmux.SplitPane,
+	SelectLayoutTarget:    tmux.SelectLayoutTarget,
+	RespawnPane:           tmux.RespawnPane,
+	SelectPane:            tmux.SelectPane,
+	SelectWindow:          tmux.SelectWindow,
+	SwitchClient:          tmux.SwitchClient,
+	ExistingSessions:      tmux.FetchSessions,
+	DefaultCommand:        tmux.DefaultCommand,
+	ExistingWindowIndices: tmux.WindowIndices,
+	SessionOption:         tmux.SessionOption,
+	SetSessionOption:      tmux.SetSessionOption,
 }
 
 // restoreMarkerKey returns the tmux session option name used to record that
@@ -79,88 +56,88 @@ func restoreMarkerKey(sessionName string) string {
 // with* helpers replace the package-level vars for the duration of a test and
 // return a restore function.
 
-func withCreateSessionFn(fn func(string, string, string, string) error) func() {
-	orig := createSessionFn
-	createSessionFn = fn
-	return func() { createSessionFn = orig }
+func withCreateSessionFn(fn func(tmux.SessionSpec) error) func() {
+	orig := restoreDeps.CreateSession
+	restoreDeps.CreateSession = fn
+	return func() { restoreDeps.CreateSession = orig }
 }
 
-func withCreateWindowFn(fn func(string, string, int, string, string, string) error) func() {
-	orig := createWindowFn
-	createWindowFn = fn
-	return func() { createWindowFn = orig }
+func withCreateWindowFn(fn func(tmux.WindowSpec) error) func() {
+	orig := restoreDeps.CreateWindow
+	restoreDeps.CreateWindow = fn
+	return func() { restoreDeps.CreateWindow = orig }
 }
 
 func withRenameWindowFn(fn func(string, string, string) error) func() {
-	orig := renameWindowFn
-	renameWindowFn = fn
-	return func() { renameWindowFn = orig }
+	orig := restoreDeps.RenameWindow
+	restoreDeps.RenameWindow = fn
+	return func() { restoreDeps.RenameWindow = orig }
 }
 
-func withSplitPaneFn(fn func(string, string, string, string) error) func() {
-	orig := splitPaneFn
-	splitPaneFn = fn
-	return func() { splitPaneFn = orig }
+func withSplitPaneFn(fn func(tmux.PaneSpec) error) func() {
+	orig := restoreDeps.SplitPane
+	restoreDeps.SplitPane = fn
+	return func() { restoreDeps.SplitPane = orig }
 }
 
 func withSelectLayoutTargetFn(fn func(string, string, string) error) func() {
-	orig := selectLayoutTargetFn
-	selectLayoutTargetFn = fn
-	return func() { selectLayoutTargetFn = orig }
+	orig := restoreDeps.SelectLayoutTarget
+	restoreDeps.SelectLayoutTarget = fn
+	return func() { restoreDeps.SelectLayoutTarget = orig }
 }
 
-func withRespawnPaneFn(fn func(string, string, string, string) error) func() {
-	orig := respawnPaneFn
-	respawnPaneFn = fn
-	return func() { respawnPaneFn = orig }
+func withRespawnPaneFn(fn func(tmux.PaneSpec) error) func() {
+	orig := restoreDeps.RespawnPane
+	restoreDeps.RespawnPane = fn
+	return func() { restoreDeps.RespawnPane = orig }
 }
 
 func withSelectPaneFn(fn func(string, string) error) func() {
-	orig := selectPaneFn
-	selectPaneFn = fn
-	return func() { selectPaneFn = orig }
+	orig := restoreDeps.SelectPane
+	restoreDeps.SelectPane = fn
+	return func() { restoreDeps.SelectPane = orig }
 }
 
 func withSelectWindowFn(fn func(string, string) error) func() {
-	orig := selectWindowFn
-	selectWindowFn = fn
-	return func() { selectWindowFn = orig }
+	orig := restoreDeps.SelectWindow
+	restoreDeps.SelectWindow = fn
+	return func() { restoreDeps.SelectWindow = orig }
 }
 
 func withSwitchClientFn(fn func(string, string, string) error) func() {
-	orig := switchClientFn
-	switchClientFn = fn
-	return func() { switchClientFn = orig }
+	orig := restoreDeps.SwitchClient
+	restoreDeps.SwitchClient = fn
+	return func() { restoreDeps.SwitchClient = orig }
 }
 
 func withExistingSessionsFn(fn func(string) (tmux.SessionSnapshot, error)) func() {
-	orig := existingSessionsFn
-	existingSessionsFn = fn
-	return func() { existingSessionsFn = orig }
+	orig := restoreDeps.ExistingSessions
+	restoreDeps.ExistingSessions = fn
+	return func() { restoreDeps.ExistingSessions = orig }
 }
 
 func withDefaultCommandFn(fn func(string) string) func() {
-	orig := defaultCommandFn
-	defaultCommandFn = fn
-	return func() { defaultCommandFn = orig }
+	orig := restoreDeps.DefaultCommand
+	restoreDeps.DefaultCommand = fn
+	return func() { restoreDeps.DefaultCommand = orig }
 }
 
 func withExistingWindowIndicesFn(fn func(string, string) (map[int]bool, error)) func() {
-	orig := existingWindowIndicesFn
-	existingWindowIndicesFn = fn
-	return func() { existingWindowIndicesFn = orig }
+	orig := restoreDeps.ExistingWindowIndices
+	restoreDeps.ExistingWindowIndices = fn
+	return func() { restoreDeps.ExistingWindowIndices = orig }
 }
 
 func withSessionOptionFn(fn func(string, string, string) string) func() {
-	orig := sessionOptionFn
-	sessionOptionFn = fn
-	return func() { sessionOptionFn = orig }
+	orig := restoreDeps.SessionOption
+	restoreDeps.SessionOption = fn
+	return func() { restoreDeps.SessionOption = orig }
 }
 
 func withSetSessionOptionFn(fn func(string, string, string, string) error) func() {
-	orig := setSessionOptionFn
-	setSessionOptionFn = fn
-	return func() { setSessionOptionFn = orig }
+	orig := restoreDeps.SetSessionOption
+	restoreDeps.SetSessionOption = fn
+	return func() { restoreDeps.SetSessionOption = orig }
 }
 
 // Restore orchestrates a full session restore and emits ProgressEvents on the
@@ -176,18 +153,12 @@ func Restore(cfg Config, file string) <-chan ProgressEvent {
 
 var greenCheck = lipgloss.NewStyle().Foreground(lipgloss.Color("#00c853")).Render("✓")
 
-// shellQuote wraps s in single quotes, escaping any embedded single quotes
-// using the standard sh '\'' technique.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
-}
-
 // paneStartupCommand builds the startup command for a pane that has saved
 // content. The command prints the saved scrollback then execs into the shell.
 // Both contentPath and defaultCmd are shell-quoted to prevent injection when
 // tmux passes the string to /bin/sh -c.
 func paneStartupCommand(contentPath, defaultCmd string) string {
-	return fmt.Sprintf("cat %s; exec %s", shellQuote(contentPath), shellQuote(defaultCmd))
+	return fmt.Sprintf("cat %s; exec %s", shquote.Quote(contentPath), shquote.Quote(defaultCmd))
 }
 
 func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
@@ -219,7 +190,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	}
 
 	// fetch existing sessions to detect conflicts
-	existingSnap, err := existingSessionsFn(cfg.SocketPath)
+	existingSnap, err := restoreDeps.ExistingSessions(cfg.SocketPath)
 	if err != nil {
 		return sendError(ch, "fetching existing sessions: %w", err)
 	}
@@ -231,7 +202,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	// resolve default command for startup command chains
 	defaultCmd := ""
 	if hasPaneArchive {
-		defaultCmd = defaultCommandFn(cfg.SocketPath)
+		defaultCmd = restoreDeps.DefaultCommand(cfg.SocketPath)
 	}
 
 	// lookupPaneCmd returns the startup command for a pane if it has saved
@@ -275,7 +246,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		if merge {
 			// idempotency: skip if this slot was already merged
 			markerKey := restoreMarkerKey(sess.Name)
-			if sessionOptionFn(cfg.SocketPath, sess.Name, markerKey) != "" {
+			if restoreDeps.SessionOption(cfg.SocketPath, sess.Name, markerKey) != "" {
 				sessSteps := 2 + 3*len(sess.Windows)
 				for _, win := range sess.Windows {
 					for _, pane := range win.Panes {
@@ -295,7 +266,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				continue
 			}
 
-			existingIndices, err := existingWindowIndicesFn(cfg.SocketPath, sess.Name)
+			existingIndices, err := restoreDeps.ExistingWindowIndices(cfg.SocketPath, sess.Name)
 			if err != nil {
 				return sendError(ch, "listing windows for session %s: %w", sess.Name, err)
 			}
@@ -338,7 +309,11 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			// whatever process (control-mode client, popup, etc.) sends
 			// the new-session command.
 			sessionDir := os.Getenv("HOME")
-			if err := createSessionFn(cfg.SocketPath, sess.Name, sessionDir, ""); err != nil {
+			if err := restoreDeps.CreateSession(tmux.SessionSpec{
+				SocketPath: cfg.SocketPath,
+				Name:       sess.Name,
+				Dir:        sessionDir,
+			}); err != nil {
 				return sendError(ch, "creating session %s: %w", sess.Name, err)
 			}
 
@@ -350,7 +325,12 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				paneCmd := lookupPaneCmd(sess.Name, sess.Windows[0].Index, p0.Index)
 				if p0.WorkingDir != "" || paneCmd != "" {
 					paneTarget := fmt.Sprintf("%s:0.0", sess.Name)
-					if err := respawnPaneFn(cfg.SocketPath, paneTarget, p0.WorkingDir, paneCmd); err != nil {
+					if err := restoreDeps.RespawnPane(tmux.PaneSpec{
+						SocketPath: cfg.SocketPath,
+						Target:     paneTarget,
+						Dir:        p0.WorkingDir,
+						Command:    paneCmd,
+					}); err != nil {
 						return sendError(ch, "respawning pane %s: %w", paneTarget, err)
 					}
 				}
@@ -367,7 +347,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 
 			if !merge && win.Index == 0 {
 				// first window of a new session is auto-created; rename it
-				if err := renameWindowFn(cfg.SocketPath, winTarget, win.Name); err != nil {
+				if err := restoreDeps.RenameWindow(cfg.SocketPath, winTarget, win.Name); err != nil {
 					return sendError(ch, "renaming window %s: %w", winTarget, err)
 				}
 			} else {
@@ -377,7 +357,14 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 					winDir = win.Panes[0].WorkingDir
 					winCmd = lookupPaneCmd(sess.Name, win.Index, win.Panes[0].Index)
 				}
-				if err := createWindowFn(cfg.SocketPath, sess.Name, targetIdx, win.Name, winDir, winCmd); err != nil {
+				if err := restoreDeps.CreateWindow(tmux.WindowSpec{
+					SocketPath: cfg.SocketPath,
+					Session:    sess.Name,
+					Index:      targetIdx,
+					Name:       win.Name,
+					Dir:        winDir,
+					Command:    winCmd,
+				}); err != nil {
 					return sendError(ch, "creating window %s: %w", winTarget, err)
 				}
 			}
@@ -403,7 +390,12 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				}
 				paneTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
 				paneCmd := lookupPaneCmd(sess.Name, win.Index, pane.Index)
-				if err := splitPaneFn(cfg.SocketPath, paneTarget, pane.WorkingDir, paneCmd); err != nil {
+				if err := restoreDeps.SplitPane(tmux.PaneSpec{
+					SocketPath: cfg.SocketPath,
+					Target:     paneTarget,
+					Dir:        pane.WorkingDir,
+					Command:    paneCmd,
+				}); err != nil {
 					return sendError(ch, "splitting pane %s.%d: %w", paneTarget, pane.Index, err)
 				}
 				paneIDs = append(paneIDs, fmt.Sprintf("%s.%d", paneTarget, pane.Index))
@@ -425,7 +417,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			targetIdx := indexMap[win.Index]
 			winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
 			step++
-			if err := selectLayoutTargetFn(cfg.SocketPath, winTarget, win.Layout); err != nil {
+			if err := restoreDeps.SelectLayoutTarget(cfg.SocketPath, winTarget, win.Layout); err != nil {
 				return sendError(ch, "applying layout for %s: %w", winTarget, err)
 			}
 		}
@@ -441,7 +433,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			}
 			paneTarget := fmt.Sprintf("%s:%d.%d", sess.Name, targetIdx, activePaneIdx)
 			step++
-			if err := selectPaneFn(cfg.SocketPath, paneTarget); err != nil {
+			if err := restoreDeps.SelectPane(cfg.SocketPath, paneTarget); err != nil {
 				return sendError(ch, "selecting active pane %s: %w", paneTarget, err)
 			}
 		}
@@ -455,7 +447,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		}
 		activeWindowTarget := fmt.Sprintf("%s:%d", sess.Name, indexMap[activeWindowIdx])
 		step++
-		if err := selectWindowFn(cfg.SocketPath, activeWindowTarget); err != nil {
+		if err := restoreDeps.SelectWindow(cfg.SocketPath, activeWindowTarget); err != nil {
 			return sendError(ch, "selecting active window %s: %w", activeWindowTarget, err)
 		}
 
@@ -468,7 +460,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 
 		// mark restored sessions so re-running the same restore is idempotent
 		markerKey := restoreMarkerKey(sess.Name)
-		if err := setSessionOptionFn(cfg.SocketPath, sess.Name, markerKey, "1"); err != nil {
+		if err := restoreDeps.SetSessionOption(cfg.SocketPath, sess.Name, markerKey, "1"); err != nil {
 			return sendError(ch, "setting restore marker for session %s: %w", sess.Name, err)
 		}
 	}
@@ -476,7 +468,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	// restore client session
 	step++
 	if sf.ClientSession != "" {
-		if err := switchClientFn(cfg.SocketPath, cfg.ClientID, sf.ClientSession); err != nil {
+		if err := restoreDeps.SwitchClient(cfg.SocketPath, cfg.ClientID, sf.ClientSession); err != nil {
 			return sendError(ch, "switching client to session %s: %w", sf.ClientSession, err)
 		}
 	}

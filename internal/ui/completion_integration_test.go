@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/atomicstack/tmux-popup-control/internal/shquote"
 	"github.com/atomicstack/tmux-popup-control/internal/testutil"
 )
 
@@ -65,10 +65,10 @@ func launchCompletionBinary(t *testing.T, bin, socket, session, rootMenu string)
 	exitFile = filepath.Join(scriptDir, "exit-code")
 	scriptPath := filepath.Join(scriptDir, "run.sh")
 	script := "#!/bin/sh\n" +
-		"POPUP_BIN=" + shellQuote(bin) + "\n" +
-		"POPUP_SOCKET=" + shellQuote(socket) + "\n" +
-		"POPUP_EXIT=" + shellQuote(exitFile) + "\n" +
-		fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shellQuote(rootMenu)) +
+		"POPUP_BIN=" + shquote.Quote(bin) + "\n" +
+		"POPUP_SOCKET=" + shquote.Quote(socket) + "\n" +
+		"POPUP_EXIT=" + shquote.Quote(exitFile) + "\n" +
+		fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shquote.Quote(rootMenu)) +
 		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=ansi256\n" +
 		"\"$POPUP_BIN\" -socket \"$POPUP_SOCKET\" -width 80 -height 24 2>/dev/null\n" +
 		"printf '%s' $? > \"$POPUP_EXIT\"\n" +
@@ -99,8 +99,4 @@ func completionRepoRoot(t *testing.T) string {
 		}
 		dir = parent
 	}
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

@@ -16,17 +16,20 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-// tmuxOptionFn queries a tmux option value. Injectable for tests.
-var tmuxOptionFn = func(socket, opt string) string {
-	return tmux.ShowOption(socket, opt)
+type StorageDeps struct {
+	ShowOption func(socket, opt string) string
+}
+
+var storageDeps = StorageDeps{
+	ShowOption: tmux.ShowOption,
 }
 
 // withTmuxOptionFn replaces tmuxOptionFn for the duration of a test and
 // returns a restore function.
 func withTmuxOptionFn(fn func(socket, opt string) string) func() {
-	orig := tmuxOptionFn
-	tmuxOptionFn = fn
-	return func() { tmuxOptionFn = orig }
+	orig := storageDeps.ShowOption
+	storageDeps.ShowOption = fn
+	return func() { storageDeps.ShowOption = orig }
 }
 
 // ResolveDir returns the directory used for save files. Lookup chain:
@@ -41,7 +44,7 @@ func ResolveDir(socketPath string) (string, error) {
 		return ensureDir(os.ExpandEnv(d))
 	}
 
-	if d := tmuxOptionFn(socketPath, "@tmux-popup-control-session-storage-dir"); d != "" {
+	if d := storageDeps.ShowOption(socketPath, "@tmux-popup-control-session-storage-dir"); d != "" {
 		return ensureDir(os.ExpandEnv(d))
 	}
 
@@ -222,7 +225,7 @@ func ResolveAutosaveIntervalMinutes(socketPath string) int {
 	if v := strings.TrimSpace(os.Getenv(envAutosaveIntervalMinutes)); v != "" {
 		return parseAutosaveInterval(v)
 	}
-	if v := strings.TrimSpace(tmuxOptionFn(socketPath, optAutosaveIntervalMinutes)); v != "" {
+	if v := strings.TrimSpace(storageDeps.ShowOption(socketPath, optAutosaveIntervalMinutes)); v != "" {
 		return parseAutosaveInterval(v)
 	}
 	return 0
@@ -232,7 +235,7 @@ func ResolveAutosaveMax(socketPath string) int {
 	if v := strings.TrimSpace(os.Getenv(envAutosaveMax)); v != "" {
 		return parseAutosaveMax(v)
 	}
-	if v := strings.TrimSpace(tmuxOptionFn(socketPath, optAutosaveMax)); v != "" {
+	if v := strings.TrimSpace(storageDeps.ShowOption(socketPath, optAutosaveMax)); v != "" {
 		return parseAutosaveMax(v)
 	}
 	return 5
@@ -242,7 +245,7 @@ func ResolveAutosaveIconSeconds(socketPath string) int {
 	if v := strings.TrimSpace(os.Getenv(envAutosaveIconSeconds)); v != "" {
 		return parseAutosaveIconSeconds(v)
 	}
-	if v := strings.TrimSpace(tmuxOptionFn(socketPath, optAutosaveIconSeconds)); v != "" {
+	if v := strings.TrimSpace(storageDeps.ShowOption(socketPath, optAutosaveIconSeconds)); v != "" {
 		return parseAutosaveIconSeconds(v)
 	}
 	return 0
@@ -252,7 +255,7 @@ func ResolveAutosaveIcon(socketPath string) string {
 	if v := os.Getenv(envAutosaveIcon); v != "" {
 		return v
 	}
-	if v := tmuxOptionFn(socketPath, optAutosaveIcon); v != "" {
+	if v := storageDeps.ShowOption(socketPath, optAutosaveIcon); v != "" {
 		return v
 	}
 	return defaultAutosaveStatusIcon
@@ -329,7 +332,7 @@ func ResolvePaneContents(socketPath string) bool {
 	if v := os.Getenv("TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS"); v != "" {
 		return parseBool(v)
 	}
-	if v := tmuxOptionFn(socketPath, "@tmux-popup-control-restore-pane-contents"); v != "" {
+	if v := storageDeps.ShowOption(socketPath, "@tmux-popup-control-restore-pane-contents"); v != "" {
 		return parseBool(v)
 	}
 	return false

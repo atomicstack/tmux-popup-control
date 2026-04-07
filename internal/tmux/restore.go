@@ -9,19 +9,42 @@ import (
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
+type SessionSpec struct {
+	SocketPath string
+	Name       string
+	Dir        string
+	Command    string
+}
+
+type WindowSpec struct {
+	SocketPath string
+	Session    string
+	Index      int
+	Name       string
+	Dir        string
+	Command    string
+}
+
+type PaneSpec struct {
+	SocketPath string
+	Target     string
+	Dir        string
+	Command    string
+}
+
 // CreateSession creates a new tmux session with the given name, starting
 // directory, and optional startup command (for pane content restore).
-func CreateSession(socketPath, name, dir, command string) error {
-	client, err := newTmux(socketPath)
+func CreateSession(spec SessionSpec) error {
+	client, err := newTmux(spec.SocketPath)
 	if err != nil {
 		return err
 	}
-	args := []string{"new-session", "-d", "-s", name}
-	if dir != "" {
-		args = append(args, "-c", dir)
+	args := []string{"new-session", "-d", "-s", spec.Name}
+	if spec.Dir != "" {
+		args = append(args, "-c", spec.Dir)
 	}
-	if command != "" {
-		args = append(args, command)
+	if spec.Command != "" {
+		args = append(args, spec.Command)
 	}
 	_, err = client.Command(args...)
 	return err
@@ -30,15 +53,15 @@ func CreateSession(socketPath, name, dir, command string) error {
 // CreateWindow creates a new window at the given index within a session.
 // The window is created detached (-d) to avoid switching focus.
 // An optional startup command is appended for pane content restore.
-func CreateWindow(socketPath, session string, index int, name, dir, command string) error {
-	client, err := newTmux(socketPath)
+func CreateWindow(spec WindowSpec) error {
+	client, err := newTmux(spec.SocketPath)
 	if err != nil {
 		return err
 	}
-	target := fmt.Sprintf("%s:%d", session, index)
-	args := []string{"new-window", "-t", target, "-n", name, "-c", dir, "-d"}
-	if command != "" {
-		args = append(args, command)
+	target := fmt.Sprintf("%s:%d", spec.Session, spec.Index)
+	args := []string{"new-window", "-t", target, "-n", spec.Name, "-c", spec.Dir, "-d"}
+	if spec.Command != "" {
+		args = append(args, spec.Command)
 	}
 	_, err = client.Command(args...)
 	return err
@@ -47,17 +70,17 @@ func CreateWindow(socketPath, session string, index int, name, dir, command stri
 // SplitPane splits the pane at the given target, starting in dir.
 // The new pane is created detached to avoid disturbing focus.
 // An optional startup command is appended for pane content restore.
-func SplitPane(socketPath, target, dir, command string) error {
-	client, err := newTmux(socketPath)
+func SplitPane(spec PaneSpec) error {
+	client, err := newTmux(spec.SocketPath)
 	if err != nil {
 		return err
 	}
-	args := []string{"split-window", "-d", "-t", target}
-	if dir != "" {
-		args = append(args, "-c", dir)
+	args := []string{"split-window", "-d", "-t", spec.Target}
+	if spec.Dir != "" {
+		args = append(args, "-c", spec.Dir)
 	}
-	if command != "" {
-		args = append(args, command)
+	if spec.Command != "" {
+		args = append(args, spec.Command)
 	}
 	_, err = client.Command(args...)
 	return err
@@ -66,17 +89,17 @@ func SplitPane(socketPath, target, dir, command string) error {
 // RespawnPane kills the running command in the target pane and restarts it in
 // the given directory with an optional command. This is used during restore to
 // set the first pane's working directory without polluting session_path.
-func RespawnPane(socketPath, target, dir, command string) error {
-	client, err := newTmux(socketPath)
+func RespawnPane(spec PaneSpec) error {
+	client, err := newTmux(spec.SocketPath)
 	if err != nil {
 		return err
 	}
-	args := []string{"respawn-pane", "-k", "-t", target}
-	if dir != "" {
-		args = append(args, "-c", dir)
+	args := []string{"respawn-pane", "-k", "-t", spec.Target}
+	if spec.Dir != "" {
+		args = append(args, "-c", spec.Dir)
 	}
-	if command != "" {
-		args = append(args, command)
+	if spec.Command != "" {
+		args = append(args, spec.Command)
 	}
 	_, err = client.Command(args...)
 	return err

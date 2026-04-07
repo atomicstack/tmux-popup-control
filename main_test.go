@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/atomicstack/tmux-popup-control/internal/app"
@@ -102,36 +103,29 @@ func TestSubcommandHelpersUseParsedCommandArgs(t *testing.T) {
 }
 
 func TestAutoSaveOutputUsesResolvedSettings(t *testing.T) {
-	restoreSaveDir := withResolveSaveDirFn(func(string) (string, error) { return "/tmp/saves", nil })
-	defer restoreSaveDir()
-	restorePaneContents := withResolvePaneContentsFn(func(string) bool { return true })
-	defer restorePaneContents()
-	restoreSocket := withResolveSocketPathFn(func(string) (string, error) { return "/tmp/tmux.sock", nil })
-	defer restoreSocket()
-	restoreInterval := withResolveAutosaveIntervalMinutesFn(func(string) int { return 7 })
-	defer restoreInterval()
-	restoreMax := withResolveAutosaveMaxFn(func(string) int { return 9 })
-	defer restoreMax()
-	restoreAutosaveIcon := withResolveAutosaveIconFn(func(string) string { return "X " })
-	defer restoreAutosaveIcon()
-	restoreIcon := withResolveAutosaveIconSecondsFn(func(string) int { return 5 })
-	defer restoreIcon()
-
 	var gotCfg resurrect.StatusConfig
-	restoreAutosave := withRunAutoSaveCommandFn(func(cfg resurrect.StatusConfig, outputWriter io.Writer) error {
+	deps := MainDeps{
+		ResolveSaveDir: func(string) (string, error) { return "/tmp/saves", nil },
+		ResolvePaneContents: func(string) bool { return true },
+		ResolveSocketPath: func(string) (string, error) { return "/tmp/tmux.sock", nil },
+		ResolveAutosaveIntervalMinutes: func(string) int { return 7 },
+		ResolveAutosaveMax: func(string) int { return 9 },
+		ResolveAutosaveIcon: func(string) string { return "X " },
+		ResolveAutosaveIconSeconds: func(string) int { return 5 },
+		RunAutoSaveCommand: func(cfg resurrect.StatusConfig, outputWriter io.Writer) error {
 		gotCfg = cfg
 		_, err := outputWriter.Write([]byte("X \n"))
 		return err
-	})
-	defer restoreAutosave()
+		},
+	}
 
-	output, err := autoSaveOutput(config.Config{
+	output, err := autoSaveOutputWithDeps(config.Config{
 		App: app.Config{SocketPath: "app-socket"},
 		Command: []string{
 			"autosave",
 			"-socket", "flag-socket",
 		},
-	})
+	}, deps)
 	if err != nil {
 		t.Fatalf("autoSaveOutput: %v", err)
 	}
@@ -162,50 +156,33 @@ func TestAutoSaveOutputUsesResolvedSettings(t *testing.T) {
 	}
 }
 
-func withResolveSocketPathFn(fn func(string) (string, error)) func() {
-	orig := resolveSocketPathFn
-	resolveSocketPathFn = fn
-	return func() { resolveSocketPathFn = orig }
+func TestBuildSelfCommandQuotesArguments(t *testing.T) {
+	got, err := buildSelfCommand("save-sessions", "-name", "space's here")
+	if err != nil {
+		t.Fatalf("buildSelfCommand: %v", err)
+	}
+	if got == "" {
+		t.Fatal("expected non-empty command")
+	}
+	if !strings.Contains(got, "'save-sessions'") {
+		t.Fatalf("expected quoted subcommand, got %q", got)
+	}
+	if !strings.Contains(got, "'space'\\''s here'") {
+		t.Fatalf("expected shell-quoted value, got %q", got)
+	}
 }
 
-func withResolveSaveDirFn(fn func(string) (string, error)) func() {
-	orig := resolveSaveDirFn
-	resolveSaveDirFn = fn
-	return func() { resolveSaveDirFn = orig }
-}
-
-func withResolvePaneContentsFn(fn func(string) bool) func() {
-	orig := resolvePaneContentsFn
-	resolvePaneContentsFn = fn
-	return func() { resolvePaneContentsFn = orig }
-}
-
-func withResolveAutosaveIntervalMinutesFn(fn func(string) int) func() {
-	orig := resolveAutosaveIntervalMinutesFn
-	resolveAutosaveIntervalMinutesFn = fn
-	return func() { resolveAutosaveIntervalMinutesFn = orig }
-}
-
-func withResolveAutosaveMaxFn(fn func(string) int) func() {
-	orig := resolveAutosaveMaxFn
-	resolveAutosaveMaxFn = fn
-	return func() { resolveAutosaveMaxFn = orig }
-}
-
-func withResolveAutosaveIconFn(fn func(string) string) func() {
-	orig := resolveAutosaveIconFn
-	resolveAutosaveIconFn = fn
-	return func() { resolveAutosaveIconFn = orig }
-}
-
-func withResolveAutosaveIconSecondsFn(fn func(string) int) func() {
-	orig := resolveAutosaveIconSecondsFn
-	resolveAutosaveIconSecondsFn = fn
-	return func() { resolveAutosaveIconSecondsFn = orig }
-}
-
-func withRunAutoSaveCommandFn(fn func(resurrect.StatusConfig, io.Writer) error) func() {
-	orig := runAutoSaveCommandFn
-	runAutoSaveCommandFn = fn
-	return func() { runAutoSaveCommandFn = orig }
+func TestCommandHandlersIncludesAutosaveAlias(t *testing.T) {
+	handlers := commandHandlers()
+	autosave, ok := handlers["autosave"]
+	if !ok {
+		t.Fatal("expected autosave handler")
+	}
+	autosaveStatus, ok := handlers["autosave-status"]
+	if !ok {
+		t.Fatal("expected autosave-status handler")
+	}
+	if autosave.ErrorLabel != "autosave" || autosaveStatus.ErrorLabel != "autosave" {
+		t.Fatalf("expected autosave labels, got %q and %q", autosave.ErrorLabel, autosaveStatus.ErrorLabel)
+	}
 }

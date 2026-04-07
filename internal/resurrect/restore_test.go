@@ -36,16 +36,16 @@ func writeSaveFile(t *testing.T, dir string, name string, sf *SaveFile) string {
 }
 
 // stubNoOp returns a function that accepts any args and returns nil.
-func noopSession(_, _, _, _ string) error                 { return nil }
-func noopWindow(_, _ string, _ int, _, _, _ string) error { return nil }
-func noopRename(_, _, _ string) error                     { return nil }
-func noopSplit(_, _, _, _ string) error                   { return nil }
-func noopLayout(_, _, _ string) error                     { return nil }
-func noopPane(_, _ string) error                          { return nil }
-func noopSelectWindow(_, _ string) error                  { return nil }
-func noopSwitch(_, _, _ string) error                     { return nil }
-func noopRespawn(_, _, _, _ string) error                 { return nil }
-func noopDefaultCommand(_ string) string                  { return "/bin/bash" }
+func noopSession(tmux.SessionSpec) error     { return nil }
+func noopWindow(tmux.WindowSpec) error       { return nil }
+func noopRename(_, _, _ string) error        { return nil }
+func noopSplit(tmux.PaneSpec) error          { return nil }
+func noopLayout(_, _, _ string) error        { return nil }
+func noopPane(_, _ string) error             { return nil }
+func noopSelectWindow(_, _ string) error     { return nil }
+func noopSwitch(_, _, _ string) error        { return nil }
+func noopRespawn(tmux.PaneSpec) error        { return nil }
+func noopDefaultCommand(_ string) string     { return "/bin/bash" }
 
 // collectRestoreEvents drains the channel returned by Restore.
 func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
@@ -233,13 +233,13 @@ func TestRestoreSessionMerge(t *testing.T) {
 
 	createSessionCalled := false
 	var createdWindowIndices []int
-	r1 := withCreateSessionFn(func(_, _, _, _ string) error {
+	r1 := withCreateSessionFn(func(tmux.SessionSpec) error {
 		createSessionCalled = true
 		return nil
 	})
 	defer r1()
-	r2 := withCreateWindowFn(func(_, _ string, index int, _, _, _ string) error {
-		createdWindowIndices = append(createdWindowIndices, index)
+	r2 := withCreateWindowFn(func(spec tmux.WindowSpec) error {
+		createdWindowIndices = append(createdWindowIndices, spec.Index)
 		return nil
 	})
 	defer r2()
@@ -355,7 +355,7 @@ func TestRestoreSessionCreationError(t *testing.T) {
 	dir := t.TempDir()
 
 	createErr := errors.New("new-session failed")
-	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return createErr })
+	r1 := withCreateSessionFn(func(tmux.SessionSpec) error { return createErr })
 	defer r1()
 	r2 := withCreateWindowFn(noopWindow)
 	defer r2()
@@ -419,8 +419,8 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	var respawnCommands []string
 	var splitCommands []string
 
-	r1 := withCreateSessionFn(func(_, _, _, command string) error {
-		sessionCommands = append(sessionCommands, command)
+	r1 := withCreateSessionFn(func(spec tmux.SessionSpec) error {
+		sessionCommands = append(sessionCommands, spec.Command)
 		return nil
 	})
 	defer r1()
@@ -428,8 +428,8 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	defer r2()
 	r3 := withRenameWindowFn(noopRename)
 	defer r3()
-	r4 := withSplitPaneFn(func(_, _, _, command string) error {
-		splitCommands = append(splitCommands, command)
+	r4 := withSplitPaneFn(func(spec tmux.PaneSpec) error {
+		splitCommands = append(splitCommands, spec.Command)
 		return nil
 	})
 	defer r4()
@@ -454,8 +454,8 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
 	defer r13()
-	r14 := withRespawnPaneFn(func(_, _, _, command string) error {
-		respawnCommands = append(respawnCommands, command)
+	r14 := withRespawnPaneFn(func(spec tmux.PaneSpec) error {
+		respawnCommands = append(respawnCommands, spec.Command)
 		return nil
 	})
 	defer r14()
@@ -688,17 +688,17 @@ func TestRestoreMergeIndexRemapping(t *testing.T) {
 		index   int
 		name    string
 	}
-	r1 := withCreateSessionFn(func(_, _, _, _ string) error {
+	r1 := withCreateSessionFn(func(tmux.SessionSpec) error {
 		createSessionCalled = true
 		return nil
 	})
 	defer r1()
-	r2 := withCreateWindowFn(func(_, session string, index int, name, _, _ string) error {
+	r2 := withCreateWindowFn(func(spec tmux.WindowSpec) error {
 		createdWindows = append(createdWindows, struct {
 			session string
 			index   int
 			name    string
-		}{session, index, name})
+		}{spec.Session, spec.Index, spec.Name})
 		return nil
 	})
 	defer r2()
@@ -794,23 +794,23 @@ func TestRestoreMergeWithPaneArchive(t *testing.T) {
 		cmd    string
 	}
 
-	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return nil })
+	r1 := withCreateSessionFn(func(tmux.SessionSpec) error { return nil })
 	defer r1()
-	r2 := withCreateWindowFn(func(_, _ string, index int, _, _, cmd string) error {
+	r2 := withCreateWindowFn(func(spec tmux.WindowSpec) error {
 		windowCmds = append(windowCmds, struct {
 			index int
 			cmd   string
-		}{index, cmd})
+		}{spec.Index, spec.Command})
 		return nil
 	})
 	defer r2()
 	r3 := withRenameWindowFn(noopRename)
 	defer r3()
-	r4 := withSplitPaneFn(func(_, target, _, cmd string) error {
+	r4 := withSplitPaneFn(func(spec tmux.PaneSpec) error {
 		splitCmds = append(splitCmds, struct {
 			target string
 			cmd    string
-		}{target, cmd})
+		}{spec.Target, spec.Command})
 		return nil
 	})
 	defer r4()
@@ -905,9 +905,9 @@ func TestRestoreMergeIdempotent(t *testing.T) {
 	dir := t.TempDir()
 
 	createWindowCalled := false
-	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return nil })
+	r1 := withCreateSessionFn(func(tmux.SessionSpec) error { return nil })
 	defer r1()
-	r2 := withCreateWindowFn(func(_, _ string, _ int, _, _, _ string) error {
+	r2 := withCreateWindowFn(func(tmux.WindowSpec) error {
 		createWindowCalled = true
 		return nil
 	})
@@ -991,7 +991,7 @@ func TestRestoreMergeSetsMarker(t *testing.T) {
 	dir := t.TempDir()
 
 	var setOptions []struct{ session, option, value string }
-	r1 := withCreateSessionFn(func(_, _, _, _ string) error { return nil })
+	r1 := withCreateSessionFn(func(tmux.SessionSpec) error { return nil })
 	defer r1()
 	r2 := withCreateWindowFn(noopWindow)
 	defer r2()

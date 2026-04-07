@@ -8,72 +8,63 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-// injectable functions — defaults call the real tmux package functions.
-
-var fetchSessionsFn = func(socket string) (tmux.SessionSnapshot, error) {
-	return tmux.FetchSessions(socket)
+type SaveDeps struct {
+	FetchSessions       func(socket string) (tmux.SessionSnapshot, error)
+	FetchWindows        func(socket string) (tmux.WindowSnapshot, error)
+	FetchPanes          func(socket string) (tmux.PaneSnapshot, error)
+	CapturePaneContents func(socket, target string) (string, error)
+	QueryWindowOptions  func(socket string) (map[string]bool, error)
+	ClientInfo          func(socket, clientID string) (clientSession, clientLastSession string)
 }
 
-var fetchWindowsFn = func(socket string) (tmux.WindowSnapshot, error) {
-	return tmux.FetchWindows(socket)
-}
-
-var fetchPanesFn = func(socket string) (tmux.PaneSnapshot, error) {
-	return tmux.FetchPanes(socket)
-}
-
-var capturePaneContentsFn = func(socket, target string) (string, error) {
-	return tmux.CapturePaneContents(socket, target)
-}
-
-// queryWindowOptionsFn returns a map from window ID to automatic-rename bool.
-// The real implementation would query tmux; it is wired in later.
-var queryWindowOptionsFn = func(socket string) (map[string]bool, error) {
-	return map[string]bool{}, nil
-}
-
-// clientInfoFn returns the current client's session and last-session.
-var clientInfoFn = func(socket, clientID string) (clientSession, clientLastSession string) {
-	return tmux.ClientSessionInfo(socket, clientID)
+var saveDeps = SaveDeps{
+	FetchSessions:       tmux.FetchSessions,
+	FetchWindows:        tmux.FetchWindows,
+	FetchPanes:          tmux.FetchPanes,
+	CapturePaneContents: tmux.CapturePaneContents,
+	QueryWindowOptions: func(string) (map[string]bool, error) {
+		return map[string]bool{}, nil
+	},
+	ClientInfo: tmux.ClientSessionInfo,
 }
 
 // with* helpers replace the package-level vars for the duration of a test and
 // return a restore function.
 
 func withFetchSessionsFn(fn func(string) (tmux.SessionSnapshot, error)) func() {
-	orig := fetchSessionsFn
-	fetchSessionsFn = fn
-	return func() { fetchSessionsFn = orig }
+	orig := saveDeps.FetchSessions
+	saveDeps.FetchSessions = fn
+	return func() { saveDeps.FetchSessions = orig }
 }
 
 func withFetchWindowsFn(fn func(string) (tmux.WindowSnapshot, error)) func() {
-	orig := fetchWindowsFn
-	fetchWindowsFn = fn
-	return func() { fetchWindowsFn = orig }
+	orig := saveDeps.FetchWindows
+	saveDeps.FetchWindows = fn
+	return func() { saveDeps.FetchWindows = orig }
 }
 
 func withFetchPanesFn(fn func(string) (tmux.PaneSnapshot, error)) func() {
-	orig := fetchPanesFn
-	fetchPanesFn = fn
-	return func() { fetchPanesFn = orig }
+	orig := saveDeps.FetchPanes
+	saveDeps.FetchPanes = fn
+	return func() { saveDeps.FetchPanes = orig }
 }
 
 func withCapturePaneContentsFn(fn func(socket, target string) (string, error)) func() {
-	orig := capturePaneContentsFn
-	capturePaneContentsFn = fn
-	return func() { capturePaneContentsFn = orig }
+	orig := saveDeps.CapturePaneContents
+	saveDeps.CapturePaneContents = fn
+	return func() { saveDeps.CapturePaneContents = orig }
 }
 
 func withQueryWindowOptionsFn(fn func(string) (map[string]bool, error)) func() {
-	orig := queryWindowOptionsFn
-	queryWindowOptionsFn = fn
-	return func() { queryWindowOptionsFn = orig }
+	orig := saveDeps.QueryWindowOptions
+	saveDeps.QueryWindowOptions = fn
+	return func() { saveDeps.QueryWindowOptions = orig }
 }
 
 func withClientInfoFn(fn func(string, string) (string, string)) func() {
-	orig := clientInfoFn
-	clientInfoFn = fn
-	return func() { clientInfoFn = orig }
+	orig := saveDeps.ClientInfo
+	saveDeps.ClientInfo = fn
+	return func() { saveDeps.ClientInfo = orig }
 }
 
 // Save orchestrates a full session save and emits ProgressEvents on the
@@ -98,17 +89,17 @@ func sendError(ch chan<- ProgressEvent, format string, args ...any) error {
 func runSave(cfg Config, ch chan<- ProgressEvent) error {
 	// ── Phase 1: discovery ───────────────────────────────────────────────────
 
-	sessionSnap, err := fetchSessionsFn(cfg.SocketPath)
+	sessionSnap, err := saveDeps.FetchSessions(cfg.SocketPath)
 	if err != nil {
 		return sendError(ch, "fetching sessions: %w", err)
 	}
 
-	windowSnap, err := fetchWindowsFn(cfg.SocketPath)
+	windowSnap, err := saveDeps.FetchWindows(cfg.SocketPath)
 	if err != nil {
 		return sendError(ch, "fetching windows: %w", err)
 	}
 
-	paneSnap, err := fetchPanesFn(cfg.SocketPath)
+	paneSnap, err := saveDeps.FetchPanes(cfg.SocketPath)
 	if err != nil {
 		return sendError(ch, "fetching panes: %w", err)
 	}
@@ -159,13 +150,13 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 	// ── Phase 2: build session tree (depth-first) ───────────────────────────
 
 	// optionally query window options
-	autoRenameMap, err := queryWindowOptionsFn(cfg.SocketPath)
+	autoRenameMap, err := saveDeps.QueryWindowOptions(cfg.SocketPath)
 	if err != nil {
 		autoRenameMap = map[string]bool{}
 	}
 
 	// client info
-	clientSess, clientLastSess := clientInfoFn(cfg.SocketPath, cfg.ClientID)
+	clientSess, clientLastSess := saveDeps.ClientInfo(cfg.SocketPath, cfg.ClientID)
 
 	step := 0
 	now := time.Now()
@@ -245,7 +236,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 				var paneIDs []string
 				for _, p := range panes {
 					paneIDs = append(paneIDs, p.ID)
-					content, err := capturePaneContentsFn(cfg.SocketPath, p.ID)
+					content, err := saveDeps.CapturePaneContents(cfg.SocketPath, p.ID)
 					if err != nil {
 						return sendError(ch, "capturing pane %s: %w", p.ID, err)
 					}

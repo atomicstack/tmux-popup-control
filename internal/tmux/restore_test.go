@@ -14,7 +14,7 @@ func TestCreateSessionSuccess(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	if err := CreateSession("", "mysession", "/tmp/work", ""); err != nil {
+	if err := CreateSession(SessionSpec{SocketPath: "", Name: "mysession", Dir: "/tmp/work"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(fake.commandCalls) != 1 {
@@ -32,7 +32,7 @@ func TestCreateSessionWithCommand(t *testing.T) {
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
 	cmd := "cat /tmp/pane.txt; exec bash"
-	if err := CreateSession("", "mysession", "/tmp", cmd); err != nil {
+	if err := CreateSession(SessionSpec{SocketPath: "", Name: "mysession", Dir: "/tmp", Command: cmd}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	args := fake.commandCalls[0]
@@ -46,7 +46,7 @@ func TestCreateSessionError(t *testing.T) {
 	fake := &fakeClient{commandErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	err := CreateSession("", "fail", "/tmp", "")
+	err := CreateSession(SessionSpec{SocketPath: "", Name: "fail", Dir: "/tmp"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -55,7 +55,7 @@ func TestCreateSessionError(t *testing.T) {
 func TestCreateSessionClientError(t *testing.T) {
 	wantErr := errors.New("connect failed")
 	withStubTmux(t, func(string) (tmuxClient, error) { return nil, wantErr })
-	err := CreateSession("", "name", "/dir", "")
+	err := CreateSession(SessionSpec{SocketPath: "", Name: "name", Dir: "/dir"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -67,7 +67,7 @@ func TestCreateWindowSuccess(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	if err := CreateWindow("", "main", 2, "editor", "/home/user", ""); err != nil {
+	if err := CreateWindow(WindowSpec{SocketPath: "", Session: "main", Index: 2, Name: "editor", Dir: "/home/user"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(fake.commandCalls) != 1 {
@@ -85,7 +85,7 @@ func TestCreateWindowWithCommand(t *testing.T) {
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
 	cmd := "cat /tmp/pane.txt; exec bash"
-	if err := CreateWindow("", "main", 2, "editor", "/home/user", cmd); err != nil {
+	if err := CreateWindow(WindowSpec{SocketPath: "", Session: "main", Index: 2, Name: "editor", Dir: "/home/user", Command: cmd}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	args := fake.commandCalls[0]
@@ -100,7 +100,7 @@ func TestCreateWindowError(t *testing.T) {
 	fake := &fakeClient{commandErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	err := CreateWindow("", "main", 0, "w", "/", "")
+	err := CreateWindow(WindowSpec{SocketPath: "", Session: "main", Index: 0, Name: "w", Dir: "/"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -109,7 +109,7 @@ func TestCreateWindowError(t *testing.T) {
 func TestCreateWindowClientError(t *testing.T) {
 	wantErr := errors.New("connect failed")
 	withStubTmux(t, func(string) (tmuxClient, error) { return nil, wantErr })
-	err := CreateWindow("", "s", 1, "w", "/", "")
+	err := CreateWindow(WindowSpec{SocketPath: "", Session: "s", Index: 1, Name: "w", Dir: "/"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -121,7 +121,7 @@ func TestSplitPaneSuccess(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	if err := SplitPane("", "main:1.0", "/var/log", ""); err != nil {
+	if err := SplitPane(PaneSpec{SocketPath: "", Target: "main:1.0", Dir: "/var/log"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(fake.commandCalls) != 1 {
@@ -139,7 +139,7 @@ func TestSplitPaneWithCommand(t *testing.T) {
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
 	cmd := "cat /tmp/pane.txt; exec bash"
-	if err := SplitPane("", "main:1.0", "/var/log", cmd); err != nil {
+	if err := SplitPane(PaneSpec{SocketPath: "", Target: "main:1.0", Dir: "/var/log", Command: cmd}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	args := fake.commandCalls[0]
@@ -153,7 +153,7 @@ func TestSplitPaneError(t *testing.T) {
 	fake := &fakeClient{commandErr: wantErr}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 
-	err := SplitPane("", "main:1.0", "/tmp", "")
+	err := SplitPane(PaneSpec{SocketPath: "", Target: "main:1.0", Dir: "/tmp"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}
@@ -162,7 +162,7 @@ func TestSplitPaneError(t *testing.T) {
 func TestSplitPaneClientError(t *testing.T) {
 	wantErr := errors.New("connect failed")
 	withStubTmux(t, func(string) (tmuxClient, error) { return nil, wantErr })
-	err := SplitPane("", "t", "/", "")
+	err := SplitPane(PaneSpec{SocketPath: "", Target: "t", Dir: "/"})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("expected %v, got %v", wantErr, err)
 	}

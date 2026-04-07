@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/atomicstack/tmux-popup-control/internal/shquote"
 )
 
 // cursorBlinkRE matches a single character rendered with a cursor background
@@ -81,15 +83,15 @@ func launchBinary(t *testing.T, bin, socket, session, rootMenu string) (pane, ex
 	scriptPath := filepath.Join(scriptDir, "run.sh")
 	var rootLine string
 	if rootMenu != "" {
-		rootLine = fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shellQuote(rootMenu))
+		rootLine = fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shquote.Quote(rootMenu))
 	}
 	// Embed paths directly so no env-var propagation through tmux is needed.
 	// Do NOT redirect stdout here: the binary writes via os.Stdout which is the
 	// pane's PTY. Redirecting it to /dev/null silences all rendering.
 	script := "#!/bin/sh\n" +
-		"POPUP_BIN=" + shellQuote(bin) + "\n" +
-		"POPUP_SOCKET=" + shellQuote(socket) + "\n" +
-		"POPUP_EXIT=" + shellQuote(exitFile) + "\n" +
+		"POPUP_BIN=" + shquote.Quote(bin) + "\n" +
+		"POPUP_SOCKET=" + shquote.Quote(socket) + "\n" +
+		"POPUP_EXIT=" + shquote.Quote(exitFile) + "\n" +
 		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=ansi256\n" +
 		rootLine +
 		"\"$POPUP_BIN\" -socket \"$POPUP_SOCKET\" -width 80 -height 24 2>/dev/null\n" +
@@ -192,16 +194,16 @@ func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, ex
 	scriptPath := filepath.Join(scriptDir, "run.sh")
 	var rootLine string
 	if rootMenu != "" {
-		rootLine = fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shellQuote(rootMenu))
+		rootLine = fmt.Sprintf("export TMUX_POPUP_CONTROL_ROOT_MENU=%s\n", shquote.Quote(rootMenu))
 	}
 	var extraLines string
 	for _, line := range extraEnv {
 		extraLines += line + "\n"
 	}
 	script := "#!/bin/sh\n" +
-		"POPUP_BIN=" + shellQuote(bin) + "\n" +
-		"POPUP_SOCKET=" + shellQuote(socket) + "\n" +
-		"POPUP_EXIT=" + shellQuote(exitFile) + "\n" +
+		"POPUP_BIN=" + shquote.Quote(bin) + "\n" +
+		"POPUP_SOCKET=" + shquote.Quote(socket) + "\n" +
+		"POPUP_EXIT=" + shquote.Quote(exitFile) + "\n" +
 		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=ansi256\n" +
 		rootLine +
 		extraLines +
@@ -216,12 +218,6 @@ func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, ex
 		t.Fatalf("start session %s: %v", session, err)
 	}
 	return session + ":0.0", exitFile
-}
-
-// shellQuote wraps s in single quotes, escaping any embedded single quotes.
-// Safe for paths produced by os.MkdirTemp and standard temp-dir locations.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func repoRoot(t *testing.T) string {
