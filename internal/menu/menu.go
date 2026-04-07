@@ -108,6 +108,7 @@ func RootItems() []Item {
 	return []Item{
 		{ID: "process", Label: "process"},
 		{ID: "clipboard", Label: "clipboard"},
+		{ID: "customize-mode", Label: "customize-mode"},
 		{ID: "keybinding", Label: "keybinding"},
 		{ID: "command", Label: "command"},
 		{ID: "pane", Label: "pane"},
@@ -134,6 +135,7 @@ func CategoryLoaders() map[string]Loader {
 // ActionHandlers maps submenu identifiers to their execution logic.
 func ActionHandlers() map[string]Action {
 	return map[string]Action{
+		"customize-mode":           CustomizeModeAction,
 		"session:new":              SessionNewAction,
 		"session:switch":           SessionSwitchAction,
 		"session:rename":           SessionRenameAction,
