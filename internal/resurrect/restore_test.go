@@ -36,16 +36,16 @@ func writeSaveFile(t *testing.T, dir string, name string, sf *SaveFile) string {
 }
 
 // stubNoOp returns a function that accepts any args and returns nil.
-func noopSession(tmux.SessionSpec) error     { return nil }
-func noopWindow(tmux.WindowSpec) error       { return nil }
-func noopRename(_, _, _ string) error        { return nil }
-func noopSplit(tmux.PaneSpec) error          { return nil }
-func noopLayout(_, _, _ string) error        { return nil }
-func noopPane(_, _ string) error             { return nil }
-func noopSelectWindow(_, _ string) error     { return nil }
-func noopSwitch(_, _, _ string) error        { return nil }
-func noopRespawn(tmux.PaneSpec) error        { return nil }
-func noopDefaultCommand(_ string) string     { return "/bin/bash" }
+func noopSession(tmux.SessionSpec) error { return nil }
+func noopWindow(tmux.WindowSpec) error   { return nil }
+func noopRename(_, _, _ string) error    { return nil }
+func noopSplit(tmux.PaneSpec) error      { return nil }
+func noopLayout(_, _, _ string) error    { return nil }
+func noopPane(_, _ string) error         { return nil }
+func noopSelectWindow(_, _ string) error { return nil }
+func noopSwitch(_, _, _ string) error    { return nil }
+func noopRespawn(tmux.PaneSpec) error    { return nil }
+func noopDefaultCommand(_ string) string { return "/bin/bash" }
 
 // collectRestoreEvents drains the channel returned by Restore.
 func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {

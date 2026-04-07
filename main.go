@@ -27,25 +27,25 @@ import (
 var Version = "dev"
 
 type MainDeps struct {
-	ResolveSocketPath             func(string) (string, error)
-	ResolveSaveDir               func(string) (string, error)
-	ResolvePaneContents          func(string) bool
+	ResolveSocketPath              func(string) (string, error)
+	ResolveSaveDir                 func(string) (string, error)
+	ResolvePaneContents            func(string) bool
 	ResolveAutosaveIntervalMinutes func(string) int
-	ResolveAutosaveMax           func(string) int
-	ResolveAutosaveIcon          func(string) string
-	ResolveAutosaveIconSeconds   func(string) int
-	RunAutoSaveCommand           func(resurrect.StatusConfig, io.Writer) error
+	ResolveAutosaveMax             func(string) int
+	ResolveAutosaveIcon            func(string) string
+	ResolveAutosaveIconSeconds     func(string) int
+	RunAutoSaveCommand             func(resurrect.StatusConfig, io.Writer) error
 }
 
 var mainDeps = MainDeps{
-	ResolveSocketPath:               tmux.ResolveSocketPath,
-	ResolveSaveDir:                  resurrect.ResolveDir,
-	ResolvePaneContents:             resurrect.ResolvePaneContents,
-	ResolveAutosaveIntervalMinutes:  resurrect.ResolveAutosaveIntervalMinutes,
-	ResolveAutosaveMax:              resurrect.ResolveAutosaveMax,
-	ResolveAutosaveIcon:             resurrect.ResolveAutosaveIcon,
-	ResolveAutosaveIconSeconds:      resurrect.ResolveAutosaveIconSeconds,
-	RunAutoSaveCommand:              resurrect.RunAutoSaveCommand,
+	ResolveSocketPath:              tmux.ResolveSocketPath,
+	ResolveSaveDir:                 resurrect.ResolveDir,
+	ResolvePaneContents:            resurrect.ResolvePaneContents,
+	ResolveAutosaveIntervalMinutes: resurrect.ResolveAutosaveIntervalMinutes,
+	ResolveAutosaveMax:             resurrect.ResolveAutosaveMax,
+	ResolveAutosaveIcon:            resurrect.ResolveAutosaveIcon,
+	ResolveAutosaveIconSeconds:     resurrect.ResolveAutosaveIconSeconds,
+	RunAutoSaveCommand:             resurrect.RunAutoSaveCommand,
 }
 
 type commandHandler struct {

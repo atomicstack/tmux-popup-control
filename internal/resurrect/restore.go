@@ -14,20 +14,20 @@ import (
 )
 
 type RestoreDeps struct {
-	CreateSession        func(tmux.SessionSpec) error
-	CreateWindow         func(tmux.WindowSpec) error
-	RenameWindow         func(socketPath, target, newName string) error
-	SplitPane            func(tmux.PaneSpec) error
-	SelectLayoutTarget   func(socketPath, target, layout string) error
-	RespawnPane          func(tmux.PaneSpec) error
-	SelectPane           func(socketPath, target string) error
-	SelectWindow         func(socketPath, target string) error
-	SwitchClient         func(socketPath, clientID, target string) error
-	ExistingSessions     func(socketPath string) (tmux.SessionSnapshot, error)
-	DefaultCommand       func(socketPath string) string
+	CreateSession         func(tmux.SessionSpec) error
+	CreateWindow          func(tmux.WindowSpec) error
+	RenameWindow          func(socketPath, target, newName string) error
+	SplitPane             func(tmux.PaneSpec) error
+	SelectLayoutTarget    func(socketPath, target, layout string) error
+	RespawnPane           func(tmux.PaneSpec) error
+	SelectPane            func(socketPath, target string) error
+	SelectWindow          func(socketPath, target string) error
+	SwitchClient          func(socketPath, clientID, target string) error
+	ExistingSessions      func(socketPath string) (tmux.SessionSnapshot, error)
+	DefaultCommand        func(socketPath string) string
 	ExistingWindowIndices func(socketPath, sessionName string) (map[int]bool, error)
-	SessionOption        func(socketPath, session, option string) string
-	SetSessionOption     func(socketPath, session, option, value string) error
+	SessionOption         func(socketPath, session, option string) string
+	SetSessionOption      func(socketPath, session, option, value string) error
 }
 
 var restoreDeps = RestoreDeps{

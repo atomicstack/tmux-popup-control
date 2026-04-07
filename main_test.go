@@ -105,17 +105,17 @@ func TestSubcommandHelpersUseParsedCommandArgs(t *testing.T) {
 func TestAutoSaveOutputUsesResolvedSettings(t *testing.T) {
 	var gotCfg resurrect.StatusConfig
 	deps := MainDeps{
-		ResolveSaveDir: func(string) (string, error) { return "/tmp/saves", nil },
-		ResolvePaneContents: func(string) bool { return true },
-		ResolveSocketPath: func(string) (string, error) { return "/tmp/tmux.sock", nil },
+		ResolveSaveDir:                 func(string) (string, error) { return "/tmp/saves", nil },
+		ResolvePaneContents:            func(string) bool { return true },
+		ResolveSocketPath:              func(string) (string, error) { return "/tmp/tmux.sock", nil },
 		ResolveAutosaveIntervalMinutes: func(string) int { return 7 },
-		ResolveAutosaveMax: func(string) int { return 9 },
-		ResolveAutosaveIcon: func(string) string { return "X " },
-		ResolveAutosaveIconSeconds: func(string) int { return 5 },
+		ResolveAutosaveMax:             func(string) int { return 9 },
+		ResolveAutosaveIcon:            func(string) string { return "X " },
+		ResolveAutosaveIconSeconds:     func(string) int { return 5 },
 		RunAutoSaveCommand: func(cfg resurrect.StatusConfig, outputWriter io.Writer) error {
-		gotCfg = cfg
-		_, err := outputWriter.Write([]byte("X \n"))
-		return err
+			gotCfg = cfg
+			_, err := outputWriter.Write([]byte("X \n"))
+			return err
 		},
 	}
 
