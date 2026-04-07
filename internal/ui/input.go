@@ -414,7 +414,14 @@ func (m *Model) triggerCompletion() {
 			}
 			descriptions[value] = helpDescriptions[value]
 		}
-		m.openLabeledCompletion(values, labels, descriptions, "flag", "flag", ctx.Prefix)
+		m.openCompletion(CompletionOptions{
+			Items:        values,
+			Labels:       labels,
+			Descriptions: descriptions,
+			ArgType:      "flag",
+			TypeLabel:    "flag",
+			Prefix:       ctx.Prefix,
+		})
 	case cmdparse.ContextFlagValue, cmdparse.ContextPositionalValue:
 		resolver := cmdparse.NewStoreResolver(&modelDataSource{
 			sessions: m.sessions,
@@ -431,17 +438,18 @@ func (m *Model) triggerCompletion() {
 			}
 			return
 		}
-		m.openCompletion(candidates, ctx.ArgType, typeLabel, ctx.Prefix)
+		m.openCompletion(CompletionOptions{
+			Items:     candidates,
+			ArgType:   ctx.ArgType,
+			TypeLabel: typeLabel,
+			Prefix:    ctx.Prefix,
+		})
 	default:
 		m.dismissCompletion()
 	}
 }
 
-func (m *Model) openCompletion(items []string, argType, typeLabel, prefix string) {
-	m.openLabeledCompletion(items, nil, nil, argType, typeLabel, prefix)
-}
-
-func (m *Model) openLabeledCompletion(items []string, labels, descriptions map[string]string, argType, typeLabel, prefix string) {
+func (m *Model) openCompletion(opts CompletionOptions) {
 	current := m.currentLevel()
 	if current == nil {
 		m.dismissCompletion()
@@ -452,14 +460,15 @@ func (m *Model) openLabeledCompletion(items []string, labels, descriptions map[s
 		previousSelected = m.completion.selected()
 	}
 
-	anchorCol := 2 + current.FilterCursorPos() - len([]rune(prefix))
+	anchorCol := 2 + current.FilterCursorPos() - len([]rune(opts.Prefix))
 	if anchorCol < 0 {
 		anchorCol = 0
 	}
 
-	m.completion = newCompletionStateWithMetadata(items, labels, descriptions, argType, typeLabel, anchorCol)
-	if prefix != "" {
-		m.completion.applyFilter(prefix)
+	opts.AnchorCol = anchorCol
+	m.completion = newCompletionState(opts)
+	if opts.Prefix != "" {
+		m.completion.applyFilter(opts.Prefix)
 	}
 	if previousSelected != "" {
 		for idx, item := range m.completion.filtered {
@@ -469,7 +478,7 @@ func (m *Model) openLabeledCompletion(items []string, labels, descriptions map[s
 			}
 		}
 	}
-	if prefix != "" && shouldDismissExactMatchCompletion(argType) && m.completion.hasExactMatch(prefix) {
+	if opts.Prefix != "" && shouldDismissExactMatchCompletion(opts.ArgType) && m.completion.hasExactMatch(opts.Prefix) {
 		m.dismissCompletion()
 		return
 	}

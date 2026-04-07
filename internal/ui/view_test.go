@@ -38,7 +38,12 @@ func TestViewOverlaysCompletionAbovePrompt(t *testing.T) {
 	}, node)
 	lvl.SetFilter("kill-session -t ", len([]rune("kill-session -t ")))
 	m.stack = []*level{lvl}
-	m.completion = newCompletionState([]string{"main", "work"}, "target-session", "target-session", 18)
+	m.completion = newCompletionState(CompletionOptions{
+		Items:     []string{"main", "work"},
+		ArgType:   "target-session",
+		TypeLabel: "target-session",
+		AnchorCol: 18,
+	})
 
 	view := ansi.Strip(m.View().Content)
 	if !strings.Contains(view, "main") {
@@ -60,13 +65,18 @@ func TestViewOverlaysCompletionBelowPromptWhenInsufficientRoomAbove(t *testing.T
 	}, node)
 	lvl.SetFilter("move-window -t ", len([]rune("move-window -t ")))
 	m.stack = []*level{lvl}
-	m.completion = newCompletionState([]string{
-		"main:0",
-		"main:1",
-		"work:0",
-		"work:1",
-		"scratch:0",
-	}, "dst-window", "dst-window", 18)
+	m.completion = newCompletionState(CompletionOptions{
+		Items: []string{
+			"main:0",
+			"main:1",
+			"work:0",
+			"work:1",
+			"scratch:0",
+		},
+		ArgType:   "dst-window",
+		TypeLabel: "dst-window",
+		AnchorCol: 18,
+	})
 
 	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
 	promptIdx := -1

@@ -96,6 +96,30 @@ func TestTreeRendersExpanded(t *testing.T) {
 	}
 }
 
+func TestRenderTreeViewUsesOptionsStruct(t *testing.T) {
+	sessions := []menu.SessionEntry{{Name: "alpha", Windows: 1}}
+	windows := []menu.WindowEntry{{ID: "0", Label: "0:bash", Session: "alpha", Index: 0}}
+	m := testTreeModel(sessions, windows, nil, true)
+	current := m.currentLevel()
+	ts, ok := current.Data.(*menu.TreeState)
+	if !ok {
+		t.Fatal("expected tree state on level")
+	}
+
+	lines := m.renderTreeView(treeRenderOptions{
+		LevelID:        current.ID,
+		Items:          current.Items,
+		State:          ts,
+		CursorIdx:      current.Cursor,
+		Width:          40,
+		ViewportOffset: 0,
+		MaxVisible:     10,
+	})
+	if len(lines) == 0 {
+		t.Fatal("expected rendered tree lines")
+	}
+}
+
 func TestTreeExpandCollapse(t *testing.T) {
 	sessions := []menu.SessionEntry{
 		{Name: "alpha", Windows: 2},

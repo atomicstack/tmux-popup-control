@@ -8,7 +8,7 @@ import (
 )
 
 func TestCompletionFilter(t *testing.T) {
-	cs := newCompletionState([]string{"main", "work", "scratch"}, "target-session", "target-session", 5)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work", "scratch"}, ArgType: "target-session", TypeLabel: "target-session", AnchorCol: 5})
 	if len(cs.filtered) != 3 {
 		t.Fatalf("expected 3 filtered items, got %d", len(cs.filtered))
 	}
@@ -23,7 +23,7 @@ func TestCompletionFilter(t *testing.T) {
 }
 
 func TestCompletionCursorBounds(t *testing.T) {
-	cs := newCompletionState([]string{"a", "b", "c"}, "", "", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"a", "b", "c"}})
 	cs.moveDown()
 	if cs.cursor != 1 {
 		t.Fatalf("expected cursor 1, got %d", cs.cursor)
@@ -43,7 +43,7 @@ func TestCompletionCursorBounds(t *testing.T) {
 }
 
 func TestCompletionSelected(t *testing.T) {
-	cs := newCompletionState([]string{"main", "work"}, "", "", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work"}})
 	if cs.selected() != "main" {
 		t.Fatalf("expected 'main', got %q", cs.selected())
 	}
@@ -54,14 +54,14 @@ func TestCompletionSelected(t *testing.T) {
 }
 
 func TestCompletionSelectedEmpty(t *testing.T) {
-	cs := newCompletionState(nil, "", "", 0)
+	cs := newCompletionState(CompletionOptions{})
 	if cs.selected() != "" {
 		t.Fatalf("expected empty, got %q", cs.selected())
 	}
 }
 
 func TestCompletionCursorWrapsUpFromFirstItem(t *testing.T) {
-	cs := newCompletionState([]string{"a", "b", "c"}, "", "", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"a", "b", "c"}})
 	cs.moveUp()
 	if cs.cursor != 2 {
 		t.Fatalf("expected cursor to wrap to last item, got %d", cs.cursor)
@@ -69,7 +69,7 @@ func TestCompletionCursorWrapsUpFromFirstItem(t *testing.T) {
 }
 
 func TestCompletionCursorWrapsDownFromLastItem(t *testing.T) {
-	cs := newCompletionState([]string{"a", "b", "c"}, "", "", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"a", "b", "c"}})
 	cs.cursor = 2
 	cs.moveDown()
 	if cs.cursor != 0 {
@@ -78,7 +78,7 @@ func TestCompletionCursorWrapsDownFromLastItem(t *testing.T) {
 }
 
 func TestCompletionGhostHintNoInput(t *testing.T) {
-	cs := newCompletionState([]string{"main", "work"}, "target-session", "target-session", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work"}, ArgType: "target-session", TypeLabel: "target-session"})
 	ghost := cs.ghostHint("")
 	if ghost != "main" {
 		t.Fatalf("expected ghost 'main', got %q", ghost)
@@ -86,7 +86,7 @@ func TestCompletionGhostHintNoInput(t *testing.T) {
 }
 
 func TestCompletionGhostHintWithSelection(t *testing.T) {
-	cs := newCompletionState([]string{"main", "work"}, "target-session", "target-session", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work"}, ArgType: "target-session", TypeLabel: "target-session"})
 	cs.moveDown()
 	ghost := cs.ghostHint("")
 	if ghost != "work" {
@@ -95,7 +95,7 @@ func TestCompletionGhostHintWithSelection(t *testing.T) {
 }
 
 func TestCompletionGhostHintUniquePrefix(t *testing.T) {
-	cs := newCompletionState([]string{"main", "work"}, "target-session", "target-session", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work"}, ArgType: "target-session", TypeLabel: "target-session"})
 	cs.applyFilter("ma")
 	ghost := cs.ghostHint("ma")
 	if ghost != "in" {
@@ -104,7 +104,7 @@ func TestCompletionGhostHintUniquePrefix(t *testing.T) {
 }
 
 func TestCompletionGhostHintMultipleMatches(t *testing.T) {
-	cs := newCompletionState([]string{"main", "master"}, "target-session", "target-session", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "master"}, ArgType: "target-session", TypeLabel: "target-session"})
 	cs.applyFilter("ma")
 	ghost := cs.ghostHint("ma")
 	if ghost != "in" {
@@ -113,7 +113,7 @@ func TestCompletionGhostHintMultipleMatches(t *testing.T) {
 }
 
 func TestCompletionGhostHintNoMatch(t *testing.T) {
-	cs := newCompletionState([]string{"main", "work"}, "target-session", "target-session", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work"}, ArgType: "target-session", TypeLabel: "target-session"})
 	cs.applyFilter("xyz")
 	ghost := cs.ghostHint("xyz")
 	if ghost != "" {
@@ -122,7 +122,7 @@ func TestCompletionGhostHintNoMatch(t *testing.T) {
 }
 
 func TestCompletionView(t *testing.T) {
-	cs := newCompletionState([]string{"main", "work", "scratch"}, "target-session", "target-session", 0)
+	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work", "scratch"}, ArgType: "target-session", TypeLabel: "target-session"})
 	view := cs.view(30, 10)
 	if view == "" {
 		t.Fatal("expected non-empty view")

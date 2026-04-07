@@ -119,7 +119,7 @@ func (m *Model) handleEnterKey() tea.Cmd {
 		m.pendingLabel = fmt.Sprintf("%s ↔ %s", first.Label, item.Label)
 		m.errMsg = ""
 		m.forceClearInfo()
-		return menu.WindowSwapCommand(ctx, first.ID, item.ID, first.Label, item.Label)
+		return menu.WindowSwapCommand(ctx, first, item)
 	}
 	if current.ID == "pane:swap-target" && m.pendingPaneSwap != nil {
 		first := *m.pendingPaneSwap

@@ -283,19 +283,19 @@ func PaneRenameAction(ctx Context, item Item) tea.Cmd {
 	}
 }
 
-func PaneRenameCommand(ctx Context, target, title string) tea.Cmd {
+func PaneRenameCommand(req RenameRequest) tea.Cmd {
 	return func() tea.Msg {
-		trimmedTarget := strings.TrimSpace(target)
+		trimmedTarget := strings.TrimSpace(req.Target)
 		if trimmedTarget == "" {
 			return ActionResult{Err: fmt.Errorf("pane target required")}
 		}
-		trimmedTitle := strings.TrimSpace(title)
+		trimmedTitle := strings.TrimSpace(req.Value)
 		if trimmedTitle == "" {
 			return ActionResult{Err: fmt.Errorf("pane title required")}
 		}
 		targetPane := trimmedTarget
 		paneLabel := trimmedTarget
-		for _, entry := range ctx.Panes {
+		for _, entry := range req.Context.Panes {
 			if strings.TrimSpace(entry.ID) == trimmedTarget {
 				paneLabel = entry.Label
 				if id := strings.TrimSpace(entry.PaneID); id != "" {
@@ -305,7 +305,7 @@ func PaneRenameCommand(ctx Context, target, title string) tea.Cmd {
 			}
 		}
 		events.Pane.Rename(targetPane, trimmedTitle)
-		if err := renamePaneFn(ctx.SocketPath, targetPane, trimmedTitle); err != nil {
+		if err := renamePaneFn(req.Context.SocketPath, targetPane, trimmedTitle); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Renamed %s to %s", paneLabel, trimmedTitle)}
@@ -367,12 +367,6 @@ func splitPaneIDs(raw string) []string {
 type PaneSwapPrompt struct {
 	Context Context
 	First   Item
-}
-
-type PanePrompt struct {
-	Context Context
-	Target  string
-	Initial string
 }
 
 type PaneRenameForm struct {
@@ -448,7 +442,11 @@ func (f *PaneRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				return nil, false, false
 			}
 			events.Pane.SubmitRename(f.target, title)
-			return nil, true, false
+			return PaneRenameCommand(RenameRequest{
+				Context: f.ctx,
+				Target:  f.target,
+				Value:   title,
+			}), true, false
 		}
 	}
 	updated, cmd := f.input.Update(msg)

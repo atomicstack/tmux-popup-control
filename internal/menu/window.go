@@ -415,20 +415,20 @@ func WindowEntriesFromTmux(windows []tmux.Window) []WindowEntry {
 	return entries
 }
 
-func WindowRenameCommand(ctx Context, target, name string) tea.Cmd {
+func WindowRenameCommand(req RenameRequest) tea.Cmd {
 	return func() tea.Msg {
-		if target == "" {
+		if req.Target == "" {
 			return ActionResult{Err: fmt.Errorf("window target required")}
 		}
-		trimmed := strings.TrimSpace(name)
+		trimmed := strings.TrimSpace(req.Value)
 		if trimmed == "" {
 			return ActionResult{Err: fmt.Errorf("window name required")}
 		}
-		events.Window.Rename(target, trimmed)
-		if err := renameWindowFn(ctx.SocketPath, target, trimmed); err != nil {
+		events.Window.Rename(req.Target, trimmed)
+		if err := renameWindowFn(req.Context.SocketPath, req.Target, trimmed); err != nil {
 			return ActionResult{Err: err}
 		}
-		return ActionResult{Info: fmt.Sprintf("Renamed %s to %s", target, trimmed)}
+		return ActionResult{Info: fmt.Sprintf("Renamed %s to %s", req.Target, trimmed)}
 	}
 }
 
@@ -487,26 +487,22 @@ func WindowSwapAction(ctx Context, item Item) tea.Cmd {
 	}
 }
 
-func WindowSwapCommand(ctx Context, firstID, secondID, firstLabel, secondLabel string) tea.Cmd {
+func WindowSwapCommand(ctx Context, first, second Item) tea.Cmd {
 	return func() tea.Msg {
-		events.Window.Swap(firstID, secondID)
-		if err := swapWindowsFn(ctx.SocketPath, firstID, secondID); err != nil {
+		events.Window.Swap(first.ID, second.ID)
+		if err := swapWindowsFn(ctx.SocketPath, first.ID, second.ID); err != nil {
 			return ActionResult{Err: err}
 		}
+		firstLabel := first.Label
 		if firstLabel == "" {
-			firstLabel = firstID
+			firstLabel = first.ID
 		}
+		secondLabel := second.Label
 		if secondLabel == "" {
-			secondLabel = secondID
+			secondLabel = second.ID
 		}
 		return ActionResult{Info: fmt.Sprintf("Swapped %s ↔ %s", firstLabel, secondLabel)}
 	}
-}
-
-type WindowPrompt struct {
-	Context Context
-	Target  string
-	Initial string
 }
 
 type WindowSwapPrompt struct {
@@ -588,7 +584,11 @@ func (f *WindowRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				return nil, false, false
 			}
 			events.Window.SubmitRename(f.target, name)
-			return WindowRenameCommand(f.ctx, f.target, name), true, false
+			return WindowRenameCommand(RenameRequest{
+				Context: f.ctx,
+				Target:  f.target,
+				Value:   name,
+			}), true, false
 		}
 	}
 	updated, cmd := f.input.Update(msg)

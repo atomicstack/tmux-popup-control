@@ -155,6 +155,52 @@ func TestPaneCaptureActionEmptyPaneID(t *testing.T) {
 	}
 }
 
+func TestPaneRenameCommandUsesStub(t *testing.T) {
+	restore := withPaneStub(&renamePaneFn, func(_ string, target, title string) error {
+		if target != "%1" || title != "new-title" {
+			t.Fatalf("unexpected args %s %s", target, title)
+		}
+		return nil
+	})
+	defer restore()
+
+	ctx := Context{
+		SocketPath: "sock",
+		Panes: []PaneEntry{
+			{ID: "s:1.0", PaneID: "%1", Label: "pane-label"},
+		},
+	}
+	cmd := PaneRenameCommand(RenameRequest{Context: ctx, Target: "s:1.0", Value: "new-title"})
+	msg := cmd()
+	res := msg.(ActionResult)
+	if res.Err != nil {
+		t.Fatalf("unexpected error: %v", res.Err)
+	}
+}
+
+func TestPaneRenameFormEnterReturnsCommand(t *testing.T) {
+	form := NewPaneRenameForm(RenamePrompt{
+		Context: Context{
+			SocketPath: "sock",
+			Panes: []PaneEntry{
+				{ID: "s:1.0", PaneID: "%1", Label: "pane-label"},
+			},
+		},
+		Target:  "s:1.0",
+		Initial: "old-title",
+	})
+	cmd, done, cancel := form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cancel {
+		t.Fatal("enter should not cancel")
+	}
+	if !done {
+		t.Fatal("enter should submit")
+	}
+	if cmd == nil {
+		t.Fatal("expected submit command from pane rename form")
+	}
+}
+
 func TestPaneCaptureFormToggleEscSeqs(t *testing.T) {
 	form := NewPaneCaptureForm(PaneCapturePrompt{
 		Context:  Context{CurrentPaneID: "%1"},

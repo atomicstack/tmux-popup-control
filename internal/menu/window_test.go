@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func withStub[T any](restore *T, value T) func() {
@@ -320,11 +322,29 @@ func TestWindowRenameCommandUsesStub(t *testing.T) {
 	defer restore()
 
 	ctx := Context{SocketPath: "sock"}
-	cmd := WindowRenameCommand(ctx, "s1:1", "new")
+	cmd := WindowRenameCommand(RenameRequest{Context: ctx, Target: "s1:1", Value: "new"})
 	msg := cmd()
 	res := msg.(ActionResult)
 	if res.Err != nil {
 		t.Fatalf("unexpected error: %v", res.Err)
+	}
+}
+
+func TestWindowRenameFormEnterReturnsCommand(t *testing.T) {
+	form := NewWindowRenameForm(RenamePrompt{
+		Context: Context{SocketPath: "sock"},
+		Target:  "s1:1",
+		Initial: "main",
+	})
+	cmd, done, cancel := form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cancel {
+		t.Fatal("enter should not cancel")
+	}
+	if !done {
+		t.Fatal("enter should submit")
+	}
+	if cmd == nil {
+		t.Fatal("expected submit command from window rename form")
 	}
 }
 

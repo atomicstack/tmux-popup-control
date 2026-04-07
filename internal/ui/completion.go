@@ -15,6 +15,16 @@ type completionItem struct {
 	Description string
 }
 
+type CompletionOptions struct {
+	Items        []string
+	Labels       map[string]string
+	Descriptions map[string]string
+	ArgType      string
+	TypeLabel    string
+	Prefix       string
+	AnchorCol    int
+}
+
 // completionState tracks the argument completion dropdown state.
 type completionState struct {
 	visible   bool
@@ -27,24 +37,16 @@ type completionState struct {
 	typeLabel string
 }
 
-func newCompletionState(items []string, argType, typeLabel string, anchorCol int) *completionState {
-	return newCompletionStateWithLabels(items, nil, argType, typeLabel, anchorCol)
-}
-
-func newCompletionStateWithLabels(items []string, labels map[string]string, argType, typeLabel string, anchorCol int) *completionState {
-	return newCompletionStateWithMetadata(items, labels, nil, argType, typeLabel, anchorCol)
-}
-
-func newCompletionStateWithMetadata(items []string, labels, descriptions map[string]string, argType, typeLabel string, anchorCol int) *completionState {
-	detailedItems := make([]completionItem, 0, len(items))
-	for _, item := range items {
+func newCompletionState(opts CompletionOptions) *completionState {
+	detailedItems := make([]completionItem, 0, len(opts.Items))
+	for _, item := range opts.Items {
 		label := item
-		if labels != nil && labels[item] != "" {
-			label = labels[item]
+		if opts.Labels != nil && opts.Labels[item] != "" {
+			label = opts.Labels[item]
 		}
 		description := ""
-		if descriptions != nil {
-			description = descriptions[item]
+		if opts.Descriptions != nil {
+			description = opts.Descriptions[item]
 		}
 		detailedItems = append(detailedItems, completionItem{
 			Value:       item,
@@ -52,7 +54,7 @@ func newCompletionStateWithMetadata(items []string, labels, descriptions map[str
 			Description: description,
 		})
 	}
-	return newCompletionStateWithItems(detailedItems, argType, typeLabel, anchorCol)
+	return newCompletionStateWithItems(detailedItems, opts.ArgType, opts.TypeLabel, opts.AnchorCol)
 }
 
 func newCompletionStateWithItems(items []completionItem, argType, typeLabel string, anchorCol int) *completionState {

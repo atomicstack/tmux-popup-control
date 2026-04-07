@@ -239,17 +239,27 @@ func (m *Model) treeDataForLevel(current *level) ([]menu.SessionEntry, []menu.Wi
 	return m.treeSessions, m.treeWindows, m.treePanes
 }
 
+type treeRenderOptions struct {
+	LevelID        string
+	Items          []menu.Item
+	State          *menu.TreeState
+	CursorIdx      int
+	Width          int
+	ViewportOffset int
+	MaxVisible     int
+}
+
 // renderTreeView renders the tree as styled lines for display.
 // The items parameter determines which nodes are visible — only
 // sessions/windows/panes whose IDs appear in items are rendered.
-func (m *Model) renderTreeView(levelID string, items []menu.Item, state *menu.TreeState, cursorIdx int, width int, viewportOffset int, maxVisible int) []styledLine {
-	if len(items) == 0 {
+func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
+	if len(opts.Items) == 0 {
 		return nil
 	}
 
 	// Build a set of item IDs to determine which nodes are visible.
-	idSet := make(map[string]bool, len(items))
-	for _, it := range items {
+	idSet := make(map[string]bool, len(opts.Items))
+	for _, it := range opts.Items {
 		idSet[it.ID] = true
 	}
 
@@ -257,7 +267,7 @@ func (m *Model) renderTreeView(levelID string, items []menu.Item, state *menu.Tr
 	var allSessions []menu.SessionEntry
 	var allWindows []menu.WindowEntry
 	var allPanes []menu.PaneEntry
-	if levelID == "window:pull-from-session" {
+	if opts.LevelID == "window:pull-from-session" {
 		allSessions = m.pullTreeSessions
 		allWindows = m.pullTreeWindows
 	} else {
@@ -273,7 +283,7 @@ func (m *Model) renderTreeView(levelID string, items []menu.Item, state *menu.Tr
 
 	// When a filter is active, override expand state so all matching
 	// nodes are visible (FilterTreeItems already computed the correct set).
-	renderState := state
+	renderState := opts.State
 	if current := m.currentLevel(); current != nil && current.Filter != "" {
 		renderState = menu.NewTreeState(true)
 	}
@@ -305,7 +315,7 @@ func (m *Model) renderTreeView(levelID string, items []menu.Item, state *menu.Tr
 
 	const indicator = "▌"
 	rawLines := strings.Split(rendered, "\n")
-	start := viewportOffset
+	start := opts.ViewportOffset
 	if start < 0 {
 		start = 0
 	}
@@ -313,22 +323,22 @@ func (m *Model) renderTreeView(levelID string, items []menu.Item, state *menu.Tr
 		start = len(rawLines)
 	}
 	end := len(rawLines)
-	if maxVisible > 0 && start+maxVisible < end {
-		end = start + maxVisible
+	if opts.MaxVisible > 0 && start+opts.MaxVisible < end {
+		end = start + opts.MaxVisible
 	}
 	visibleLines := rawLines[start:end]
 	result := make([]styledLine, 0, len(visibleLines))
 	for i, line := range visibleLines {
 		absoluteIdx := start + i
 		fullText := indicator + " " + line
-		if width > 0 {
-			if pad := width - len([]rune(fullText)); pad > 0 {
+		if opts.Width > 0 {
+			if pad := opts.Width - len([]rune(fullText)); pad > 0 {
 				fullText += strings.Repeat(" ", pad)
 			}
 		}
 		lineStyle := styles.Item
 		indicatorStyle := styles.ItemIndicator
-		if absoluteIdx == cursorIdx {
+		if absoluteIdx == opts.CursorIdx {
 			lineStyle = styles.SelectedItem
 			indicatorStyle = styles.SelectedItemIndicator
 		}
