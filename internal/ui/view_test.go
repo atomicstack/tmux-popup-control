@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -210,6 +211,53 @@ func TestViewUsesStyledLabelForNormalMenuItems(t *testing.T) {
 	}
 	if strings.Contains(view, "plain-label") {
 		t.Fatalf("did not expect plain label when StyledLabel is present, got:\n%s", view)
+	}
+}
+
+func TestBuildStyledNormalLineUsesOptionsStruct(t *testing.T) {
+	lineStyle := lipgloss.NewStyle().Bold(true)
+	indicatorStyle := lipgloss.NewStyle().Italic(true)
+	line := buildStyledNormalLine(menu.Item{
+		ID:          "styled",
+		Label:       "plain-label",
+		StyledLabel: "styled-label",
+	}, itemLineOptions{
+		Indicator:      "▌",
+		LineStyle:      &lineStyle,
+		IndicatorStyle: &indicatorStyle,
+		Width:          24,
+	})
+	if !line.raw {
+		t.Fatal("expected raw styled line")
+	}
+	if !strings.Contains(ansi.Strip(line.text), "styled-label") {
+		t.Fatalf("expected styled label in line, got %q", ansi.Strip(line.text))
+	}
+}
+
+func TestBuildMultiSelectLineUsesOptionsStruct(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	current := newLevel("pane:kill", "pane:kill", []menu.Item{{ID: "pane-1", Label: "pane-1"}}, nil)
+	current.MultiSelect = true
+	current.Selected["pane-1"] = struct{}{}
+	lineStyle := lipgloss.NewStyle().Bold(true)
+	indicatorStyle := lipgloss.NewStyle().Italic(true)
+
+	line := m.buildMultiSelectLine(menu.Item{
+		ID:    "pane-1",
+		Label: "pane-1",
+	}, itemLineOptions{
+		Indicator:      "▌",
+		LineStyle:      &lineStyle,
+		IndicatorStyle: &indicatorStyle,
+		Current:        current,
+		Width:          20,
+	})
+	if !line.raw {
+		t.Fatal("expected raw multi-select line")
+	}
+	if !strings.Contains(ansi.Strip(line.text), "■") {
+		t.Fatalf("expected checked multi-select marker, got %q", ansi.Strip(line.text))
 	}
 }
 

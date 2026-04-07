@@ -452,11 +452,18 @@ func (m *Model) buildItemLine(item menu.Item, idx int, current *level, width int
 		indicatorStyle = styles.SelectedItemIndicator
 		lineStyle = styles.SelectedItem
 	}
+	opts := itemLineOptions{
+		Indicator:      indicator,
+		LineStyle:      lineStyle,
+		IndicatorStyle: indicatorStyle,
+		Current:        current,
+		Width:          width,
+	}
 	if current.MultiSelect {
-		return m.buildMultiSelectLine(item, indicator, lineStyle, indicatorStyle, current, width)
+		return m.buildMultiSelectLine(item, opts)
 	}
 	if item.StyledLabel != "" {
-		return buildStyledNormalLine(item, indicator, lineStyle, indicatorStyle, width)
+		return buildStyledNormalLine(item, opts)
 	}
 	displayLabel := item.Label
 	fullText := indicator + " " + displayLabel
@@ -474,23 +481,31 @@ func (m *Model) buildItemLine(item menu.Item, idx int, current *level, width int
 	}
 }
 
-func buildStyledNormalLine(item menu.Item, indicator string, lineStyle, indicatorStyle *lipgloss.Style, width int) styledLine {
+type itemLineOptions struct {
+	Indicator      string
+	LineStyle      *lipgloss.Style
+	IndicatorStyle *lipgloss.Style
+	Current        *level
+	Width          int
+}
+
+func buildStyledNormalLine(item menu.Item, opts itemLineOptions) styledLine {
 	bodyContent := item.StyledLabel
-	if width > 0 {
-		visWidth := lipgloss.Width(indicator + " " + item.Label)
-		if pad := width - visWidth; pad > 0 {
+	if opts.Width > 0 {
+		visWidth := lipgloss.Width(opts.Indicator + " " + item.Label)
+		if pad := opts.Width - visWidth; pad > 0 {
 			bodyContent += strings.Repeat(" ", pad)
 		}
 	}
 
-	styledIndicator := indicator
-	if indicatorStyle != nil {
-		styledIndicator = indicatorStyle.Render(indicator)
+	styledIndicator := opts.Indicator
+	if opts.IndicatorStyle != nil {
+		styledIndicator = opts.IndicatorStyle.Render(opts.Indicator)
 	}
 
 	styledBody := " " + bodyContent
-	if lineStyle != nil {
-		styledBody = lineStyle.Render(styledBody)
+	if opts.LineStyle != nil {
+		styledBody = opts.LineStyle.Render(styledBody)
 	}
 
 	return styledLine{
@@ -503,10 +518,10 @@ func buildStyledNormalLine(item menu.Item, indicator string, lineStyle, indicato
 // Each segment (indicator, checkbox, body) is rendered independently to avoid
 // ANSI nesting issues where an inner reset would break the outer background.
 // The result is marked raw so applyWidth uses ANSI-aware truncation.
-func (m *Model) buildMultiSelectLine(item menu.Item, indicator string, lineStyle, indicatorStyle *lipgloss.Style, current *level, width int) styledLine {
+func (m *Model) buildMultiSelectLine(item menu.Item, opts itemLineOptions) styledLine {
 	var cbChar string
 	var cbBaseStyle *lipgloss.Style
-	if current.IsSelected(item.ID) {
+	if opts.Current != nil && opts.Current.IsSelected(item.ID) {
 		cbChar = "■"
 		cbBaseStyle = styles.CheckboxChecked
 	} else {
@@ -515,8 +530,8 @@ func (m *Model) buildMultiSelectLine(item menu.Item, indicator string, lineStyle
 	}
 	// Composite checkbox style: checkbox fg/bold + line background.
 	cbStyle := *cbBaseStyle
-	if lineStyle != nil {
-		cbStyle = cbStyle.Inherit(*lineStyle)
+	if opts.LineStyle != nil {
+		cbStyle = cbStyle.Inherit(*opts.LineStyle)
 	}
 
 	// Use plain Label for width measurement, StyledLabel for display.
@@ -525,17 +540,20 @@ func (m *Model) buildMultiSelectLine(item menu.Item, indicator string, lineStyle
 		displayLabel = item.StyledLabel
 	}
 	bodyContent := displayLabel
-	if width > 0 {
-		visWidth := lipgloss.Width(indicator + " " + cbChar + " " + item.Label)
-		if pad := width - visWidth; pad > 0 {
+	if opts.Width > 0 {
+		visWidth := lipgloss.Width(opts.Indicator + " " + cbChar + " " + item.Label)
+		if pad := opts.Width - visWidth; pad > 0 {
 			bodyContent += strings.Repeat(" ", pad)
 		}
 	}
 
-	styledIndicator := indicatorStyle.Render(indicator)
+	styledIndicator := opts.Indicator
+	if opts.IndicatorStyle != nil {
+		styledIndicator = opts.IndicatorStyle.Render(opts.Indicator)
+	}
 	var styledBody string
-	if lineStyle != nil {
-		styledBody = lineStyle.Render(" ") + cbStyle.Render(cbChar) + lineStyle.Render(" "+bodyContent)
+	if opts.LineStyle != nil {
+		styledBody = opts.LineStyle.Render(" ") + cbStyle.Render(cbChar) + opts.LineStyle.Render(" "+bodyContent)
 	} else {
 		styledBody = " " + cbStyle.Render(cbChar) + " " + bodyContent
 	}
