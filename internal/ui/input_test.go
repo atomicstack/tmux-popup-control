@@ -77,6 +77,29 @@ func TestAutoCompleteGhostStillUsesCommandNameForFirstToken(t *testing.T) {
 	}
 }
 
+func TestAutoCompleteGhostUsesSelectedRootMenuItem(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	current := m.currentLevel()
+	current.SetFilter("se", len([]rune("se")))
+
+	if got := current.Items[current.Cursor].ID; got != "session" {
+		t.Fatalf("expected filtered selection to be session, got %q", got)
+	}
+	if ghost := m.autoCompleteGhost(); ghost != "ssion" {
+		t.Fatalf("expected root menu ghost 'ssion', got %q", ghost)
+	}
+}
+
+func TestAutoCompleteGhostRequiresCursorAtEndOfFilter(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	current := m.currentLevel()
+	current.SetFilter("se", 1)
+
+	if ghost := m.autoCompleteGhost(); ghost != "" {
+		t.Fatalf("expected no ghost with cursor in middle of filter, got %q", ghost)
+	}
+}
+
 func TestTabReplacesCurrentCommandToken(t *testing.T) {
 	m := NewModel(ModelConfig{})
 	node, ok := m.registry.Find("command")

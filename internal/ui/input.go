@@ -273,13 +273,10 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 // autoCompleteGhost returns the ghost text suffix for autocomplete, or "" if
 // none applies. Ghost text is shown when the cursor is at the end of the
 // filter text and the filter is a case-insensitive prefix of the highlighted
-// item's ID on a FilterCommand level.
+// item's ID.
 func (m *Model) autoCompleteGhost() string {
 	current := m.currentLevel()
 	if current == nil {
-		return ""
-	}
-	if current.Node == nil || !current.Node.FilterCommand {
 		return ""
 	}
 	if current.Filter == "" {
@@ -298,10 +295,7 @@ func (m *Model) autoCompleteGhost() string {
 		}
 	}
 
-	if current.Filter == "" {
-		return ""
-	}
-	if strings.Contains(current.Filter, " ") {
+	if current.Node != nil && current.Node.FilterCommand && strings.Contains(current.Filter, " ") {
 		return ""
 	}
 	if current.Cursor < 0 || current.Cursor >= len(current.Items) {
