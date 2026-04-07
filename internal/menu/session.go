@@ -126,41 +126,44 @@ func SessionKillAction(ctx Context, item Item) tea.Cmd {
 	}
 }
 
-func SessionCreateCommand(ctx Context, name string) tea.Cmd {
+func SessionCreateCommand(req SessionRequest) tea.Cmd {
 	return func() tea.Msg {
+		name := strings.TrimSpace(req.Value)
 		events.Session.Create(name)
-		if err := tmux.NewSession(ctx.SocketPath, name); err != nil {
+		if err := tmux.NewSession(req.Context.SocketPath, name); err != nil {
 			return ActionResult{Err: err}
 		}
-		if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, name); err != nil {
+		if err := tmux.SwitchClient(req.Context.SocketPath, req.Context.ClientID, name); err != nil {
 			return ActionResult{Err: fmt.Errorf("created session %s but failed to switch: %w", name, err)}
 		}
 		return ActionResult{Info: fmt.Sprintf("Created and switched to %s", name)}
 	}
 }
 
-func SessionRenameCommand(ctx Context, target, name string) tea.Cmd {
+func SessionRenameCommand(req SessionRequest) tea.Cmd {
 	return func() tea.Msg {
+		target := strings.TrimSpace(req.Target)
 		if target == "" {
 			return ActionResult{Err: fmt.Errorf("session target required")}
 		}
+		name := strings.TrimSpace(req.Value)
 		if name == "" {
 			return ActionResult{Err: fmt.Errorf("session name required")}
 		}
 		events.Session.Rename(target, name)
-		if err := tmux.RenameSession(ctx.SocketPath, target, name); err != nil {
+		if err := tmux.RenameSession(req.Context.SocketPath, target, name); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Renamed %s to %s", target, name)}
 	}
 }
 
-func SessionCommandForAction(actionID string, ctx Context, target, name string) tea.Cmd {
-	switch actionID {
+func SessionCommandForAction(req SessionRequest) tea.Cmd {
+	switch req.Action {
 	case "session:rename":
-		return SessionRenameCommand(ctx, target, name)
+		return SessionRenameCommand(req)
 	default:
-		return SessionCreateCommand(ctx, name)
+		return SessionCreateCommand(req)
 	}
 }
 
@@ -254,6 +257,15 @@ func (f *SessionForm) PendingLabel() string {
 	return name
 }
 
+func (f *SessionForm) Request() SessionRequest {
+	return SessionRequest{
+		Context: f.ctx,
+		Action:  f.ActionID(),
+		Target:  f.target,
+		Value:   f.Value(),
+	}
+}
+
 func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 	switch m := msg.(type) {
 	case tea.KeyPressMsg:
@@ -284,7 +296,7 @@ func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				}
 				f.err = ""
 				events.Session.SubmitNew(value)
-				return SessionCreateCommand(f.ctx, value), true, false
+				return SessionCreateCommand(f.Request()), true, false
 			case sessionFormModeRename:
 				if value == "" {
 					events.Session.CancelRename(f.target, events.SessionReasonEmpty)
@@ -296,7 +308,7 @@ func (f *SessionForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 				}
 				f.err = ""
 				events.Session.SubmitRename(f.target, value)
-				return SessionRenameCommand(f.ctx, f.target, value), true, false
+				return SessionRenameCommand(f.Request()), true, false
 			}
 		}
 	}
@@ -508,7 +520,11 @@ func styleSaveEntryLine(line string, kind resurrect.SaveKind) string {
 func loadSessionTreeMenu(ctx Context) ([]Item, error) {
 	allExpanded := strings.TrimSpace(ctx.MenuArgs) == "expanded"
 	treeState := NewTreeState(allExpanded)
-	items := treeState.BuildTreeItems(ctx.Sessions, ctx.Windows, ctx.Panes)
+	items := treeState.BuildTreeItems(TreeItemsInput{
+		Sessions: ctx.Sessions,
+		Windows:  ctx.Windows,
+		Panes:    ctx.Panes,
+	})
 	return items, nil
 }
 

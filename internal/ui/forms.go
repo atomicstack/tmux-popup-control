@@ -38,10 +38,8 @@ func (m *Model) handleSessionForm(msg tea.Msg) (bool, tea.Cmd) {
 		return true, cmd
 	}
 	if done {
-		ctx := m.sessionForm.Context()
-		name := m.sessionForm.Value()
-		target := m.sessionForm.Target()
-		actionID := m.sessionForm.ActionID()
+		req := m.sessionForm.Request()
+		actionID := req.Action
 		pendingLabel := m.sessionForm.PendingLabel()
 		m.sessionForm = nil
 		m.mode = ModeMenu
@@ -49,7 +47,7 @@ func (m *Model) handleSessionForm(msg tea.Msg) (bool, tea.Cmd) {
 		m.pendingID = actionID
 		m.pendingLabel = pendingLabel
 		if cmd == nil {
-			cmd = menu.SessionCommandForAction(actionID, ctx, target, name)
+			cmd = menu.SessionCommandForAction(req)
 		}
 		return true, cmd
 	}

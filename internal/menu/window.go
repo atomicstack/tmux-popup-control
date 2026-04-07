@@ -244,7 +244,10 @@ func loadWindowPullFromSessionMenu(ctx Context) ([]Item, error) {
 		}
 	}
 	ts := NewTreeState(false)
-	return ts.BuildTreeItems(sessions, windows, nil), nil
+	return ts.BuildTreeItems(TreeItemsInput{
+		Sessions: sessions,
+		Windows:  windows,
+	}), nil
 }
 
 func loadWindowPushToSessionMenu(ctx Context) ([]Item, error) {

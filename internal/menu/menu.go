@@ -95,6 +95,14 @@ type SessionPrompt struct {
 	Initial string
 }
 
+// SessionRequest carries the inputs needed to create or rename a session.
+type SessionRequest struct {
+	Context Context
+	Action  string
+	Target  string
+	Value   string
+}
+
 // RootItems returns the top-level menu entries.
 func RootItems() []Item {
 	return []Item{

@@ -11,7 +11,7 @@ import (
 func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool) *Model {
 	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	ts := menu.NewTreeState(allExpanded)
-	items := ts.BuildTreeItems(sessions, windows, panes)
+	items := ts.BuildTreeItems(menu.TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes})
 	node, _ := m.registry.Find("session:tree")
 	lvl := newLevel("session:tree", "tree", items, node)
 	lvl.Data = ts
@@ -27,7 +27,7 @@ func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, pan
 func testTreeModelWithSize(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool, width int, height int) *Model {
 	m := NewModel(ModelConfig{Width: width, Height: height})
 	ts := menu.NewTreeState(allExpanded)
-	items := ts.BuildTreeItems(sessions, windows, panes)
+	items := ts.BuildTreeItems(menu.TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes})
 	node, _ := m.registry.Find("session:tree")
 	lvl := newLevel("session:tree", "tree", items, node)
 	lvl.Data = ts
@@ -470,7 +470,7 @@ func TestBuildTreeDFSOrder(t *testing.T) {
 	}
 
 	ts := menu.NewTreeState(true) // all expanded
-	items := ts.BuildTreeItems(sessions, windows, panes)
+	items := ts.BuildTreeItems(menu.TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes})
 
 	// Expected DFS order: a, 0:bash, %0, b, 0:zsh
 	if len(items) != 5 {

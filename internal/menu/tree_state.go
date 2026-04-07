@@ -85,6 +85,13 @@ func TreePaneID(sessionName string, windowIndex int, paneID string) string {
 	return fmt.Sprintf("%s%s:%d:%s", TreePrefixPane, sessionName, windowIndex, paneID)
 }
 
+// TreeItemsInput carries the data sources used to build a flat tree view.
+type TreeItemsInput struct {
+	Sessions []SessionEntry
+	Windows  []WindowEntry
+	Panes    []PaneEntry
+}
+
 // BuildTreeItems produces the flat item list based on current expand state.
 // paneKey creates a composite key for pane lookup by session and window index.
 func paneKey(session string, windowIdx int) string {
@@ -134,19 +141,19 @@ func swapLeadingBracketBlock(s string) string {
 	return command + " " + bracket + remaining
 }
 
-func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntry, panes []PaneEntry) []Item {
+func (s *TreeState) BuildTreeItems(input TreeItemsInput) []Item {
 	winBySession := make(map[string][]WindowEntry)
-	for _, w := range windows {
+	for _, w := range input.Windows {
 		winBySession[w.Session] = append(winBySession[w.Session], w)
 	}
 	paneByWin := make(map[string][]PaneEntry)
-	for _, p := range panes {
+	for _, p := range input.Panes {
 		pk := paneKey(p.Session, p.WindowIdx)
 		paneByWin[pk] = append(paneByWin[pk], p)
 	}
 
 	var items []Item
-	for _, sess := range sessions {
+	for _, sess := range input.Sessions {
 		sid := TreeSessionID(sess.Name)
 		items = append(items, Item{ID: sid, Label: sess.Name})
 
@@ -172,26 +179,26 @@ func (s *TreeState) BuildTreeItems(sessions []SessionEntry, windows []WindowEntr
 // FilterTreeItems produces a flat item list filtered by query.
 // Matched items keep their ancestor chain visible. When query is empty,
 // falls back to BuildTreeItems with current expand state.
-func (s *TreeState) FilterTreeItems(sessions []SessionEntry, windows []WindowEntry, panes []PaneEntry, query string) []Item {
+func (s *TreeState) FilterTreeItems(input TreeItemsInput, query string) []Item {
 	trimmed := strings.TrimSpace(query)
 	if trimmed == "" {
-		return s.BuildTreeItems(sessions, windows, panes)
+		return s.BuildTreeItems(input)
 	}
 
 	words := strings.Fields(trimmed)
 
 	winBySession := make(map[string][]WindowEntry)
-	for _, w := range windows {
+	for _, w := range input.Windows {
 		winBySession[w.Session] = append(winBySession[w.Session], w)
 	}
 	paneByWin := make(map[string][]PaneEntry)
-	for _, p := range panes {
+	for _, p := range input.Panes {
 		pk := paneKey(p.Session, p.WindowIdx)
 		paneByWin[pk] = append(paneByWin[pk], p)
 	}
 
 	var items []Item
-	for _, sess := range sessions {
+	for _, sess := range input.Sessions {
 		sid := TreeSessionID(sess.Name)
 		sessionMatches := treeAllWordsMatch(sess.Name, words)
 

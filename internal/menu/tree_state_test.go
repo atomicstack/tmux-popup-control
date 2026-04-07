@@ -2,24 +2,28 @@ package menu
 
 import "testing"
 
-func TestBuildItemsCollapsed(t *testing.T) {
-	sessions := []SessionEntry{
-		{Name: "main", Windows: 2, Current: true},
-		{Name: "work", Windows: 1},
+func sampleTreeItemsInput() TreeItemsInput {
+	return TreeItemsInput{
+		Sessions: []SessionEntry{
+			{Name: "main", Windows: 2, Current: true},
+			{Name: "work", Windows: 1},
+		},
+		Windows: []WindowEntry{
+			{ID: "@1", Label: "bash", Name: "bash", Session: "main", Index: 0},
+			{ID: "@2", Label: "vim", Name: "vim", Session: "main", Index: 1},
+			{ID: "@3", Label: "htop", Name: "htop", Session: "work", Index: 0},
+		},
+		Panes: []PaneEntry{
+			{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main", Window: "bash", Command: "bash"},
+			{ID: "%2", Label: "vim-pane", WindowIdx: 1, Session: "main", Window: "vim", Command: "vim"},
+			{ID: "%3", Label: "htop-pane", WindowIdx: 0, Session: "work", Window: "htop", Command: "htop"},
+		},
 	}
-	windows := []WindowEntry{
-		{ID: "@1", Label: "bash", Session: "main", Index: 0},
-		{ID: "@2", Label: "vim", Session: "main", Index: 1},
-		{ID: "@3", Label: "htop", Session: "work", Index: 0},
-	}
-	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main"},
-		{ID: "%2", Label: "pane-2", WindowIdx: 1, Session: "main"},
-		{ID: "%3", Label: "pane-3", WindowIdx: 0, Session: "work"},
-	}
+}
 
+func TestBuildItemsCollapsed(t *testing.T) {
 	state := NewTreeState(false)
-	items := state.BuildTreeItems(sessions, windows, panes)
+	items := state.BuildTreeItems(sampleTreeItemsInput())
 
 	if len(items) != 2 {
 		t.Fatalf("expected 2 items (sessions only), got %d", len(items))
@@ -42,7 +46,7 @@ func TestBuildItemsExpanded(t *testing.T) {
 
 	state := NewTreeState(false)
 	state.SetExpanded("tree:s:main", true)
-	items := state.BuildTreeItems(sessions, windows, panes)
+	items := state.BuildTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes})
 
 	if len(items) != 3 {
 		t.Fatalf("expected 3 items, got %d", len(items))
@@ -64,7 +68,7 @@ func TestBuildItemsFullyExpanded(t *testing.T) {
 	}
 
 	state := NewTreeState(true)
-	items := state.BuildTreeItems(sessions, windows, panes)
+	items := state.BuildTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes})
 
 	if len(items) != 4 {
 		t.Fatalf("expected 4 items, got %d", len(items))
@@ -78,23 +82,8 @@ func TestBuildItemsFullyExpanded(t *testing.T) {
 }
 
 func TestFilterItemsPreservesAncestors(t *testing.T) {
-	sessions := []SessionEntry{
-		{Name: "main", Windows: 2},
-		{Name: "work", Windows: 1},
-	}
-	windows := []WindowEntry{
-		{ID: "@1", Label: "bash", Name: "bash", Session: "main", Index: 0},
-		{ID: "@2", Label: "vim", Name: "vim", Session: "main", Index: 1},
-		{ID: "@3", Label: "htop", Name: "htop", Session: "work", Index: 0},
-	}
-	panes := []PaneEntry{
-		{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main", Window: "bash", Command: "bash"},
-		{ID: "%2", Label: "vim-pane", WindowIdx: 1, Session: "main", Window: "vim", Command: "vim"},
-		{ID: "%3", Label: "htop-pane", WindowIdx: 0, Session: "work", Window: "htop", Command: "htop"},
-	}
-
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+	items := state.FilterTreeItems(sampleTreeItemsInput(), "vim")
 
 	if len(items) < 2 {
 		var ids []string
@@ -125,7 +114,7 @@ func TestFilterItemsNoMatchReturnsEmpty(t *testing.T) {
 	panes := []PaneEntry{{ID: "%1", Label: "pane-1", WindowIdx: 0, Session: "main", Window: "bash", Command: "bash"}}
 
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "zzzznotfound")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "zzzznotfound")
 	if len(items) != 0 {
 		t.Fatalf("expected 0 items, got %d", len(items))
 	}
@@ -137,7 +126,7 @@ func TestFilterItemsEmptyQueryReturnsNormal(t *testing.T) {
 	panes := []PaneEntry{}
 
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "")
 	if len(items) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(items))
 	}
@@ -190,7 +179,7 @@ func TestFilterItemsSessionMatchDoesNotIncludeChildren(t *testing.T) {
 	panes := []PaneEntry{}
 
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "staging")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "staging")
 
 	// Only the session should appear — window tree labels (with the
 	// session prefix stripped) don't contain "staging".
@@ -219,7 +208,7 @@ func TestFilterItemsChildMatchShowsAncestorOnly(t *testing.T) {
 	panes := []PaneEntry{}
 
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "vim")
 
 	// "vim" matches window dev:0 — session "dev" shown as ancestor,
 	// but window "bash" (dev:1) should NOT appear.
@@ -249,7 +238,7 @@ func TestFilterItemsPaneMatchShowsAncestorsOnly(t *testing.T) {
 	}
 
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "vim")
 
 	// "vim" matches pane "vim-main" — ancestors shown, but pane "shell" excluded.
 	var ids []string
@@ -281,7 +270,7 @@ func TestFilterItemsWindowMatchExcludesNonMatchingPanes(t *testing.T) {
 	}
 
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "vim")
 
 	// "vim" matches window "vim" — panes "pane-1" and "pane-2" do NOT
 	// match "vim", so they must NOT appear.
@@ -312,7 +301,7 @@ func TestFilterItemsSessionMatchExcludesNonMatchingDescendants(t *testing.T) {
 	}
 
 	state := NewTreeState(false)
-	items := state.FilterTreeItems(sessions, windows, panes, "staging")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "staging")
 
 	// "staging" matches the session only — no window or pane contains
 	// "staging", so none of the descendants should appear.
@@ -343,7 +332,7 @@ func TestFilterItemsMultiWordPerItem(t *testing.T) {
 
 	// "cron staging" — each word must match within a single item's own metadata.
 	// No single item contains both "cron" AND "staging", so no results.
-	items := state.FilterTreeItems(sessions, windows, panes, "cron staging")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "cron staging")
 	if len(items) != 0 {
 		var ids []string
 		for _, it := range items {
@@ -353,7 +342,7 @@ func TestFilterItemsMultiWordPerItem(t *testing.T) {
 	}
 
 	// "cron" alone matches the window, with session as ancestor.
-	items = state.FilterTreeItems(sessions, windows, panes, "cron")
+	items = state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "cron")
 	var ids []string
 	for _, it := range items {
 		ids = append(ids, it.ID)
@@ -379,7 +368,7 @@ func TestFilterItemsMultiWordWithinSingleItem(t *testing.T) {
 	state := NewTreeState(false)
 
 	// Both words exist in the window's own label — should match.
-	items := state.FilterTreeItems(sessions, windows, panes, "cron staging")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "cron staging")
 	if len(items) != 2 {
 		var ids []string
 		for _, it := range items {
@@ -405,7 +394,7 @@ func TestFilterItemsMultiWordNoMatch(t *testing.T) {
 	state := NewTreeState(false)
 
 	// "cron zzznope" — one word doesn't match anything in the path.
-	items := state.FilterTreeItems(sessions, windows, panes, "cron zzznope")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "cron zzznope")
 	if len(items) != 0 {
 		var ids []string
 		for _, it := range items {
@@ -428,7 +417,7 @@ func TestFilterItemsPaneMatchedByOwnMetadataOnly(t *testing.T) {
 	state := NewTreeState(false)
 
 	// "vim" matches pane "vim-main" on its own label — ancestors shown.
-	items := state.FilterTreeItems(sessions, windows, panes, "vim")
+	items := state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "vim")
 	var ids []string
 	for _, it := range items {
 		ids = append(ids, it.ID)
@@ -448,7 +437,7 @@ func TestFilterItemsPaneMatchedByOwnMetadataOnly(t *testing.T) {
 	}
 
 	// "vim dev" — no single item contains both words, so no results.
-	items = state.FilterTreeItems(sessions, windows, panes, "vim dev")
+	items = state.FilterTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes}, "vim dev")
 	if len(items) != 0 {
 		ids = nil
 		for _, it := range items {
@@ -564,7 +553,7 @@ func TestBuildTreeItemsUsesCompactLabels(t *testing.T) {
 	}}
 
 	state := NewTreeState(true)
-	items := state.BuildTreeItems(sessions, windows, panes)
+	items := state.BuildTreeItems(TreeItemsInput{Sessions: sessions, Windows: windows, Panes: panes})
 
 	if len(items) != 3 {
 		t.Fatalf("expected 3 items, got %d", len(items))

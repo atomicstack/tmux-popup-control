@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
@@ -24,6 +25,41 @@ func TestSessionMenuIncludesTree(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("expected session menu to include 'tree' item")
+	}
+}
+
+func TestSessionCommandForActionUsesRequest(t *testing.T) {
+	cmd := SessionCommandForAction(SessionRequest{
+		Action: "session:new",
+		Context: Context{
+			SocketPath: "sock",
+			ClientID:   "client",
+		},
+		Value: "dev",
+	})
+	if cmd == nil {
+		t.Fatal("expected command")
+	}
+}
+
+func TestSessionRenameFormEnterReturnsCommand(t *testing.T) {
+	form := NewSessionForm(SessionPrompt{
+		Context: Context{SocketPath: "sock"},
+		Action:  "session:rename",
+		Target:  "main",
+		Initial: "main",
+	})
+	form.input.SetValue("renamed")
+
+	cmd, done, cancel := form.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cancel {
+		t.Fatal("enter should not cancel")
+	}
+	if !done {
+		t.Fatal("enter should submit")
+	}
+	if cmd == nil {
+		t.Fatal("expected submit command from session rename form")
 	}
 }
 

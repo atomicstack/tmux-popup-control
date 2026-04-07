@@ -164,11 +164,16 @@ func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
 		cursorID = current.Items[current.Cursor].ID
 	}
 	sessions, windows, panes := m.treeDataForLevel(current)
+	input := menu.TreeItemsInput{
+		Sessions: sessions,
+		Windows:  windows,
+		Panes:    panes,
+	}
 	var items []menu.Item
 	if current.Filter != "" {
-		items = ts.FilterTreeItems(sessions, windows, panes, current.Filter)
+		items = ts.FilterTreeItems(input, current.Filter)
 	} else {
-		items = ts.BuildTreeItems(sessions, windows, panes)
+		items = ts.BuildTreeItems(input)
 	}
 	// Set both Full and Items directly to bypass the generic FilterItems
 	// which would strip ancestor nodes that don't match the filter query.
