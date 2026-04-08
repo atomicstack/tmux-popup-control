@@ -105,6 +105,16 @@ func RespawnPane(spec PaneSpec) error {
 	return err
 }
 
+// WaitFor blocks until the tmux wait-for channel has been signaled.
+func WaitFor(socketPath, channel string) error {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	_, err = client.Command("wait-for", channel)
+	return err
+}
+
 // SelectLayoutTarget applies the named layout to the given target window.
 func SelectLayoutTarget(socketPath, target, layout string) error {
 	client, err := newTmux(socketPath)

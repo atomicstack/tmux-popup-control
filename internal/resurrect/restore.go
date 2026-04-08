@@ -20,6 +20,7 @@ type RestoreDeps struct {
 	SplitPane             func(tmux.PaneSpec) error
 	SelectLayoutTarget    func(socketPath, target, layout string) error
 	RespawnPane           func(tmux.PaneSpec) error
+	WaitFor               func(socketPath, channel string) error
 	SelectPane            func(socketPath, target string) error
 	SelectWindow          func(socketPath, target string) error
 	SwitchClient          func(socketPath, clientID, target string) error
@@ -37,6 +38,7 @@ var restoreDeps = RestoreDeps{
 	SplitPane:             tmux.SplitPane,
 	SelectLayoutTarget:    tmux.SelectLayoutTarget,
 	RespawnPane:           tmux.RespawnPane,
+	WaitFor:               tmux.WaitFor,
 	SelectPane:            tmux.SelectPane,
 	SelectWindow:          tmux.SelectWindow,
 	SwitchClient:          tmux.SwitchClient,
@@ -90,6 +92,12 @@ func withRespawnPaneFn(fn func(tmux.PaneSpec) error) func() {
 	orig := restoreDeps.RespawnPane
 	restoreDeps.RespawnPane = fn
 	return func() { restoreDeps.RespawnPane = orig }
+}
+
+func withWaitForFn(fn func(string, string) error) func() {
+	orig := restoreDeps.WaitFor
+	restoreDeps.WaitFor = fn
+	return func() { restoreDeps.WaitFor = orig }
 }
 
 func withSelectPaneFn(fn func(string, string) error) func() {
@@ -157,8 +165,16 @@ var greenCheck = lipgloss.NewStyle().Foreground(lipgloss.Color("#00c853")).Rende
 // content. The command prints the saved scrollback then execs into the shell.
 // Both contentPath and defaultCmd are shell-quoted to prevent injection when
 // tmux passes the string to /bin/sh -c.
-func paneStartupCommand(contentPath, defaultCmd string) string {
-	return fmt.Sprintf("cat %s; exec %s", shquote.Quote(contentPath), shquote.Quote(defaultCmd))
+func paneStartupCommand(contentPath, readyChannel, defaultCmd string) string {
+	cmd := fmt.Sprintf("cat %s", shquote.Quote(contentPath))
+	if strings.TrimSpace(readyChannel) != "" {
+		cmd += fmt.Sprintf("; tmux wait-for -S %s", shquote.Quote(readyChannel))
+	}
+	return cmd + fmt.Sprintf("; exec %s", shquote.Quote(defaultCmd))
+}
+
+func paneReplayWaitChannel(sessName string, winIdx, paneIdx int) string {
+	return fmt.Sprintf("tmux-popup-control-pane-restored-%s:%d.%d", sessName, winIdx, paneIdx)
 }
 
 func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
@@ -214,7 +230,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		paneKey := fmt.Sprintf("%s:%d.%d", sessName, winIdx, paneIdx)
 		path := filepath.Join(contentDir, paneKey)
 		if _, statErr := os.Stat(path); statErr == nil {
-			return paneStartupCommand(path, defaultCmd)
+			return paneStartupCommand(path, paneReplayWaitChannel(sessName, winIdx, paneIdx), defaultCmd)
 		}
 		return ""
 	}
@@ -235,6 +251,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 
 	for _, sess := range sf.Sessions {
 		merge := existingNames[sess.Name]
+		var replayWaitChannels []string
 
 		// ── session creation or merge header ────────────────────────
 
@@ -325,6 +342,9 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				paneCmd := lookupPaneCmd(sess.Name, sess.Windows[0].Index, p0.Index)
 				if p0.WorkingDir != "" || paneCmd != "" {
 					paneTarget := fmt.Sprintf("%s:0.0", sess.Name)
+					if paneCmd != "" {
+						replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, sess.Windows[0].Index, p0.Index))
+					}
 					if err := restoreDeps.RespawnPane(tmux.PaneSpec{
 						SocketPath: cfg.SocketPath,
 						Target:     paneTarget,
@@ -356,6 +376,9 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				if len(win.Panes) > 0 {
 					winDir = win.Panes[0].WorkingDir
 					winCmd = lookupPaneCmd(sess.Name, win.Index, win.Panes[0].Index)
+					if winCmd != "" {
+						replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, win.Index, win.Panes[0].Index))
+					}
 				}
 				if err := restoreDeps.CreateWindow(tmux.WindowSpec{
 					SocketPath: cfg.SocketPath,
@@ -390,6 +413,9 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 				}
 				paneTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
 				paneCmd := lookupPaneCmd(sess.Name, win.Index, pane.Index)
+				if paneCmd != "" {
+					replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, win.Index, pane.Index))
+				}
 				if err := restoreDeps.SplitPane(tmux.PaneSpec{
 					SocketPath: cfg.SocketPath,
 					Target:     paneTarget,
@@ -419,6 +445,12 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			step++
 			if err := restoreDeps.SelectLayoutTarget(cfg.SocketPath, winTarget, win.Layout); err != nil {
 				return sendError(ch, "applying layout for %s: %w", winTarget, err)
+			}
+		}
+
+		for _, channel := range replayWaitChannels {
+			if err := restoreDeps.WaitFor(cfg.SocketPath, channel); err != nil {
+				return sendError(ch, "waiting for pane replay %s: %w", channel, err)
 			}
 		}
 

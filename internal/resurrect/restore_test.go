@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +46,7 @@ func noopLayout(_, _, _ string) error    { return nil }
 func noopPane(_, _ string) error         { return nil }
 func noopSelectWindow(_, _ string) error { return nil }
 func noopSwitch(_, _, _ string) error    { return nil }
+func noopWait(_, _ string) error         { return nil }
 func noopRespawn(tmux.PaneSpec) error    { return nil }
 func noopDefaultCommand(_ string) string { return "/bin/bash" }
 
@@ -97,6 +99,7 @@ func installNoopRestoreFns(t *testing.T) func() {
 	})
 	r12, r13 := withStatefulSessionOptionFns(nil)
 	r14 := withRespawnPaneFn(noopRespawn)
+	r15 := withWaitForFn(noopWait)
 	return func() {
 		r1()
 		r2()
@@ -112,6 +115,7 @@ func installNoopRestoreFns(t *testing.T) func() {
 		r12()
 		r13()
 		r14()
+		r15()
 	}
 }
 
@@ -271,6 +275,8 @@ func TestRestoreSessionMerge(t *testing.T) {
 	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
 	defer r13()
+	r14 := withWaitForFn(noopWait)
+	defer r14()
 
 	sf := buildSaveFile(Session{
 		Name: "existing",
@@ -458,6 +464,8 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 		return nil
 	})
 	defer r14()
+	r15 := withWaitForFn(noopWait)
+	defer r15()
 
 	sf := buildSaveFile(Session{
 		Name: "dev",
@@ -520,6 +528,123 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	expected := computeRestoreTotal(sf)
 	if events[0].Total != expected {
 		t.Errorf("total: got %d, want %d", events[0].Total, expected)
+	}
+}
+
+func TestRestoreWaitsForPaneReplayBeforeSelectingAndSwitching(t *testing.T) {
+	dir := t.TempDir()
+
+	var order []string
+
+	r1 := withCreateSessionFn(noopSession)
+	defer r1()
+	r2 := withCreateWindowFn(noopWindow)
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(func(_, target, _ string) error {
+		order = append(order, "layout:"+target)
+		return nil
+	})
+	defer r5()
+	r6 := withSelectPaneFn(func(_, target string) error {
+		order = append(order, "select-pane:"+target)
+		return nil
+	})
+	defer r6()
+	r7 := withSelectWindowFn(func(_, target string) error {
+		order = append(order, "select-window:"+target)
+		return nil
+	})
+	defer r7()
+	r8 := withSwitchClientFn(func(_, _, target string) error {
+		order = append(order, "switch-client:"+target)
+		return nil
+	})
+	defer r8()
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{}, nil
+	})
+	defer r9()
+	r10 := withDefaultCommandFn(noopDefaultCommand)
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{}, nil
+	})
+	defer r11()
+	r12, r13 := withStatefulSessionOptionFns(nil)
+	defer r12()
+	defer r13()
+	r14 := withRespawnPaneFn(noopRespawn)
+	defer r14()
+	r15 := withWaitForFn(func(_, channel string) error {
+		order = append(order, "wait:"+channel)
+		return nil
+	})
+	defer r15()
+
+	sf := buildSaveFile(Session{
+		Name: "dev",
+		Windows: []Window{
+			{Index: 0, Name: "main", Layout: "tiled", Active: true,
+				Panes: []Pane{
+					{Index: 0, WorkingDir: "/home", Active: true},
+					{Index: 1, WorkingDir: "/tmp"},
+				}},
+		},
+	})
+	sf.HasPaneContents = true
+	sf.ClientSession = "dev"
+	path := writeSaveFile(t, dir, "wait-before-switch", sf)
+
+	archivePath := paneArchivePath(path)
+	paneContents := map[string]string{
+		"dev:0.0": "output for pane 0",
+		"dev:0.1": "output for pane 1",
+	}
+	if err := WritePaneArchive(archivePath, paneContents); err != nil {
+		t.Fatalf("WritePaneArchive: %v", err)
+	}
+
+	ch := Restore(Config{SaveDir: dir}, path)
+	events := collectRestoreEvents(ch)
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+
+	layoutIdx := -1
+	firstWaitIdx := -1
+	selectPaneIdx := -1
+	selectWindowIdx := -1
+	switchIdx := -1
+
+	for i, entry := range order {
+		switch {
+		case strings.HasPrefix(entry, "layout:"):
+			layoutIdx = i
+		case strings.HasPrefix(entry, "wait:") && firstWaitIdx == -1:
+			firstWaitIdx = i
+		case strings.HasPrefix(entry, "select-pane:") && selectPaneIdx == -1:
+			selectPaneIdx = i
+		case strings.HasPrefix(entry, "select-window:") && selectWindowIdx == -1:
+			selectWindowIdx = i
+		case strings.HasPrefix(entry, "switch-client:") && switchIdx == -1:
+			switchIdx = i
+		}
+	}
+
+	if layoutIdx == -1 || firstWaitIdx == -1 || selectPaneIdx == -1 || selectWindowIdx == -1 || switchIdx == -1 {
+		t.Fatalf("expected layout, wait, select-pane, select-window, and switch-client events, got %#v", order)
+	}
+	if !(layoutIdx < firstWaitIdx) {
+		t.Fatalf("expected wait after layout, got %#v", order)
+	}
+	if !(firstWaitIdx < selectPaneIdx && firstWaitIdx < selectWindowIdx && firstWaitIdx < switchIdx) {
+		t.Fatalf("expected wait before selection and switch, got %#v", order)
 	}
 }
 
@@ -838,6 +963,8 @@ func TestRestoreMergeWithPaneArchive(t *testing.T) {
 	r12, r13 := withStatefulSessionOptionFns(nil)
 	defer r12()
 	defer r13()
+	r14 := withWaitForFn(noopWait)
+	defer r14()
 
 	sf := buildSaveFile(Session{
 		Name: "dev",
@@ -1144,16 +1271,16 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 // ── TestPaneStartupCommand ───────────────────────────────────────────────────
 
 func TestPaneStartupCommand(t *testing.T) {
-	got := paneStartupCommand("/tmp/restore-123/dev:0.0", "/bin/bash")
-	want := `cat '/tmp/restore-123/dev:0.0'; exec '/bin/bash'`
+	got := paneStartupCommand("/tmp/restore-123/dev:0.0", "ready:dev:0.0", "/bin/bash")
+	want := `cat '/tmp/restore-123/dev:0.0'; tmux wait-for -S 'ready:dev:0.0'; exec '/bin/bash'`
 	if got != want {
 		t.Errorf("expected %q, got %q", want, got)
 	}
 }
 
 func TestPaneStartupCommandEscapesSingleQuotes(t *testing.T) {
-	got := paneStartupCommand("/tmp/restore/it's:0.0", "bash -c 'echo hi'")
-	want := `cat '/tmp/restore/it'\''s:0.0'; exec 'bash -c '\''echo hi'\'''`
+	got := paneStartupCommand("/tmp/restore/it's:0.0", "ready:it's:0.0", "bash -c 'echo hi'")
+	want := `cat '/tmp/restore/it'\''s:0.0'; tmux wait-for -S 'ready:it'\''s:0.0'; exec 'bash -c '\''echo hi'\'''`
 	if got != want {
 		t.Errorf("expected %q, got %q", want, got)
 	}
