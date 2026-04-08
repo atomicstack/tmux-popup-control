@@ -16,14 +16,18 @@ fi
 TEST_DIR=$(mktemp -d -t tmux-plugins-test)
 PLUGINS="$TEST_DIR/plugins"
 SOCKET="$TEST_DIR/tmux.sock"
+CONF="$TEST_DIR/tmux.conf"
 mkdir -p "$PLUGINS"
+ln -s "$REPO_DIR" "$PLUGINS/tmux-popup-control"
+
+echo "TEST_DIR=$TEST_DIR, PLUGINS=$PLUGINS, SOCKET=$SOCKET, CONF=$CONF"
 
 trap 'tmux -S "$SOCKET" kill-server 2>/dev/null; rm -rf "$TEST_DIR"' EXIT INT TERM
 
 cp "$REPO_DIR/test-plugins-inner.sh" "$TEST_DIR/inner.sh"
 chmod +x "$TEST_DIR/inner.sh"
 
-cat > "$TEST_DIR/tmux.conf" <<EOF
+cat > "$CONF" <<EOF
 # --- prefix ---
 unbind-key -q C-b
 set -g prefix ^A
@@ -128,7 +132,7 @@ set-window-option -g menu-border-lines rounded
 set-window-option -g menu-selected-style fg=colour255,bg=colour33
 set-window-option -g menu-style fg=colour251
 set-option -g status-left ''
-set-option -g status-right "#[fg=colour39]PLUGIN TEST #[fg=colour245]| #[fg=colour33]#S"
+set-option -g status-right "#[fg=colour39]shells #[fg=colour245]| #[fg=colour33]#S"
 set-option -g status-keys emacs
 set-option -g pane-border-style fg=colour236
 set-option -g pane-active-border-style fg=colour33
@@ -147,6 +151,7 @@ set-option -g visual-activity on
 set-option -g visual-bell on
 
 # --- plugins ---
+set -g @plugin 'atomicstack/tmux-popup-control'
 set -g @plugin 'tmux-plugins/tmux-sensible'
 set -g @plugin 'tmux-plugins/tmux-yank'
 
@@ -157,4 +162,8 @@ bind P display-popup -E "$BINARY -socket $SOCKET"
 run '$BINARY install-and-init-plugins'
 EOF
 
-tmux -S "$SOCKET" -f "$TEST_DIR/tmux.conf" new-session -s test "$TEST_DIR/inner.sh"
+export TMUX_SOCKET="$SOCKET"
+
+tmux -S "$SOCKET" -f "$CONF" new-session -s test "$TEST_DIR/inner.sh"
+
+echo "$0 exiting" >&2
