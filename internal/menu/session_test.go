@@ -2,6 +2,8 @@ package menu
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/atomicstack/tmux-popup-control/internal/format/table"
 	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
 )
 
@@ -225,6 +228,12 @@ func TestLoadSessionRestoreFromMenuShowsNameBeforeTypeAndColoredRows(t *testing.
 			t.Fatalf("WriteSaveFile(%s): %v", save.name, err)
 		}
 	}
+	autoPath := filepath.Join(dir, saves[1].name+"_"+saves[1].ts+".json")
+	autoInfo, err := os.Stat(autoPath)
+	if err != nil {
+		t.Fatalf("Stat(%s): %v", autoPath, err)
+	}
+	autoSize := humanizeSaveSize(autoInfo.Size())
 
 	items, err := loadSessionRestoreFromMenu(Context{})
 	if err != nil {
@@ -233,7 +242,7 @@ func TestLoadSessionRestoreFromMenuShowsNameBeforeTypeAndColoredRows(t *testing.
 	if len(items) != 3 {
 		t.Fatalf("expected header + 2 items, got %d", len(items))
 	}
-	if !items[0].Header || !strings.Contains(items[0].Label, "name") || !strings.Contains(items[0].Label, "type") {
+	if !items[0].Header || !strings.Contains(items[0].Label, "name") || !strings.Contains(items[0].Label, "type") || !strings.Contains(items[0].Label, "size") {
 		t.Fatalf("expected restore header with name and type columns, got %#v", items[0])
 	}
 	if nameIdx := indexOf(items[0].Label, "name"); nameIdx < 0 {
@@ -263,10 +272,51 @@ func TestLoadSessionRestoreFromMenuShowsNameBeforeTypeAndColoredRows(t *testing.
 			if !strings.Contains(item.StyledLabel, "[38;5;93m") {
 				t.Fatalf("expected auto row colour93 styling, got %q", item.StyledLabel)
 			}
+			if strings.Contains(stripped, saves[1].name) {
+				t.Fatalf("expected auto save row to collapse redundant timestamped name, got %q", stripped)
+			}
+			if !strings.Contains(stripped, autoSize) {
+				t.Fatalf("expected auto row to show size %q, got %q", autoSize, stripped)
+			}
 		}
 	}
 	if !sawManual || !sawAuto {
 		t.Fatalf("expected both manual and auto rows, got %#v", items)
+	}
+}
+
+func TestFormatRestoreRowsLeftAlignsHeader(t *testing.T) {
+	header := []string{"name", "type", "age", "date", "time", "size", "info"}
+	rows := [][]string{
+		{"snapshot", "manual", "1m", "2026-04-08", "09:30", "12 KB", " 1s  1w  1p"},
+	}
+	alignments := []table.Alignment{
+		table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignLeft,
+	}
+
+	got := formatRestoreRows(header, rows, alignments)
+	wantHeader := formatRestoreRow(header, restoreColumnWidths(append([][]string{header}, rows...)), nil)
+	if got[0] != wantHeader {
+		t.Fatalf("expected left-aligned header %q, got %q", wantHeader, got[0])
+	}
+}
+
+func TestHumanizeSaveSize(t *testing.T) {
+	tests := []struct {
+		size int64
+		want string
+	}{
+		{0, "0 B"},
+		{999, "999 B"},
+		{1024, "1 KB"},
+		{1536, "1.5 KB"},
+		{1024 * 1024, "1 MB"},
+		{5*1024*1024 + 512*1024, "5.5 MB"},
+	}
+	for _, tt := range tests {
+		if got := humanizeSaveSize(tt.size); got != tt.want {
+			t.Fatalf("humanizeSaveSize(%d) = %q, want %q", tt.size, got, tt.want)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -466,11 +467,10 @@ func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
 
 	now := time.Now()
 	alignments := []table.Alignment{
-		table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignLeft,
+		table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignLeft,
 	}
-	headerRow := []string{"name", "type", "age", "date", "time", "info"}
-	rows := make([][]string, 1+len(entries))
-	rows[0] = headerRow
+	headerRow := []string{"name", "type", "age", "date", "time", "size", "info"}
+	rows := make([][]string, len(entries))
 	ids := make([]string, len(entries))
 	for i, e := range entries {
 		saveType := string(e.Kind)
@@ -478,17 +478,21 @@ func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
 			saveType = string(resurrect.SaveKindManual)
 		}
 		name := e.DisplayName()
+		if e.Kind == resurrect.SaveKindAuto {
+			name = "auto"
+		}
 		age := resurrect.RelativeTime(e.Timestamp, now)
 		date := e.Timestamp.Format("2006-01-02")
 		timeStr := e.Timestamp.Format("15:04")
+		size := humanizeSaveSize(e.Size)
 		info := fmt.Sprintf("%2ds %3dw %3dp", e.SessionCount, e.WindowCount, e.PaneCount)
 		if e.HasPaneContents {
 			info += " +contents"
 		}
-		rows[1+i] = []string{name, saveType, age, date, timeStr, info}
+		rows[i] = []string{name, saveType, age, date, timeStr, size, info}
 		ids[i] = e.Path
 	}
-	aligned := table.Format(rows, alignments)
+	aligned := formatRestoreRows(headerRow, rows, alignments)
 	items := make([]Item, len(aligned))
 	items[0] = Item{Label: aligned[0], Header: true}
 	for i := 1; i < len(aligned); i++ {
@@ -500,6 +504,73 @@ func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
 		}
 	}
 	return items, nil
+}
+
+func formatRestoreRows(header []string, rows [][]string, alignments []table.Alignment) []string {
+	allRows := append([][]string{header}, rows...)
+	widths := restoreColumnWidths(allRows)
+	out := make([]string, 1+len(rows))
+	out[0] = formatRestoreRow(header, widths, nil)
+	for i, row := range rows {
+		out[i+1] = formatRestoreRow(row, widths, alignments)
+	}
+	return out
+}
+
+func restoreColumnWidths(rows [][]string) []int {
+	if len(rows) == 0 {
+		return nil
+	}
+	widths := make([]int, len(rows[0]))
+	for _, row := range rows {
+		for i, cell := range row {
+			if w := len([]rune(cell)); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+	return widths
+}
+
+func formatRestoreRow(row []string, widths []int, alignments []table.Alignment) string {
+	var b strings.Builder
+	for i, cell := range row {
+		if i > 0 {
+			b.WriteString("  ")
+		}
+		padding := widths[i] - len([]rune(cell))
+		if padding < 0 {
+			padding = 0
+		}
+		if i < len(alignments) && alignments[i] == table.AlignRight {
+			b.WriteString(strings.Repeat(" ", padding))
+			b.WriteString(cell)
+			continue
+		}
+		b.WriteString(cell)
+		b.WriteString(strings.Repeat(" ", padding))
+	}
+	return b.String()
+}
+
+func humanizeSaveSize(size int64) string {
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	value := float64(size)
+	units := []string{"KB", "MB", "GB", "TB"}
+	for _, suffix := range units {
+		value /= unit
+		if value < unit || suffix == units[len(units)-1] {
+			rounded := math.Round(value*10) / 10
+			if rounded == math.Trunc(rounded) {
+				return fmt.Sprintf("%.0f %s", rounded, suffix)
+			}
+			return fmt.Sprintf("%.1f %s", rounded, suffix)
+		}
+	}
+	return fmt.Sprintf("%d B", size)
 }
 
 var (
