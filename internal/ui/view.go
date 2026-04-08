@@ -206,8 +206,9 @@ func (m *Model) viewVertical(header string) string {
 				bodyStyle = styles.PreviewBody
 			}
 			displayLines, displayStart := previewDisplayLines(preview)
+			cursorOn := m.previewCursorVisible()
 			for idx, line := range displayLines {
-				if rendered, raw := renderPreviewLine(preview, line, displayStart+idx, bodyStyle); raw {
+				if rendered, raw := renderPreviewLine(preview, line, displayStart+idx, bodyStyle, cursorOn); raw {
 					lines = append(lines, styledLine{text: rendered, raw: true})
 				} else {
 					lines = append(lines, styledLine{text: rendered, style: bodyStyle})
@@ -655,7 +656,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 			content = contentLines[i]
 		}
 		if preview != nil && preview.err == "" && i < len(contentLines) {
-			if rendered, renderedRaw := renderPreviewLine(preview, content, preview.scrollOffset+i, bodyStyle); rendered != "" {
+			if rendered, renderedRaw := renderPreviewLine(preview, content, preview.scrollOffset+i, bodyStyle, m.previewCursorVisible()); rendered != "" {
 				content = rendered
 				rawLine = renderedRaw
 			}
@@ -820,8 +821,12 @@ func previewDisplayLines(data *previewData) ([]string, int) {
 	return lines, start
 }
 
-func renderPreviewLine(preview *previewData, line string, absoluteRow int, bodyStyle *lipgloss.Style) (string, bool) {
-	if preview == nil || !preview.cursorVisible || preview.cursorY != absoluteRow {
+func (m *Model) previewCursorVisible() bool {
+	return !m.filterCursor.IsBlinked
+}
+
+func renderPreviewLine(preview *previewData, line string, absoluteRow int, bodyStyle *lipgloss.Style, cursorOn bool) (string, bool) {
+	if preview == nil || !preview.cursorVisible || !cursorOn || preview.cursorY != absoluteRow {
 		return line, preview != nil && preview.rawANSI
 	}
 	lineWidth := lipgloss.Width(line)

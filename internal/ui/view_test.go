@@ -162,6 +162,7 @@ func TestViewShowsCommandOutputScreen(t *testing.T) {
 
 func TestViewDisplaysPreviewCursorBlock(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 16})
+	m.filterCursor.Focus()
 	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
 	m.stack = []*level{lvl}
 	m.preview["pane:switch"] = &previewData{
@@ -195,6 +196,31 @@ func TestViewOmitsPreviewCursorBlockWhenNotVisible(t *testing.T) {
 	view := ansi.Strip(m.View().Content)
 	if strings.Contains(view, "█") {
 		t.Fatalf("did not expect cursor block, got:\n%s", view)
+	}
+}
+
+func TestViewHidesPreviewCursorBlockWhenBlinkPhaseIsOff(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 16})
+	m.filterCursor.Focus()
+	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
+	m.stack = []*level{lvl}
+	m.preview["pane:switch"] = &previewData{
+		target:        "dev:1.0",
+		lines:         []string{"abcd", "wxyz"},
+		rawANSI:       false,
+		cursorVisible: true,
+		cursorX:       2,
+		cursorY:       1,
+		seq:           1,
+	}
+	m.filterCursor.IsBlinked = true
+
+	view := ansi.Strip(m.View().Content)
+	if strings.Contains(view, "wx█z") {
+		t.Fatalf("did not expect cursor block during blink-off phase, got:\n%s", view)
+	}
+	if !strings.Contains(view, "wxyz") {
+		t.Fatalf("expected preview text without cursor block, got:\n%s", view)
 	}
 }
 
@@ -279,6 +305,7 @@ func TestViewDoesNotEllipsizeStyledLabelThatFitsVisibly(t *testing.T) {
 
 func TestViewDisplaysPreviewCursorBlockPastLineEnd(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 16})
+	m.filterCursor.Focus()
 	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
 	m.stack = []*level{lvl}
 	m.preview["pane:switch"] = &previewData{
