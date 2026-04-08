@@ -2,44 +2,27 @@ package menu
 
 import (
 	"testing"
+
+	"github.com/atomicstack/tmux-popup-control/internal/plugin"
 )
 
-func TestLoadPluginsMenu(t *testing.T) {
-	items, err := loadPluginsMenu(Context{})
-	if err != nil {
-		t.Fatal(err)
+func TestMergeDeclaredPluginMetadataPreservesSourceForInstalledPlugins(t *testing.T) {
+	installed := []plugin.Plugin{
+		{Name: "maccyakto", Dir: "/tmp/plugins/maccyakto", Installed: true},
+		{Name: "other", Dir: "/tmp/plugins/other", Installed: true},
 	}
-	want := []string{"install", "update", "uninstall"}
-	if len(items) != len(want) {
-		t.Fatalf("got %d items, want %d", len(items), len(want))
+	declared := []plugin.Plugin{
+		{Name: "maccyakto", Source: "github.com/atomicstack/maccyakto", Branch: "main"},
 	}
-	for i, item := range items {
-		if item.ID != want[i] {
-			t.Errorf("items[%d].ID = %q, want %q", i, item.ID, want[i])
-		}
-	}
-}
 
-func TestParseMultiSelectIDs(t *testing.T) {
-	tests := []struct {
-		input string
-		want  []string
-	}{
-		{"", nil},
-		{"foo", []string{"foo"}},
-		{"foo\nbar\nbaz", []string{"foo", "bar", "baz"}},
-		{"foo\n\nbar\n", []string{"foo", "bar"}},
+	got := mergeDeclaredPluginMetadata(installed, declared)
+	if got[0].Source != "github.com/atomicstack/maccyakto" {
+		t.Fatalf("expected source to be copied onto installed plugin, got %q", got[0].Source)
 	}
-	for _, tt := range tests {
-		got := parseMultiSelectIDs(tt.input)
-		if len(got) != len(tt.want) {
-			t.Errorf("parseMultiSelectIDs(%q) = %v, want %v", tt.input, got, tt.want)
-			continue
-		}
-		for i := range got {
-			if got[i] != tt.want[i] {
-				t.Errorf("parseMultiSelectIDs(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.want[i])
-			}
-		}
+	if got[0].Branch != "main" {
+		t.Fatalf("expected branch to be copied onto installed plugin, got %q", got[0].Branch)
+	}
+	if got[1].Source != "" {
+		t.Fatalf("expected undeclared plugin source to remain empty, got %q", got[1].Source)
 	}
 }

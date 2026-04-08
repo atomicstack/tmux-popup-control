@@ -125,6 +125,8 @@ func PluginsUpdateAction(ctx Context, item Item) tea.Cmd {
 		if err != nil {
 			return ActionResult{Err: err}
 		}
+		declared := declaredPlugins(ctx.SocketPath)
+		installed = mergeDeclaredPluginMetadata(installed, declared)
 
 		selected := parseMultiSelectIDs(item.ID)
 		updateAll := slices.Contains(selected, AllPluginsSentinel)
@@ -190,6 +192,40 @@ func PluginsUninstallAction(ctx Context, item Item) tea.Cmd {
 	}
 }
 
+func mergeDeclaredPluginMetadata(installed, declared []plugin.Plugin) []plugin.Plugin {
+	if len(installed) == 0 || len(declared) == 0 {
+		return installed
+	}
+	byName := make(map[string]plugin.Plugin, len(declared))
+	for _, p := range declared {
+		byName[p.Name] = p
+	}
+	merged := make([]plugin.Plugin, len(installed))
+	copy(merged, installed)
+	for i := range merged {
+		if declaredPlugin, ok := byName[merged[i].Name]; ok {
+			if merged[i].Source == "" {
+				merged[i].Source = declaredPlugin.Source
+			}
+			if merged[i].Branch == "" {
+				merged[i].Branch = declaredPlugin.Branch
+			}
+		}
+	}
+	return merged
+}
+
+func declaredPlugins(socketPath string) []plugin.Plugin {
+	if socketPath == "" {
+		return nil
+	}
+	declared, err := plugin.ParseConfig(socketPath)
+	if err != nil {
+		return nil
+	}
+	return declared
+}
+
 // parseMultiSelectIDs splits a newline-joined ID string from multi-select.
 func parseMultiSelectIDs(id string) []string {
 	if id == "" {
@@ -207,11 +243,8 @@ func parseMultiSelectIDs(id string) []string {
 
 // declaredPluginNames returns the set of plugin names declared in tmux config.
 func declaredPluginNames(socketPath string) map[string]struct{} {
-	if socketPath == "" {
-		return nil
-	}
-	declared, err := plugin.ParseConfig(socketPath)
-	if err != nil {
+	declared := declaredPlugins(socketPath)
+	if len(declared) == 0 {
 		return nil
 	}
 	names := make(map[string]struct{}, len(declared))
