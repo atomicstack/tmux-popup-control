@@ -66,7 +66,7 @@ func TestNavigationOpensSubmenuAndEscapeReturns(t *testing.T) {
 	// Escape at the root exits the binary.
 	SendKeys(t, socket, pane, "Escape")
 	_ = waitForExit(t, ctx, exitFile)
-	_ = tmuxCommand(socket, "kill-session", "-t", "nav-session").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "nav-session").Run()
 }
 
 // TestFilterNarrowsSessionList starts the binary at the session:switch menu
@@ -80,7 +80,7 @@ func TestFilterNarrowsSessionList(t *testing.T) {
 
 	// Create two extra sessions with distinct names.
 	for _, name := range []string{"alpha-sess", "beta-sess"} {
-		if err := tmuxCommand(socket, "new-session", "-d", "-s", name).Run(); err != nil {
+		if err := TmuxCommand(socket, "new-session", "-d", "-s", name).Run(); err != nil {
 			t.Fatalf("create session %s: %v", name, err)
 		}
 	}
@@ -110,7 +110,7 @@ func TestFilterNarrowsSessionList(t *testing.T) {
 	// Escape at the root (session:switch is the root here) exits the binary.
 	SendKeys(t, socket, pane, "Escape")
 	_ = waitForExit(t, ctx, exitFile)
-	_ = tmuxCommand(socket, "kill-session", "-t", "filter-session").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "filter-session").Run()
 }
 
 // TestSessionSwitchExitsCleanly launches the binary at session:switch with a
@@ -124,7 +124,7 @@ func TestSessionSwitchExitsCleanly(t *testing.T) {
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
 
 	// Create a target session to switch to.
-	if err := tmuxCommand(socket, "new-session", "-d", "-s", "switch-target").Run(); err != nil {
+	if err := TmuxCommand(socket, "new-session", "-d", "-s", "switch-target").Run(); err != nil {
 		t.Fatalf("create target session: %v", err)
 	}
 
@@ -161,8 +161,8 @@ func TestSessionSwitchExitsCleanly(t *testing.T) {
 	}
 
 	// Clean up.
-	_ = tmuxCommand(socket, "kill-session", "-t", "switch-sess").Run()
-	_ = tmuxCommand(socket, "kill-session", "-t", "switch-target").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "switch-sess").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "switch-target").Run()
 }
 
 // TestEscapeExitsFromRootMenu verifies that pressing Escape at the root menu
@@ -194,7 +194,7 @@ func TestEscapeExitsFromRootMenu(t *testing.T) {
 	}
 	t.Logf("binary exited in %v with code %s", elapsed, code)
 
-	_ = tmuxCommand(socket, "kill-session", "-t", "escape-session").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "escape-session").Run()
 }
 
 // TestCommandMenuMoveWindowRenumber verifies the command submenu by typing
@@ -210,17 +210,17 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 
 	// Create a target session with three windows, then kill the middle one to
 	// produce a gap: indices 0, 2 (window 1 removed).
-	if err := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", target).Run(); err != nil {
+	if err := TmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", target).Run(); err != nil {
 		t.Fatalf("create target session: %v", err)
 	}
-	if err := tmuxCommand(socket, "new-window", "-t", target).Run(); err != nil {
+	if err := TmuxCommand(socket, "new-window", "-t", target).Run(); err != nil {
 		t.Fatalf("new-window 1: %v", err)
 	}
-	if err := tmuxCommand(socket, "new-window", "-t", target).Run(); err != nil {
+	if err := TmuxCommand(socket, "new-window", "-t", target).Run(); err != nil {
 		t.Fatalf("new-window 2: %v", err)
 	}
 	// Kill window index 1 to create a gap (leaves indices 0, 2).
-	if err := tmuxCommand(socket, "kill-window", "-t", target+":1").Run(); err != nil {
+	if err := TmuxCommand(socket, "kill-window", "-t", target+":1").Run(); err != nil {
 		t.Fatalf("kill-window 1: %v", err)
 	}
 
@@ -258,7 +258,7 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 
 	// Append " -r -t <target>" to the filter.
 	// Use -- to prevent tmux send-keys from interpreting "-r" as a flag.
-	if err := tmuxCommand(socket, "send-keys", "-l", "-t", pane, "--", " -r -t "+target).Run(); err != nil {
+	if err := TmuxCommand(socket, "send-keys", "-l", "-t", pane, "--", " -r -t "+target).Run(); err != nil {
 		t.Fatalf("send-text to pane %s: %v", pane, err)
 	}
 
@@ -287,8 +287,100 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 		}
 	}
 
-	_ = tmuxCommand(socket, "kill-session", "-t", "cmd-runner").Run()
-	_ = tmuxCommand(socket, "kill-session", "-t", target).Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "cmd-runner").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", target).Run()
+}
+
+// TestCommandMenuMoveWindowRenumberCurrentSession verifies that the command
+// submenu preserves tmux's current-pane context inside popup-style execution,
+// where TMUX_PANE is empty and the host pane ID is only available via
+// TMUX_POPUP_CONTROL_PANE_ID.
+func TestCommandMenuMoveWindowRenumberCurrentSession(t *testing.T) {
+	bin := buildBinary(t)
+	socket, cleanup, logDir := StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	session := "cmd-current"
+	runner := "cmd-current-runner"
+
+	if err := TmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", session).Run(); err != nil {
+		t.Fatalf("create target session: %v", err)
+	}
+	if err := TmuxCommand(socket, "new-window", "-t", session).Run(); err != nil {
+		t.Fatalf("new-window 1: %v", err)
+	}
+	if err := TmuxCommand(socket, "new-window", "-t", session).Run(); err != nil {
+		t.Fatalf("new-window 2: %v", err)
+	}
+	if err := TmuxCommand(socket, "kill-window", "-t", session+":1").Run(); err != nil {
+		t.Fatalf("kill-window 1: %v", err)
+	}
+
+	beforeIndices := windowIndices(t, socket, session)
+	t.Logf("window indices before: %v", beforeIndices)
+	if len(beforeIndices) != 2 {
+		t.Fatalf("expected 2 windows, got %d", len(beforeIndices))
+	}
+	hasGap := false
+	for i := 1; i < len(beforeIndices); i++ {
+		if beforeIndices[i]-beforeIndices[i-1] > 1 {
+			hasGap = true
+			break
+		}
+	}
+	if !hasGap {
+		t.Fatalf("expected gap in window indices %v", beforeIndices)
+	}
+
+	hostPane, err := TmuxCommand(socket, "display-message", "-t", session, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get host pane: %v", err)
+	}
+
+	pane, exitFile := launchBinaryWithEnv(t, bin, socket, runner, "command",
+		[]string{
+			"export TMUX_POPUP_CONTROL_SESSION=" + session,
+			"export TMUX_PANE=",
+			"export TMUX_POPUP_CONTROL_PANE_ID=" + strings.TrimSpace(string(hostPane)),
+		})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
+	defer cancel()
+
+	WaitForContent(t, ctx, socket, pane, "command")
+
+	SendText(t, socket, pane, "move-win")
+	WaitForContent(t, ctx, socket, pane, "move-window")
+	SendKeys(t, socket, pane, "Tab")
+
+	if err := TmuxCommand(socket, "send-keys", "-l", "-t", pane, "--", " -r").Run(); err != nil {
+		t.Fatalf("send-text to pane %s: %v", pane, err)
+	}
+	SendKeys(t, socket, pane, "Enter")
+
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer exitCancel()
+	code := waitForExit(t, exitCtx, exitFile)
+	t.Logf("binary exit code: %s", code)
+	if code != "0" {
+		errOutput, _ := CapturePane(t, socket, pane)
+		t.Fatalf("binary exited with code %s; pane output:\n%s", code, errOutput)
+	}
+
+	afterIndices := windowIndices(t, socket, session)
+	t.Logf("window indices after: %v", afterIndices)
+	if len(afterIndices) != 2 {
+		t.Fatalf("expected 2 windows after renumber, got %d", len(afterIndices))
+	}
+	for i, idx := range afterIndices {
+		if idx != i {
+			t.Fatalf("expected contiguous indices starting at 0, got %v", afterIndices)
+		}
+	}
+
+	_ = TmuxCommand(socket, "kill-session", "-t", runner).Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", session).Run()
 }
 
 // TestTreeFilterShowsOnlyMatchingItems launches the binary at session:tree
@@ -304,18 +396,18 @@ func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
 	// Create sessions with distinct names and windows whose names do NOT
 	// contain the session name, so we can verify per-item filtering.
 	for _, name := range []string{"shells", "devbox"} {
-		if err := tmuxCommand(socket, "new-session", "-d", "-s", name).Run(); err != nil {
+		if err := TmuxCommand(socket, "new-session", "-d", "-s", name).Run(); err != nil {
 			t.Fatalf("create session %s: %v", name, err)
 		}
 	}
 	// Rename windows to names that definitely don't contain "shells".
-	if err := tmuxCommand(socket, "rename-window", "-t", "shells:0", "vim").Run(); err != nil {
+	if err := TmuxCommand(socket, "rename-window", "-t", "shells:0", "vim").Run(); err != nil {
 		t.Fatalf("rename window: %v", err)
 	}
-	if err := tmuxCommand(socket, "new-window", "-t", "shells", "-n", "htop").Run(); err != nil {
+	if err := TmuxCommand(socket, "new-window", "-t", "shells", "-n", "htop").Run(); err != nil {
 		t.Fatalf("new-window htop: %v", err)
 	}
-	if err := tmuxCommand(socket, "rename-window", "-t", "devbox:0", "code").Run(); err != nil {
+	if err := TmuxCommand(socket, "rename-window", "-t", "devbox:0", "code").Run(); err != nil {
 		t.Fatalf("rename window: %v", err)
 	}
 
@@ -374,9 +466,9 @@ func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
 	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exitCancel()
 	_ = waitForExit(t, exitCtx, exitFile)
-	_ = tmuxCommand(socket, "kill-session", "-t", "tree-filter").Run()
-	_ = tmuxCommand(socket, "kill-session", "-t", "shells").Run()
-	_ = tmuxCommand(socket, "kill-session", "-t", "devbox").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "tree-filter").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "shells").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "devbox").Run()
 }
 
 // TestTreeFilterChildMatchShowsAncestor verifies that when a window name
@@ -389,14 +481,14 @@ func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
 
 	// Create a session with a uniquely-named window.
-	if err := tmuxCommand(socket, "new-session", "-d", "-s", "mywork").Run(); err != nil {
+	if err := TmuxCommand(socket, "new-session", "-d", "-s", "mywork").Run(); err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	if err := tmuxCommand(socket, "rename-window", "-t", "mywork:0", "xyzzyfind").Run(); err != nil {
+	if err := TmuxCommand(socket, "rename-window", "-t", "mywork:0", "xyzzyfind").Run(); err != nil {
 		t.Fatalf("rename window: %v", err)
 	}
 	// A second window that should NOT match.
-	if err := tmuxCommand(socket, "new-window", "-t", "mywork", "-n", "bash").Run(); err != nil {
+	if err := TmuxCommand(socket, "new-window", "-t", "mywork", "-n", "bash").Run(); err != nil {
 		t.Fatalf("new-window: %v", err)
 	}
 
@@ -435,8 +527,8 @@ func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
 	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer exitCancel()
 	_ = waitForExit(t, exitCtx, exitFile)
-	_ = tmuxCommand(socket, "kill-session", "-t", "tree-child").Run()
-	_ = tmuxCommand(socket, "kill-session", "-t", "mywork").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "tree-child").Run()
+	_ = TmuxCommand(socket, "kill-session", "-t", "mywork").Run()
 }
 
 // TestPaneCaptureResolvesCorrectPaneID launches the binary with two sessions
@@ -454,18 +546,18 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 	// StartTmuxServer creates "tmux-popup-control-test" as the initial session.
 	// Create a second session and split it to get higher pane IDs.
 	targetSession := "zzz-target"
-	if err := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", targetSession).Run(); err != nil {
+	if err := TmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", targetSession).Run(); err != nil {
 		t.Fatalf("create target session: %v", err)
 	}
 	for i := range 3 {
-		if err := tmuxCommand(socket, "split-window", "-t", targetSession).Run(); err != nil {
+		if err := TmuxCommand(socket, "split-window", "-t", targetSession).Run(); err != nil {
 			t.Fatalf("split-window %d: %v", i, err)
 		}
 	}
 	time.Sleep(200 * time.Millisecond)
 
 	// Get the active pane ID in the target session.
-	activeOut, err := tmuxCommand(socket, "display-message", "-t", targetSession, "-p", "#{pane_id}").Output()
+	activeOut, err := TmuxCommand(socket, "display-message", "-t", targetSession, "-p", "#{pane_id}").Output()
 	if err != nil {
 		t.Fatalf("get active pane: %v", err)
 	}
@@ -473,7 +565,7 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 	t.Logf("active pane in %s: %s", targetSession, targetPaneID)
 
 	// Get the session ID for the target session.
-	sidOut, err := tmuxCommand(socket, "display-message", "-t", targetSession, "-p", "#{session_id}").Output()
+	sidOut, err := TmuxCommand(socket, "display-message", "-t", targetSession, "-p", "#{session_id}").Output()
 	if err != nil {
 		t.Fatalf("get session id: %v", err)
 	}
@@ -491,8 +583,8 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 
 	// Ensure sessions are cleaned up even if the test fails mid-way.
 	t.Cleanup(func() {
-		_ = tmuxCommand(socket, "kill-session", "-t", "capture-test").Run()
-		_ = tmuxCommand(socket, "kill-session", "-t", targetSession).Run()
+		_ = TmuxCommand(socket, "kill-session", "-t", "capture-test").Run()
+		_ = TmuxCommand(socket, "kill-session", "-t", targetSession).Run()
 	})
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -517,7 +609,7 @@ func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
 // windowIndices returns the sorted window indices for the given session.
 func windowIndices(t *testing.T, socket, session string) []int {
 	t.Helper()
-	out, err := tmuxCommand(socket, "list-windows", "-t", session, "-F", "#{window_index}").Output()
+	out, err := TmuxCommand(socket, "list-windows", "-t", session, "-F", "#{window_index}").Output()
 	if err != nil {
 		t.Fatalf("list-windows: %v", err)
 	}

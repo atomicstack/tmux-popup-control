@@ -100,7 +100,7 @@ func launchBinary(t *testing.T, bin, socket, session, rootMenu string) (pane, ex
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write launcher script: %v", err)
 	}
-	cmd := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", session, scriptPath)
+	cmd := TmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", session, scriptPath)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("start session %s: %v", session, err)
 	}
@@ -214,7 +214,7 @@ func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, ex
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write launcher script: %v", err)
 	}
-	cmd := tmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", session, scriptPath)
+	cmd := TmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", session, scriptPath)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("start session %s: %v", session, err)
 	}

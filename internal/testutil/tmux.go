@@ -39,12 +39,12 @@ func StartTmuxServer(t *testing.T) (string, func(), string) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(baseDir) })
 	socketPath := filepath.Join(baseDir, "tmux-test.sock")
-	cmd := tmuxCommand(socketPath, "-f", "/dev/null", "-vv", "new-session", "-d", "-s", "tmux-popup-control-test", "sleep", "600")
+	cmd := TmuxCommand(socketPath, "-f", "/dev/null", "-vv", "new-session", "-d", "-s", "tmux-popup-control-test", "sleep", "600")
 	if err := cmd.Run(); err != nil {
 		t.Skipf("skipping: failed to start tmux server: %v", err)
 	}
 	serverPID := ""
-	if out, err := tmuxCommand(socketPath, "display-message", "-p", "#{pid}").Output(); err == nil {
+	if out, err := TmuxCommand(socketPath, "display-message", "-p", "#{pid}").Output(); err == nil {
 		serverPID = strings.TrimSpace(string(out))
 		if serverPID != "" {
 			t.Logf("started tmux test server pid=%s socket=%s", serverPID, socketPath)
@@ -55,7 +55,7 @@ func StartTmuxServer(t *testing.T) (string, func(), string) {
 		defer cancel()
 		if err := killTmuxServerControl(ctx, socketPath); err != nil {
 			t.Logf("control-mode kill failed for socket %s: %v; falling back to tmux kill-server", socketPath, err)
-			_ = tmuxCommand(socketPath, "kill-server").Run()
+			_ = TmuxCommand(socketPath, "kill-server").Run()
 		}
 	}
 	return socketPath, cleanup, baseDir
@@ -96,7 +96,7 @@ func CapturePane(t *testing.T, socketPath, target string) (string, error) {
 	if target != "" {
 		args = append(args, "-t", target)
 	}
-	cmd := tmuxCommand(socketPath, args...)
+	cmd := TmuxCommand(socketPath, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -108,7 +108,10 @@ func CapturePane(t *testing.T, socketPath, target string) (string, error) {
 	return string(output), nil
 }
 
-func tmuxCommand(socket string, extra ...string) *exec.Cmd {
+// TmuxCommand builds a tmux command targeting the given socket with all
+// tmux-related environment variables sanitised to prevent contamination
+// of the user's live session when tests run inside an existing tmux.
+func TmuxCommand(socket string, extra ...string) *exec.Cmd {
 	trimmed := strings.TrimSpace(socket)
 	args := make([]string, 0, len(extra)+2)
 	if trimmed != "" {
@@ -118,7 +121,9 @@ func tmuxCommand(socket string, extra ...string) *exec.Cmd {
 	cmd := exec.Command("tmux", args...)
 	env := make([]string, 0, len(os.Environ())+2)
 	for _, entry := range os.Environ() {
-		if strings.HasPrefix(entry, "TMUX=") {
+		if strings.HasPrefix(entry, "TMUX=") ||
+			strings.HasPrefix(entry, "TMUX_PANE=") ||
+			strings.HasPrefix(entry, "TMUX_POPUP_CONTROL_") {
 			continue
 		}
 		env = append(env, entry)
@@ -201,7 +206,7 @@ func SendKeys(t *testing.T, socketPath, pane string, keys ...string) {
 		return
 	}
 	args := append([]string{"send-keys", "-t", pane}, keys...)
-	if err := tmuxCommand(socketPath, args...).Run(); err != nil {
+	if err := TmuxCommand(socketPath, args...).Run(); err != nil {
 		t.Fatalf("send-keys %v to pane %s: %v", keys, pane, err)
 	}
 }
@@ -210,7 +215,7 @@ func SendKeys(t *testing.T, socketPath, pane string, keys ...string) {
 // Use this for filter input (e.g. "alpha").
 func SendText(t *testing.T, socketPath, pane, text string) {
 	t.Helper()
-	if err := tmuxCommand(socketPath, "send-keys", "-l", "-t", pane, text).Run(); err != nil {
+	if err := TmuxCommand(socketPath, "send-keys", "-l", "-t", pane, text).Run(); err != nil {
 		t.Fatalf("send-text %q to pane %s: %v", text, pane, err)
 	}
 }
