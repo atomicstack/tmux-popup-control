@@ -338,6 +338,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeFor[menu.ResurrectStart]():        m.handleResurrectStartMsg,
 		reflect.TypeFor[resurrectProgressMsg]():       m.handleResurrectProgressMsg,
 		reflect.TypeFor[resurrectTickMsg]():           m.handleResurrectTickMsg,
+		reflect.TypeFor[resurrectAnimTickMsg]():       m.handleResurrectAnimTickMsg,
 		reflect.TypeFor[restoreRefreshTickMsg]():      m.handleRestoreRefreshTickMsg,
 		reflect.TypeFor[restoreRefreshLoadedMsg]():    m.handleRestoreRefreshLoadedMsg,
 		reflect.TypeFor[menu.SaveAsPrompt]():          m.handleSaveAsPromptMsg,

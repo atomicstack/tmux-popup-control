@@ -153,8 +153,9 @@ func TestResurrectViewContainsLogAndBar(t *testing.T) {
 			{message: "saving session 'work'...", kind: "session", id: "work"},
 			{message: "saving window 'term'", kind: "window", id: "term"},
 		},
-		step:  2,
-		total: 5,
+		step:        2,
+		total:       5,
+		displayStep: 2,
 	}
 
 	view := m.resurrectView()
@@ -268,8 +269,9 @@ func TestResurrectViewRestoreOperation(t *testing.T) {
 		log: []logEntry{
 			{message: "restoring session 'main'...", kind: "session", id: "main"},
 		},
-		step:  3,
-		total: 10,
+		step:        3,
+		total:       10,
+		displayStep: 3,
 	}
 
 	view := m.resurrectView()

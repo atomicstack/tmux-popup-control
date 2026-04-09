@@ -10,13 +10,15 @@ import (
 )
 
 type resurrectState struct {
-	operation string // "save" or "restore"
-	progress  <-chan resurrect.ProgressEvent
-	log       []logEntry
-	step      int
-	total     int
-	done      bool
-	err       error
+	operation   string // "save" or "restore"
+	progress    <-chan resurrect.ProgressEvent
+	log         []logEntry
+	step        int
+	total       int
+	displayStep float64 // smoothed value for rendering the bar
+	animating   bool    // true while a lerp tick is running
+	done        bool
+	err         error
 }
 
 type logEntry struct {
@@ -30,6 +32,16 @@ type resurrectProgressMsg struct {
 }
 
 type resurrectTickMsg struct{}
+
+type resurrectAnimTickMsg struct{}
+
+// resurrectAnimInterval is the tick rate for progress bar lerp animation.
+const resurrectAnimInterval = 16 * time.Millisecond // ~60 fps
+
+// resurrectLerpSpeed controls how quickly displayStep catches up to step
+// per tick. higher = faster catchup. at 0.1 and 60fps, a 10-unit gap
+// closes to <0.5 in ~250ms.
+const resurrectLerpSpeed = 0.1
 
 // SetResurrectInit configures the model to emit a ResurrectStart on Init,
 // entering the progress UI immediately. Used by the CLI subcommands.
@@ -85,6 +97,7 @@ func (m *Model) handleResurrectProgressMsg(msg tea.Msg) tea.Cmd {
 	}
 	if evt.Done {
 		s.done = true
+		s.displayStep = float64(s.step)
 		if evt.Err != nil {
 			s.err = evt.Err
 			return nil
@@ -94,7 +107,32 @@ func (m *Model) handleResurrectProgressMsg(msg tea.Msg) tea.Cmd {
 			return resurrectTickMsg{}
 		})
 	}
-	return readResurrectProgress(s.progress)
+	cmds := []tea.Cmd{readResurrectProgress(s.progress)}
+	if !s.animating {
+		s.animating = true
+		cmds = append(cmds, tea.Tick(resurrectAnimInterval, func(time.Time) tea.Msg {
+			return resurrectAnimTickMsg{}
+		}))
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) handleResurrectAnimTickMsg(msg tea.Msg) tea.Cmd {
+	s := m.resurrectState
+	if s == nil {
+		return nil
+	}
+	target := float64(s.step)
+	gap := target - s.displayStep
+	if gap < 0.5 || s.done {
+		s.displayStep = target
+		s.animating = false
+		return nil
+	}
+	s.displayStep += gap * resurrectLerpSpeed
+	return tea.Tick(resurrectAnimInterval, func(time.Time) tea.Msg {
+		return resurrectAnimTickMsg{}
+	})
 }
 
 func (m *Model) handleResurrectTickMsg(msg tea.Msg) tea.Cmd {

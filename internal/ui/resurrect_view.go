@@ -100,10 +100,10 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	barWidth := availWidth - counterWidth
 	barWidth = max(barWidth, 10)
 
-	// sub-cell precision: compute exact fill and fractional remainder
+	// sub-cell precision: use the smoothed displayStep for the bar fill
 	exactFilled := 0.0
 	if s.total > 0 {
-		exactFilled = float64(barWidth) * float64(s.step) / float64(s.total)
+		exactFilled = float64(barWidth) * s.displayStep / float64(s.total)
 		if exactFilled > float64(barWidth) {
 			exactFilled = float64(barWidth)
 		}
