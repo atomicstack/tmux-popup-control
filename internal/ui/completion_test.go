@@ -7,6 +7,73 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// TestCompletionViewWidthStableWhileScrolling pins the rendered popup width
+// against the widest item in the full filtered set, so scrolling (which shifts
+// which items are visible) must not change the popup's width.
+func TestCompletionViewWidthStableWhileScrolling(t *testing.T) {
+	// The widest row is the first item; the rest are short. With a 10-row
+	// viewport, scrolling to the bottom of the list pushes the widest row
+	// out of view, which is where the old "measure visible only" logic
+	// reflowed the popup narrower.
+	items := []string{
+		"aaaaaaaaaaaaaaaaaaaaaaaaaa", // widest
+		"b",
+		"c",
+		"d",
+		"e",
+		"f",
+		"g",
+		"h",
+		"i",
+		"j",
+		"k",
+		"l",
+		"m",
+		"n",
+		"o",
+	}
+	cs := newCompletionState(CompletionOptions{Items: items})
+
+	widthAtCursor := func(cursor int) int {
+		cs.cursor = cursor
+		out := cs.view(200, 20)
+		longest := 0
+		for line := range strings.SplitSeq(out, "\n") {
+			if w := ansi.StringWidth(line); w > longest {
+				longest = w
+			}
+		}
+		return longest
+	}
+
+	base := widthAtCursor(0)
+	for cursor := 1; cursor < len(items); cursor++ {
+		if got := widthAtCursor(cursor); got != base {
+			t.Errorf("popup width at cursor %d = %d, want %d (scrolling should not reflow the popup)", cursor, got, base)
+		}
+	}
+}
+
+// TestCompletionViewWidthCapped pins the popup width cap at 50 visible columns
+// so a single absurdly wide candidate cannot blow the popup across the screen.
+func TestCompletionViewWidthCapped(t *testing.T) {
+	items := []string{strings.Repeat("x", 120)}
+	cs := newCompletionState(CompletionOptions{Items: items})
+	out := cs.view(200, 20)
+	longest := 0
+	for line := range strings.SplitSeq(out, "\n") {
+		if w := ansi.StringWidth(line); w > longest {
+			longest = w
+		}
+	}
+	// Popup = border (2) + scrollbar (0, only one row) + padding (2) + content.
+	// With content capped at 50 visible cols, total visible width is 54.
+	const maxPopupWidth = 54
+	if longest > maxPopupWidth {
+		t.Errorf("popup width = %d, expected ≤ %d", longest, maxPopupWidth)
+	}
+}
+
 func TestCompletionFilter(t *testing.T) {
 	cs := newCompletionState(CompletionOptions{Items: []string{"main", "work", "scratch"}, ArgType: "target-session", TypeLabel: "target-session", AnchorCol: 5})
 	if len(cs.filtered) != 3 {

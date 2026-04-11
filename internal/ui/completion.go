@@ -7,7 +7,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const completionMaxVisible = 10
+const (
+	completionMaxVisible      = 10
+	completionMaxContentWidth = 50 // hard cap on popup content width, regardless of terminal size
+)
 
 type completionItem struct {
 	Value       string
@@ -223,10 +226,14 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 	end := min(start+maxRows, len(cs.filtered))
 	visible := cs.filtered[start:end]
 
+	// Measure against the entire filtered candidate set, not just the rows
+	// currently on screen. Measuring only `visible` makes the popup reflow
+	// every time the user scrolls because the widest row drifts in and out
+	// of the viewport.
 	leftWidth := 1
 	rightWidth := 0
 	hasDescriptions := false
-	for _, item := range visible {
+	for _, item := range cs.filtered {
 		if w := lipgloss.Width(item.Label); w > leftWidth {
 			leftWidth = w
 		}
@@ -242,22 +249,28 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 	if hasDescriptions {
 		contentWidth += 2 + rightWidth
 	}
+	// Apply caps from tightest to loosest: hard fixed cap, then terminal-
+	// relative cap, then leave contentWidth alone.
+	capWidth := completionMaxContentWidth
 	if maxWidth > 0 {
-		if capWidth := maxWidth - 4; capWidth > 0 && contentWidth > capWidth {
-			if !hasDescriptions {
-				contentWidth = capWidth
-				leftWidth = capWidth
-			} else if leftWidth >= capWidth {
-				leftWidth = capWidth
-				rightWidth = 0
-				contentWidth = capWidth
-			} else {
-				rightWidth = capWidth - leftWidth - 2
-				rightWidth = max(rightWidth, 0)
-				contentWidth = leftWidth
-				if rightWidth > 0 {
-					contentWidth += 2 + rightWidth
-				}
+		if termCap := maxWidth - 4; termCap > 0 && termCap < capWidth {
+			capWidth = termCap
+		}
+	}
+	if capWidth > 0 && contentWidth > capWidth {
+		if !hasDescriptions {
+			contentWidth = capWidth
+			leftWidth = capWidth
+		} else if leftWidth >= capWidth {
+			leftWidth = capWidth
+			rightWidth = 0
+			contentWidth = capWidth
+		} else {
+			rightWidth = capWidth - leftWidth - 2
+			rightWidth = max(rightWidth, 0)
+			contentWidth = leftWidth
+			if rightWidth > 0 {
+				contentWidth += 2 + rightWidth
 			}
 		}
 	}
