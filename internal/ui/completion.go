@@ -141,28 +141,6 @@ func (cs *completionState) hasExactMatch(prefix string) bool {
 	return false
 }
 
-func (cs *completionState) selectedLabel() string {
-	if cs == nil || len(cs.filtered) == 0 || cs.cursor < 0 || cs.cursor >= len(cs.filtered) {
-		return ""
-	}
-	return cs.filtered[cs.cursor].Label
-}
-
-func (cs *completionState) labelFor(value string) string {
-	if cs == nil {
-		return value
-	}
-	for _, item := range cs.items {
-		if item.Value == value {
-			if item.Label != "" {
-				return item.Label
-			}
-			return value
-		}
-	}
-	return value
-}
-
 func (cs *completionState) ghostHint(typedPrefix string) string {
 	if cs == nil || len(cs.filtered) == 0 {
 		return ""
@@ -262,6 +240,13 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 		selectedStyle = &fallback
 	}
 
+	borderStyle := styles.CompletionBorder
+	borderColor := lipgloss.Color("240")
+	if borderStyle != nil {
+		borderColor = borderStyle.GetForeground()
+	}
+	scrollbarCellStyle := lipgloss.NewStyle().Foreground(borderColor)
+
 	lines := make([]string, 0, len(visible))
 	for idx, item := range visible {
 		label := ansi.Truncate(item.Label, leftWidth, "…")
@@ -279,36 +264,29 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 		if pad := contentWidth - lipgloss.Width(content); pad > 0 {
 			content += strings.Repeat(" ", pad)
 		}
-		line := " " + content + " "
+		body := " " + content + " "
 		if start+idx == cs.cursor {
-			lines = append(lines, selectedStyle.Render(line))
+			lines = append(lines, selectedStyle.Render(body))
 		} else {
-			lines = append(lines, itemStyle.Render(line))
+			lines = append(lines, itemStyle.Render(body))
 		}
 	}
+	listBlock := strings.Join(lines, "\n")
 
-	if start > 0 && len(lines) > 0 {
-		lines[0] = itemStyle.Render(" " + padIndicator("^", contentWidth) + " ")
-	}
-	if end < len(cs.filtered) && len(lines) > 0 {
-		lines[len(lines)-1] = itemStyle.Render(" " + padIndicator("v", contentWidth) + " ")
-	}
-
-	borderStyle := styles.CompletionBorder
-	borderColor := lipgloss.Color("240")
-	if borderStyle != nil {
-		borderColor = borderStyle.GetForeground()
+	// Render the scrollbar as its own column, then join it beside the item
+	// block. This keeps the scrollbar strictly outside each row's styled body
+	// so selection highlighting cannot bleed into it.
+	if scrollCells := renderScrollbar(len(cs.filtered), len(visible), start); scrollCells != nil {
+		cellStrs := make([]string, len(scrollCells))
+		for i, c := range scrollCells {
+			cellStrs[i] = scrollbarCellStyle.Render(string(c))
+		}
+		scrollColumn := strings.Join(cellStrs, "\n")
+		listBlock = lipgloss.JoinHorizontal(lipgloss.Top, listBlock, scrollColumn)
 	}
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
-		Render(strings.Join(lines, "\n"))
-}
-
-func padIndicator(marker string, width int) string {
-	if width <= 1 {
-		return marker
-	}
-	return strings.Repeat(" ", width-1) + marker
+		Render(listBlock)
 }

@@ -30,7 +30,8 @@ type styledLine struct {
 	style         *lipgloss.Style
 	prefixStyle   *lipgloss.Style
 	highlightFrom int
-	raw           bool // text contains ANSI escapes; skip style wrapping, use ANSI-aware truncation
+	raw           bool   // text contains ANSI escapes; skip style wrapping, use ANSI-aware truncation
+	suffix        string // pre-rendered fragment appended verbatim after the styled body (e.g. scrollbar cell)
 }
 
 // hasSidePreview reports whether the current level should be rendered with the
@@ -180,9 +181,18 @@ func (m *Model) viewVertical(header string) string {
 				MaxVisible:     m.maxVisibleItems(),
 			})...)
 		} else {
+			scrollCells := renderScrollbar(len(current.Items), len(displayItems), start)
+			itemWidth := m.width
+			if scrollCells != nil && itemWidth > 0 {
+				itemWidth = m.width - 1
+			}
 			for i, item := range displayItems {
 				idx := start + i
-				lines = append(lines, m.buildItemLine(item, idx, current, m.width))
+				line := m.buildItemLine(item, idx, current, itemWidth)
+				if scrollCells != nil {
+					line.suffix = scrollbarStyle.Render(string(scrollCells[i]))
+				}
+				lines = append(lines, line)
 			}
 		}
 	}
@@ -277,9 +287,18 @@ func (m *Model) viewSideBySide(header string) string {
 				MaxVisible:     m.maxVisibleItems(),
 			})...)
 		} else {
+			scrollCells := renderScrollbar(len(current.Items), len(displayItems), start)
+			itemWidth := menuW
+			if scrollCells != nil && itemWidth > 0 {
+				itemWidth = menuW - 1
+			}
 			for i, item := range displayItems {
 				idx := start + i
-				contentLines = append(contentLines, m.buildItemLine(item, idx, current, menuW))
+				line := m.buildItemLine(item, idx, current, itemWidth)
+				if scrollCells != nil {
+					line.suffix = scrollbarStyle.Render(string(scrollCells[i]))
+				}
+				contentLines = append(contentLines, line)
 			}
 		}
 	}
@@ -1045,13 +1064,20 @@ func applyWidth(lines []styledLine, width int) []styledLine {
 	result := make([]styledLine, len(lines))
 	for i, line := range lines {
 		text := line.text
+		// Reserve visible columns for any pre-rendered suffix so truncation of
+		// the main text accounts for the scrollbar cell or similar.
+		cap := width
+		if line.suffix != "" {
+			cap = width - lipgloss.Width(line.suffix)
+			cap = max(cap, 0)
+		}
 		if line.raw {
 			w := lipgloss.Width(text)
-			if w > width {
-				text = ansi.Truncate(text, width-1, "…")
+			if w > cap {
+				text = ansi.Truncate(text, cap-1, "…")
 			}
 		} else {
-			text = truncateText(text, width)
+			text = truncateText(text, cap)
 		}
 		result[i] = styledLine{
 			text:          text,
@@ -1059,6 +1085,7 @@ func applyWidth(lines []styledLine, width int) []styledLine {
 			prefixStyle:   line.prefixStyle,
 			highlightFrom: line.highlightFrom,
 			raw:           line.raw,
+			suffix:        line.suffix,
 		}
 	}
 	return result
@@ -1070,7 +1097,7 @@ func renderLines(lines []styledLine) string {
 		text := line.text
 		if line.raw {
 			// Text already contains ANSI escapes; pass through as-is.
-			out[i] = text
+			out[i] = text + line.suffix
 			continue
 		}
 		runes := []rune(text)
@@ -1087,7 +1114,7 @@ func renderLines(lines []styledLine) string {
 		} else if line.style != nil {
 			text = line.style.Render(text)
 		}
-		out[i] = text
+		out[i] = text + line.suffix
 	}
 	return strings.Join(out, "\n")
 }

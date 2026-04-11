@@ -336,12 +336,17 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 		end = start + opts.MaxVisible
 	}
 	visibleLines := rawLines[start:end]
+	scrollCells := renderScrollbar(len(rawLines), len(visibleLines), start)
+	rowWidth := opts.Width
+	if scrollCells != nil && rowWidth > 0 {
+		rowWidth = opts.Width - 1
+	}
 	result := make([]styledLine, 0, len(visibleLines))
 	for i, line := range visibleLines {
 		absoluteIdx := start + i
 		fullText := indicator + " " + line
-		if opts.Width > 0 {
-			if pad := opts.Width - len([]rune(fullText)); pad > 0 {
+		if rowWidth > 0 {
+			if pad := rowWidth - len([]rune(fullText)); pad > 0 {
 				fullText += strings.Repeat(" ", pad)
 			}
 		}
@@ -351,12 +356,16 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 			lineStyle = styles.SelectedItem
 			indicatorStyle = styles.SelectedItemIndicator
 		}
-		result = append(result, styledLine{
+		sl := styledLine{
 			text:          fullText,
 			style:         lineStyle,
 			prefixStyle:   indicatorStyle,
 			highlightFrom: 1,
-		})
+		}
+		if scrollCells != nil {
+			sl.suffix = scrollbarStyle.Render(string(scrollCells[i]))
+		}
+		result = append(result, sl)
 	}
 	return result
 }
