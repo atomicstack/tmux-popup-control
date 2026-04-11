@@ -414,6 +414,18 @@ func (m *Model) triggerCompletion() {
 			Prefix:       ctx.Prefix,
 		})
 	case cmdparse.ContextFlagValue, cmdparse.ContextPositionalValue:
+		if tmuxOpts, handled := m.tmuxOptCompletion(schema, ctx, current.Filter); handled {
+			if len(tmuxOpts.Items) == 0 {
+				m.completion = &completionState{
+					typeLabel: tmuxOpts.TypeLabel,
+					argType:   tmuxOpts.ArgType,
+					prefix:    tmuxOpts.Prefix,
+				}
+				return
+			}
+			m.openCompletion(tmuxOpts)
+			return
+		}
 		resolver := cmdparse.NewStoreResolver(&modelDataSource{
 			sessions: m.sessions,
 			windows:  m.windows,

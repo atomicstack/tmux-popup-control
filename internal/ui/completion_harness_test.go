@@ -339,6 +339,10 @@ func setupCommandHarness(t *testing.T) *Harness {
 		"swap-window (swapw) [-d] [-s src-window] [-t target-window]",
 		"bind-key (bind) [-nr] [-T key-table] [-N note] key [command [argument ...]]",
 		"move-window (movew) [-abdkr] [-s src-window] [-t dst-window]",
+		"set-option (set) [-aFgopqsuUw] [-t target-pane] option [value]",
+		"set-window-option (setw) [-aFgoqu] [-t target-window] option [value]",
+		"set-hook [-agpRuw] [-t target-pane] hook [command]",
+		"show-options (show) [-AgHpqsvw] [-t target-pane] [option]",
 	}
 	model.commandSchemas = cmdparse.BuildRegistry(commandLines)
 	model.commandItemsCache = []menu.Item{
@@ -346,6 +350,10 @@ func setupCommandHarness(t *testing.T) *Harness {
 		{ID: "swap-window", Label: commandLines[1]},
 		{ID: "bind-key", Label: commandLines[2]},
 		{ID: "move-window", Label: commandLines[3]},
+		{ID: "set-option", Label: commandLines[4]},
+		{ID: "set-window-option", Label: commandLines[5]},
+		{ID: "set-hook", Label: commandLines[6]},
+		{ID: "show-options", Label: commandLines[7]},
 	}
 
 	node, ok := model.registry.Find("command")
