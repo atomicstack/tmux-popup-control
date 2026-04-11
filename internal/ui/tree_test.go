@@ -456,6 +456,60 @@ func TestTreeRendersCompactLabels(t *testing.T) {
 	}
 }
 
+func TestTreeRendersSingularPaneCount(t *testing.T) {
+	sessions := []menu.SessionEntry{{Name: "alpha", Windows: 2}}
+	windows := []menu.WindowEntry{
+		{ID: "0", Label: "0:bash", Session: "alpha", Index: 0},
+		{ID: "1", Label: "1:vim", Session: "alpha", Index: 1},
+	}
+	panes := []menu.PaneEntry{
+		{ID: "%0", Label: "%0", Session: "alpha", WindowIdx: 0, Index: 0},
+		{ID: "%1", Label: "%1", Session: "alpha", WindowIdx: 1, Index: 0},
+		{ID: "%2", Label: "%2", Session: "alpha", WindowIdx: 1, Index: 1},
+	}
+
+	m := testTreeModel(sessions, windows, panes, true)
+	view := m.View().Content
+
+	if !strings.Contains(view, "(1 pane)") {
+		t.Fatalf("expected '(1 pane)' for window with one pane, got:\n%s", view)
+	}
+	if strings.Contains(view, "(1 panes)") {
+		t.Fatalf("did not expect '(1 panes)' (should be singular), got:\n%s", view)
+	}
+	if !strings.Contains(view, "(2 panes)") {
+		t.Fatalf("expected '(2 panes)' for window with two panes, got:\n%s", view)
+	}
+}
+
+func TestTreeMarksCurrentWindow(t *testing.T) {
+	sessions := []menu.SessionEntry{{Name: "alpha", Windows: 2}}
+	windows := []menu.WindowEntry{
+		{ID: "0", Label: "0:bash", Session: "alpha", Index: 0},
+		{ID: "1", Label: "1:vim", Session: "alpha", Index: 1, Current: true},
+	}
+	panes := []menu.PaneEntry{
+		{ID: "%0", Label: "%0", Session: "alpha", WindowIdx: 0, Index: 0},
+		{ID: "%1", Label: "%1", Session: "alpha", WindowIdx: 1, Index: 0},
+	}
+
+	m := testTreeModelWithSize(sessions, windows, panes, true, 160, 24)
+	view := m.View().Content
+
+	if !strings.Contains(view, "(current)") {
+		t.Fatalf("expected '(current)' marker on active window, got:\n%s", view)
+	}
+	if strings.Count(view, "(current)") != 1 {
+		t.Fatalf("expected exactly one '(current)' marker, got:\n%s", view)
+	}
+	// Ensure marker sits on the vim window, not bash.
+	vimIdx := strings.Index(view, "1:vim")
+	currentIdx := strings.Index(view, "(current)")
+	if vimIdx < 0 || currentIdx < 0 || currentIdx < vimIdx {
+		t.Fatalf("expected '(current)' to follow vim window label, got:\n%s", view)
+	}
+}
+
 func TestBuildTreeDFSOrder(t *testing.T) {
 	sessions := []menu.SessionEntry{
 		{Name: "a", Windows: 1},
