@@ -70,6 +70,49 @@ func TestCompletionArrowNavigation(t *testing.T) {
 	}
 }
 
+// TestCompletionPageNavigationScopesToDropdown guards that pgup/pgdown while
+// the completion popup is focused move the completion cursor only and never
+// leak through to the background menu level.
+func TestCompletionPageNavigationScopesToDropdown(t *testing.T) {
+	h := setupCommandHarness(t)
+
+	// Open option-name completion for set-option; the static catalog yields
+	// enough rows that a page step is visibly larger than one.
+	sendKeys(h, "set-option")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	sendKeys(h, "m")
+
+	if !h.model.completionVisible() {
+		t.Fatal("expected option-name completion visible")
+	}
+	if len(h.model.completion.filtered) < 3 {
+		t.Fatalf("need at least 3 candidates to exercise paging, got %d", len(h.model.completion.filtered))
+	}
+
+	bgLevel := h.model.currentLevel()
+	if bgLevel == nil {
+		t.Fatal("expected current level")
+	}
+	bgCursorBefore := bgLevel.Cursor
+
+	completionCursorBefore := h.model.completion.cursor
+	h.Send(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	if got := bgLevel.Cursor; got != bgCursorBefore {
+		t.Errorf("background cursor moved on pgdown while completion focused: before=%d after=%d", bgCursorBefore, got)
+	}
+	if h.model.completion.cursor == completionCursorBefore {
+		t.Error("expected completion cursor to advance on pgdown")
+	}
+
+	h.Send(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	if got := bgLevel.Cursor; got != bgCursorBefore {
+		t.Errorf("background cursor moved on pgup while completion focused: before=%d after=%d", bgCursorBefore, got)
+	}
+	if h.model.completion.cursor != completionCursorBefore {
+		t.Errorf("expected pgup to return completion cursor to %d, got %d", completionCursorBefore, h.model.completion.cursor)
+	}
+}
+
 func TestCompletionTabAccepts(t *testing.T) {
 	h := setupCommandHarness(t)
 

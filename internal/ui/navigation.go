@@ -336,6 +336,12 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		case "down":
 			m.completion.moveDown()
 			return nil
+		case "pgup":
+			m.completion.movePageUp()
+			return nil
+		case "pgdown":
+			m.completion.movePageDown()
+			return nil
 		case "tab":
 			return m.acceptCompletion()
 		case "esc":

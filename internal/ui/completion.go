@@ -122,6 +122,39 @@ func (cs *completionState) moveUp() {
 	cs.cursor = len(cs.filtered) - 1
 }
 
+// pageStep returns the number of rows a page-up/page-down should move. It is
+// sized to the visible viewport of the dropdown — the same completionMaxVisible
+// constant used when rendering — clamped to at least 1.
+func (cs *completionState) pageStep() int {
+	step := completionMaxVisible
+	if step < 1 {
+		step = 1
+	}
+	return step
+}
+
+// movePageDown advances the cursor by one viewport, clamping at the last item.
+func (cs *completionState) movePageDown() {
+	if cs == nil || len(cs.filtered) == 0 {
+		return
+	}
+	cs.cursor += cs.pageStep()
+	if cs.cursor >= len(cs.filtered) {
+		cs.cursor = len(cs.filtered) - 1
+	}
+}
+
+// movePageUp retreats the cursor by one viewport, clamping at the first item.
+func (cs *completionState) movePageUp() {
+	if cs == nil || len(cs.filtered) == 0 {
+		return
+	}
+	cs.cursor -= cs.pageStep()
+	if cs.cursor < 0 {
+		cs.cursor = 0
+	}
+}
+
 func (cs *completionState) selected() string {
 	if cs == nil || len(cs.filtered) == 0 || cs.cursor < 0 || cs.cursor >= len(cs.filtered) {
 		return ""
