@@ -152,6 +152,7 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 | `TMUX_POPUP_CONTROL_KEY_COMMAND_MENU` | `@tmux-popup-control-key-command-menu` | `:` | open the command browser |
 | `TMUX_POPUP_CONTROL_KEY_SESSION_TREE` | `@tmux-popup-control-key-session-tree` | `s` | open the session tree |
 | `TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER` | `@tmux-popup-control-key-pane-switcher` | `f` | open the pane switcher |
+| `TMUX_POPUP_CONTROL_KEY_WINDOW_SWITCHER` | `@tmux-popup-control-key-window-switcher` | `w` | open the window switcher |
 | `TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE` | `@tmux-popup-control-key-pane-capture` | `H` | capture pane to file |
 | `TMUX_POPUP_CONTROL_KEY_SESSION_SAVE` | `@tmux-popup-control-key-session-save` | `C-s` | save sessions |
 | `TMUX_POPUP_CONTROL_KEY_SESSION_RESTORE_FROM` | `@tmux-popup-control-key-session-restore-from` | `C-r` | restore sessions from a snapshot |
