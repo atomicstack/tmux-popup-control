@@ -1,5 +1,9 @@
 # tmux-popup-control
 
+Current version: **v0.9.0** — see the [release
+notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.9.0)
+for the latest changes.
+
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
 inside a `tmux display-popup`. Built with [Bubble
 Tea](https://github.com/charmbracelet/bubbletea) and [Lip
@@ -25,7 +29,9 @@ control-mode connection via
 - **Kill** sessions
 - **Detach** clients from sessions
 - **Tree view** — full session/window/pane hierarchy with expand/collapse,
-  multi-word fuzzy filtering across the tree, and per-node live previews
+  multi-word fuzzy filtering across the tree, and per-node live previews;
+  marks the currently-attached window with a `(current)` suffix and
+  singularises the pane count for single-pane windows
 
 ### Window management
 - **Switch** windows with live pane-capture preview
@@ -62,8 +68,12 @@ control-mode connection via
 - **Keybinding** browser — lists all tmux key bindings, filterable
 - **Command** browser — lists all tmux commands, filterable, with contextual
   argument completion for flags, flag values, and positional parameters;
-  preserves `tmux lscm` flag order, keeps repeatable flags available, and uses
-  Tab as the only completion accept key
+  preserves `tmux lscm` flag order, keeps repeatable flags available, uses
+  Tab as the only completion accept key, and offers completion for tmux
+  option names, hook names, and enumerated option values via a built-in
+  catalog covering every documented option, hook, and value with
+  descriptions (`set-option`, `set-window-option`, `set-hook`,
+  `show-options`, etc.)
 
 ### UI
 - Fuzzy-search filtering on every menu level
@@ -73,10 +83,17 @@ control-mode connection via
 - Multi-select with Tab for bulk operations
 - Command prompt help line with tmux command summaries under the input field
 - Command completion popup with ghost hints, aligned flag/parameter
-  descriptions, wraparound navigation, and live tmux-backed value candidates
+  descriptions, wraparound navigation, viewport-sized page up/down scoped
+  to the popup, stable width across scrolling (hard-capped at 50 visible
+  columns so a single long candidate cannot blow the popup across the
+  screen), and live tmux-backed value candidates
+- Thin vertical-line scrollbar column on every long list (main menu,
+  completion popup, session tree), rendered outside row highlighting so
+  selection styling never bleeds into the scrollbar glyph
 - Alt-screen with mouse cell-motion support
 - Hybrid progress bar with gradient blocks and background fill for
-  save/restore operations
+  save/restore operations, smoothed at ~60 fps via a lerped display value
+  so bursts of restore events do not look jerky
 - Non-selectable header items for menu section grouping
 
 ## Not yet implemented
