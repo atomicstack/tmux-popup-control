@@ -101,6 +101,58 @@ func TestRunCommandReturnsOutputOnSuccess(t *testing.T) {
 	}
 }
 
+func TestRunCommandShowOptionsEmptyOutputSynthesizesPlaceholder(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	runCommandOutputFn = func(string, ...string) ([]byte, error) {
+		return []byte(""), nil
+	}
+
+	cases := []struct {
+		command string
+		want    string
+	}{
+		{"show-options -g mouse", "[option mouse has no value]"},
+		{"show-window-options -g main-pane-width", "[option main-pane-width has no value]"},
+		{"show-options -gq status-left", "[option status-left has no value]"},
+		{"show -g mouse", "[option mouse has no value]"},
+		{"show-hooks -g pane-focus-in", "[hook pane-focus-in has no value]"},
+	}
+	for _, tc := range cases {
+		cmd := RunCommand("/tmp/test.sock", tc.command)
+		msg := cmd()
+		result, ok := msg.(ActionResult)
+		if !ok {
+			t.Fatalf("%s: expected ActionResult, got %T", tc.command, msg)
+		}
+		if result.Err != nil {
+			t.Fatalf("%s: unexpected error: %v", tc.command, result.Err)
+		}
+		if result.Output != tc.want {
+			t.Errorf("%s: expected Output %q, got %q", tc.command, tc.want, result.Output)
+		}
+	}
+}
+
+func TestRunCommandShowOptionsListAllStaysEmpty(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	runCommandOutputFn = func(string, ...string) ([]byte, error) {
+		return []byte(""), nil
+	}
+
+	// With no option positional, show-options is a full list — empty output
+	// is unexpected but should not synthesize an option-name placeholder.
+	cmd := RunCommand("/tmp/test.sock", "show-options -g")
+	msg := cmd()
+	result := msg.(ActionResult)
+	if result.Output != "" {
+		t.Errorf("expected empty Output for bare show-options, got %q", result.Output)
+	}
+}
+
 func TestRunCommandEmptyReturnsError(t *testing.T) {
 	cmd := RunCommand("/tmp/test.sock", "")
 	if cmd == nil {

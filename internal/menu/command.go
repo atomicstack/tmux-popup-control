@@ -80,7 +80,52 @@ func RunCommand(socketPath, command string) tea.Cmd {
 		result := ActionResult{Info: fmt.Sprintf("Ran: %s", command)}
 		if output := strings.TrimRight(string(out), "\r\n"); strings.TrimSpace(output) != "" {
 			result.Output = output
+		} else if placeholder := showOptionEmptyPlaceholder(args); placeholder != "" {
+			result.Output = placeholder
 		}
 		return result
 	}
+}
+
+// showOptionEmptyPlaceholder returns a human-readable placeholder for empty
+// output from a `show-options`, `show-window-options`, or `show-hooks`
+// invocation that queried a single option/hook name. Returns "" when the
+// command is not a show-options variant or no single-target name was given.
+func showOptionEmptyPlaceholder(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	var kind string
+	switch args[0] {
+	case "show-options", "show", "show-window-options", "showw":
+		kind = "option"
+	case "show-hooks":
+		kind = "hook"
+	default:
+		return ""
+	}
+	target := showOptionPositional(args[1:])
+	if target == "" {
+		return ""
+	}
+	return fmt.Sprintf("[%s %s has no value]", kind, target)
+}
+
+// showOptionPositional walks the argument list for a `show-*` command and
+// returns the first positional (the option or hook name), skipping bool-flag
+// clusters and the `-t target` arg flag. Returns "" when no positional exists.
+func showOptionPositional(args []string) string {
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if strings.HasPrefix(tok, "-") && len(tok) >= 2 {
+			// Bool-flag cluster ending in `t` consumes the next token as
+			// the target value (e.g. `-gqt main` or `-t main`).
+			if strings.HasSuffix(tok, "t") {
+				i++
+			}
+			continue
+		}
+		return tok
+	}
+	return ""
 }
