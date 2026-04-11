@@ -46,6 +46,9 @@ opt() { echo "${TMUX_OPTS["tmux-popup-control-$1"]}"; }
 [[ -z "$TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER" ]] && TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER="$(opt key-pane-switcher)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER" ]] && TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER='f'
 
+[[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_SWITCHER" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_SWITCHER="$(opt key-window-switcher)"
+[[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_SWITCHER" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_SWITCHER='w'
+
 [[ -z "$TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE" ]] && TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE="$(opt key-pane-capture)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE" ]] && TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE='H'
 
@@ -73,6 +76,7 @@ bind-key -T prefix -N "Launches $BINARY_NAME via $LAUNCH_SCRIPT" "$TMUX_POPUP_CO
 bind-key -T prefix -N "Launches $BINARY_NAME's command menu" "$TMUX_POPUP_CONTROL_KEY_COMMAND_MENU" run-shell -b "$LAUNCH_SCRIPT --root-menu=command"
 bind-key -T prefix -N "Launches $BINARY_NAME's session tree" "$TMUX_POPUP_CONTROL_KEY_SESSION_TREE" run-shell -b "$LAUNCH_SCRIPT --root-menu session:tree"
 bind-key -T prefix -N "Launches $BINARY_NAME's pane switcher" "$TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER" run-shell -b "$LAUNCH_SCRIPT --root-menu pane:switch"
+bind-key -T prefix -N "Launches $BINARY_NAME's window switcher" "$TMUX_POPUP_CONTROL_KEY_WINDOW_SWITCHER" run-shell -b "$LAUNCH_SCRIPT --root-menu window:switch"
 bind-key -T prefix -N "Captures pane to file via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE" run-shell -b "$LAUNCH_SCRIPT --root-menu pane:capture"
 bind-key -T prefix -N "Saves sessions via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_SESSION_SAVE" run-shell -b "$LAUNCH_SCRIPT --root-menu session:save"
 bind-key -T prefix -N "Restores sessions from a snapshot via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_SESSION_RESTORE_FROM" run-shell -b "$LAUNCH_SCRIPT --root-menu session:restore-from"
