@@ -809,7 +809,7 @@ var Commands = map[string]CommandHelp{
 		},
 	},
 	"set-option": {
-		Summary: "set a session, window, pane, or server option",
+		Summary: "set a server, session, window, pane, or user option",
 		Args: []ArgHelp{
 			{Name: "-a", Description: "append value"},
 			{Name: "-F", Description: "expand value as format"},
@@ -875,7 +875,7 @@ var Commands = map[string]CommandHelp{
 		},
 	},
 	"show-options": {
-		Summary: "show options",
+		Summary: "show server, session, window, pane, or user options",
 		Args: []ArgHelp{
 			{Name: "-A", Description: "include inherited values"},
 			{Name: "-g", Description: "use global scope"},

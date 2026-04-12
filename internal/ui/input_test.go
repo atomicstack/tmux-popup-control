@@ -202,6 +202,70 @@ func TestOptionFilterSpanCursorAtEnd(t *testing.T) {
 	}
 }
 
+func TestDecorateScopeSummary(t *testing.T) {
+	summary := "set a server, session, window, pane, or user option"
+	result := decorateScopeSummary(summary, nil)
+	if result == "" {
+		t.Fatal("expected decorated summary")
+	}
+	stripped := ansi.Strip(result)
+	if stripped != summary {
+		t.Fatalf("stripped decorated summary should match original, got %q", stripped)
+	}
+	if result == summary {
+		t.Fatal("expected ANSI escapes in decorated summary")
+	}
+}
+
+func TestDecorateScopeSummaryNoScopes(t *testing.T) {
+	result := decorateScopeSummary("display a message", nil)
+	if result != "" {
+		t.Fatal("expected empty result for summary without scope words")
+	}
+}
+
+func TestSetOptionSummaryText(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+	current := newLevel("command", "command", []menu.Item{
+		{ID: "set-option", Label: "set-option [-aFgoqpsUuw] [-t target-pane] option [value]"},
+	}, node)
+	current.SetFilter("set-option ", len([]rune("set-option ")))
+	m.stack = []*level{current}
+
+	got := m.currentCommandSummary()
+	if !strings.Contains(got, "user") {
+		t.Fatalf("expected 'user' in set-option summary, got %q", got)
+	}
+	if !strings.HasPrefix(got, "set a server,") {
+		t.Fatalf("expected summary to start with 'set a server,', got %q", got)
+	}
+}
+
+func TestShowOptionsSummaryText(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+	current := newLevel("command", "command", []menu.Item{
+		{ID: "show-options", Label: "show-options [-AgHpqsvw] [-t target-pane] [option]"},
+	}, node)
+	current.SetFilter("show-options ", len([]rune("show-options ")))
+	m.stack = []*level{current}
+
+	got := m.currentCommandSummary()
+	if !strings.Contains(got, "user") {
+		t.Fatalf("expected 'user' in show-options summary, got %q", got)
+	}
+	if !strings.HasPrefix(got, "show server,") {
+		t.Fatalf("expected summary to start with 'show server,', got %q", got)
+	}
+}
+
 func TestTriggerCompletionIncludesFlagDescriptions(t *testing.T) {
 	m := NewModel(ModelConfig{})
 	node, ok := m.registry.Find("command")

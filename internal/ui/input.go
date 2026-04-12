@@ -370,6 +370,52 @@ func (m *Model) currentCommandSummary() string {
 	return help.Summary
 }
 
+var scopeWords = map[string]OptionScope{
+	"server":   ScopeServer,
+	"servers":  ScopeServer,
+	"session":  ScopeSession,
+	"sessions": ScopeSession,
+	"window":   ScopeWindow,
+	"windows":  ScopeWindow,
+	"pane":     ScopePane,
+	"panes":    ScopePane,
+	"user":     ScopeUser,
+	"users":    ScopeUser,
+}
+
+func decorateScopeSummary(summary string, baseStyle *lipgloss.Style) string {
+	words := strings.Fields(summary)
+	var parts []string
+	decorated := false
+	for _, w := range words {
+		bare := strings.TrimRight(w, ",")
+		if scope, ok := scopeWords[bare]; ok {
+			if ss := scopeStyleFor(scope); ss != nil {
+				coloured := ss.Render(bare)
+				if bare != w {
+					coloured += w[len(bare):]
+				}
+				if baseStyle != nil {
+					parts = append(parts, baseStyle.Render("")+coloured)
+				} else {
+					parts = append(parts, coloured)
+				}
+				decorated = true
+				continue
+			}
+		}
+		if baseStyle != nil {
+			parts = append(parts, baseStyle.Render(w))
+		} else {
+			parts = append(parts, w)
+		}
+	}
+	if !decorated {
+		return ""
+	}
+	return strings.Join(parts, " ")
+}
+
 func (m *Model) lookupCommandHelp(name string) (cmdhelp.CommandHelp, bool) {
 	if m == nil || m.commandHelp == nil || name == "" {
 		return cmdhelp.CommandHelp{}, false

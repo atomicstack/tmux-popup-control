@@ -434,7 +434,11 @@ func (m *Model) renderBottomBarLines() []styledLine {
 			fallback := lipgloss.NewStyle().Faint(true)
 			summaryStyle = &fallback
 		}
-		lines = append(lines, styledLine{text: summary, style: summaryStyle})
+		if decorated := decorateScopeSummary(summary, summaryStyle); decorated != "" {
+			lines = append(lines, styledLine{text: decorated, raw: true})
+		} else {
+			lines = append(lines, styledLine{text: summary, style: summaryStyle})
+		}
 	}
 	return applyWidth(lines, m.width)
 }
