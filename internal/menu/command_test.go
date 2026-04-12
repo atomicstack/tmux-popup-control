@@ -135,7 +135,7 @@ func TestRunCommandShowOptionsEmptyOutputSynthesizesPlaceholder(t *testing.T) {
 	}
 }
 
-func TestRunCommandShowOptionsListAllStaysEmpty(t *testing.T) {
+func TestRunCommandShowOptionsEmptyScopeSynthesizesPlaceholder(t *testing.T) {
 	restore := runCommandOutputFn
 	t.Cleanup(func() { runCommandOutputFn = restore })
 
@@ -143,9 +143,39 @@ func TestRunCommandShowOptionsListAllStaysEmpty(t *testing.T) {
 		return []byte(""), nil
 	}
 
-	// With no option positional, show-options is a full list — empty output
-	// is unexpected but should not synthesize an option-name placeholder.
-	cmd := RunCommand("/tmp/test.sock", "show-options -g")
+	cases := []struct {
+		command string
+		want    string
+	}{
+		{"show-options -g", "[no options found in scope -g]"},
+		{"show-options -s", "[no options found in scope -s]"},
+		{"show-options -w", "[no options found in scope -w]"},
+		{"show-options -p", "[no options found in scope -p]"},
+		{"show-options -gq", "[no options found in scope -g]"},
+		{"show-window-options -g", "[no options found in scope -g]"},
+		{"show-hooks -g", "[no hooks found in scope -g]"},
+	}
+	for _, tc := range cases {
+		cmd := RunCommand("/tmp/test.sock", tc.command)
+		msg := cmd()
+		result := msg.(ActionResult)
+		if result.Output != tc.want {
+			t.Errorf("%s: expected %q, got %q", tc.command, tc.want, result.Output)
+		}
+	}
+}
+
+func TestRunCommandShowOptionsNoScopeStaysEmpty(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	runCommandOutputFn = func(string, ...string) ([]byte, error) {
+		return []byte(""), nil
+	}
+
+	// Without a scope flag the query targets the current context; an
+	// unexpected empty result is not actionable information to surface.
+	cmd := RunCommand("/tmp/test.sock", "show-options")
 	msg := cmd()
 	result := msg.(ActionResult)
 	if result.Output != "" {

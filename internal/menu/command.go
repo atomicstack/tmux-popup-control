@@ -89,8 +89,13 @@ func RunCommand(socketPath, command string) tea.Cmd {
 
 // showOptionEmptyPlaceholder returns a human-readable placeholder for empty
 // output from a `show-options`, `show-window-options`, or `show-hooks`
-// invocation that queried a single option/hook name. Returns "" when the
-// command is not a show-options variant or no single-target name was given.
+// invocation. It distinguishes three cases:
+//
+//   - a single option/hook name was queried → "[option name has no value]"
+//   - a scope flag (-g/-s/-w/-p) was given without a name → "[no options
+//     found in scope -g]"
+//   - no positional and no scope flag → empty string (the popup stays hidden
+//     because an unexpected-empty result is not actionable here)
 func showOptionEmptyPlaceholder(args []string) string {
 	if len(args) == 0 {
 		return ""
@@ -105,10 +110,13 @@ func showOptionEmptyPlaceholder(args []string) string {
 		return ""
 	}
 	target := showOptionPositional(args[1:])
-	if target == "" {
-		return ""
+	if target != "" {
+		return fmt.Sprintf("[%s %s has no value]", kind, target)
 	}
-	return fmt.Sprintf("[%s %s has no value]", kind, target)
+	if scope := showOptionScopeFlag(args[1:]); scope != "" {
+		return fmt.Sprintf("[no %ss found in scope %s]", kind, scope)
+	}
+	return ""
 }
 
 // showOptionPositional walks the argument list for a `show-*` command and
@@ -126,6 +134,25 @@ func showOptionPositional(args []string) string {
 			continue
 		}
 		return tok
+	}
+	return ""
+}
+
+// showOptionScopeFlag returns the first scope flag encountered in args —
+// one of "-g", "-s", "-w", "-p" — or "" if none are present. Scope letters
+// can appear inside a cluster (e.g. "-gq" → "-g"); only the first match is
+// reported to keep the placeholder message simple.
+func showOptionScopeFlag(args []string) string {
+	for _, tok := range args {
+		if !strings.HasPrefix(tok, "-") || len(tok) < 2 || tok == "--" {
+			continue
+		}
+		for _, r := range tok[1:] {
+			switch r {
+			case 'g', 's', 'w', 'p':
+				return "-" + string(r)
+			}
+		}
 	}
 	return ""
 }
