@@ -131,6 +131,7 @@ type fakeClient struct {
 	}
 	splitWindowErr error
 	globalOptionFn func(key string) (string, error)
+	optionsFn      func(target, level string) ([]*gotmux.Option, error)
 
 	// Display and format queries.
 	displayMessageFn        func(target, format string) (string, error)
@@ -304,6 +305,13 @@ func (f *fakeClient) GlobalOption(key string) (string, error) {
 		return f.globalOptionFn(key)
 	}
 	return "", nil
+}
+
+func (f *fakeClient) Options(target, level string) ([]*gotmux.Option, error) {
+	if f.optionsFn != nil {
+		return f.optionsFn(target, level)
+	}
+	return nil, nil
 }
 
 // Display and format queries.

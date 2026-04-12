@@ -163,6 +163,7 @@ type tmuxClient interface {
 	SplitWindow(target string, op *gotmux.SplitWindowOptions) error
 	// Option queries (control-mode).
 	GlobalOption(key string) (string, error)
+	Options(target, level string) ([]*gotmux.Option, error)
 	// Display and custom-format queries (control-mode).
 	DisplayMessage(target, format string) (string, error)
 	ListSessionsFormat(format string) ([]string, error)

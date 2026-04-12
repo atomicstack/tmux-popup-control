@@ -193,6 +193,13 @@ func (c *tracedTmuxClient) GlobalOption(key string) (string, error) {
 	})
 }
 
+func (c *tracedTmuxClient) Options(target, level string) ([]*gotmux.Option, error) {
+	attrs := mergeTracingAttrs(c.baseAttrs(), map[string]any{"level": level, "target": target})
+	return traceValue("tmux.control", "options", target, attrs, func() ([]*gotmux.Option, error) {
+		return c.inner.Options(target, level)
+	})
+}
+
 func (c *tracedTmuxClient) DisplayMessage(target, format string) (string, error) {
 	return traceValue("tmux.control", "display_message", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{"format": format}), func() (string, error) {
 		return c.inner.DisplayMessage(target, format)

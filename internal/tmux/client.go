@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -123,6 +124,41 @@ func ClientSessionInfo(socketPath, clientID string) (session, lastSession string
 		}
 	}
 	return "", ""
+}
+
+// UserOptions returns the sorted set of user-defined option names (those
+// starting with `@`) visible at the server-global scope. It is the live
+// counterpart to the static tmuxopts catalog: the catalog knows every
+// documented option but has no way of listing @-options because they are
+// whatever the user's tmux.conf declares. Duplicates are removed and the
+// result is returned in lexical order so the completion dropdown is stable.
+func UserOptions(socketPath string) ([]string, error) {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return nil, err
+	}
+	opts, err := client.Options("", "-g")
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(opts))
+	names := make([]string, 0, len(opts))
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		key := strings.TrimSpace(opt.Key)
+		if !strings.HasPrefix(key, "@") {
+			continue
+		}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		names = append(names, key)
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 // isValidClientName checks that name looks like a real tmux client
