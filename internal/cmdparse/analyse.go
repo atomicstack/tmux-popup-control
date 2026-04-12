@@ -56,7 +56,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 
 			flag := rune(tok[1])
 
-			if schemaHasArgFlag(schema, flag) {
+			if SchemaHasArgFlag(schema, flag) {
 				// arg flag — consumes next token as its value
 				flagsUsed = append(flagsUsed, flag)
 				i++ // skip the flag token
@@ -94,7 +94,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 		inPositionals = true
 		if isLast {
 			// mid-typing a positional
-			pos := positionalAt(schema, posIndex)
+			pos := PositionalAt(schema, posIndex)
 			if pos != nil {
 				return CompletionContext{
 					Kind:      ContextPositionalValue,
@@ -107,7 +107,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 		}
 
 		// fully typed positional
-		pos := positionalAt(schema, posIndex)
+		pos := PositionalAt(schema, posIndex)
 		if pos != nil && !pos.Variadic {
 			posIndex++
 		}
@@ -121,7 +121,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 		prevTok := tokens[len(tokens)-1]
 		if strings.HasPrefix(prevTok, "-") && len(prevTok) >= 2 {
 			flag := rune(prevTok[1])
-			if schemaHasArgFlag(schema, flag) {
+			if SchemaHasArgFlag(schema, flag) {
 				return CompletionContext{
 					Kind:      ContextFlagValue,
 					ArgType:   schemaArgFlagType(schema, flag),
@@ -141,7 +141,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 	}
 
 	// suggest next positional
-	pos := positionalAt(schema, posIndex)
+	pos := PositionalAt(schema, posIndex)
 	if pos != nil {
 		return CompletionContext{
 			Kind:      ContextPositionalValue,
@@ -153,8 +153,8 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 	return CompletionContext{Kind: ContextNone, FlagsUsed: flagsUsed}
 }
 
-// schemaHasArgFlag reports whether the schema defines flag as an arg-taking flag.
-func schemaHasArgFlag(schema *CommandSchema, flag rune) bool {
+// SchemaHasArgFlag reports whether the schema defines flag as an arg-taking flag.
+func SchemaHasArgFlag(schema *CommandSchema, flag rune) bool {
 	for _, af := range schema.ArgFlags {
 		if af.Short == flag {
 			return true
@@ -189,10 +189,10 @@ func hasUnusedFlags(schema *CommandSchema, used []rune) bool {
 	return false
 }
 
-// positionalAt returns the positional definition at the given index, or nil if
+// PositionalAt returns the positional definition at the given index, or nil if
 // out of range. For variadic positionals, the last one is returned for any
 // index beyond the list.
-func positionalAt(schema *CommandSchema, index int) *PositionalDef {
+func PositionalAt(schema *CommandSchema, index int) *PositionalDef {
 	if len(schema.Positionals) == 0 {
 		return nil
 	}
