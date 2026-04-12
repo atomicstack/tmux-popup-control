@@ -67,6 +67,11 @@ func cloneSessionEntries(entries []menu.SessionEntry) []menu.SessionEntry {
 		return nil
 	}
 	dup := make([]menu.SessionEntry, len(entries))
-	copy(dup, entries)
+	for i, entry := range entries {
+		dup[i] = entry
+		if len(entry.Clients) > 0 {
+			dup[i].Clients = append([]string(nil), entry.Clients...)
+		}
+	}
 	return dup
 }

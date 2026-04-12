@@ -14,7 +14,12 @@ func Format(rows [][]string, alignments []Alignment) []string {
 	if len(rows) == 0 {
 		return nil
 	}
-	colCount := len(rows[0])
+	colCount := 0
+	for _, row := range rows {
+		if len(row) > colCount {
+			colCount = len(row)
+		}
+	}
 	widths := make([]int, colCount)
 	for _, row := range rows {
 		for c, cell := range row {

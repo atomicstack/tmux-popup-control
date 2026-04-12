@@ -49,6 +49,19 @@ var mainDeps = MainDeps{
 	RunAutoSaveCommand:             resurrect.RunAutoSaveCommand,
 }
 
+var (
+	ensureZeroExitOnHangupFn = ensureZeroExitOnHangup
+	loadConfigFn             = config.Load
+	validateConfigFn         = config.Validate
+	configureLoggingFn       = logging.Configure
+	setTraceEnabledFn        = logging.SetTraceEnabled
+	enableSQLiteDebugFn      = logging.EnableSQLiteDebug
+	closeLoggingFn           = logging.Close
+	traceStartupFn           = traceStartup
+	appRunFn                 = app.Run
+	logErrorFn               = logging.Error
+)
+
 type commandHandler struct {
 	ErrorLabel string
 	Run        func(config.Config, MainDeps) error
@@ -63,18 +76,18 @@ func run() (exitCode int) {
 }
 
 func runWithDeps(deps MainDeps) (exitCode int) {
-	ensureZeroExitOnHangup()
+	ensureZeroExitOnHangupFn()
 	var exitStatus = "ok"
 	var exitErr error
 	defer func() {
-		logging.Close(logging.RunResult{
+		closeLoggingFn(logging.RunResult{
 			ExitCode:   exitCode,
 			ExitStatus: exitStatus,
 			Error:      exitErr,
 		})
 	}()
 
-	runtimeCfg, err := config.Load()
+	runtimeCfg, err := loadConfigFn()
 	if errors.Is(err, config.ErrVersionRequested) {
 		fmt.Println(Version)
 		return 0
@@ -85,16 +98,16 @@ func runWithDeps(deps MainDeps) (exitCode int) {
 		exitErr = err
 		return 2
 	}
-	if err := config.Validate(runtimeCfg); err != nil {
+	if err := validateConfigFn(runtimeCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
 		exitStatus = "config_error"
 		exitErr = err
 		return 2
 	}
-	logging.Configure(runtimeCfg.Logging.FilePath)
-	logging.SetTraceEnabled(runtimeCfg.Logging.Trace)
+	configureLoggingFn(runtimeCfg.Logging.FilePath)
+	setTraceEnabledFn(runtimeCfg.Logging.Trace)
 	if runtimeCfg.Logging.DebugToSQLite {
-		if err := logging.EnableSQLiteDebug(buildSQLiteRunInfo(runtimeCfg)); err != nil {
+		if err := enableSQLiteDebugFn(buildSQLiteRunInfo(runtimeCfg)); err != nil {
 			fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
 			exitStatus = "sqlite_debug_error"
 			exitErr = err
@@ -102,7 +115,7 @@ func runWithDeps(deps MainDeps) (exitCode int) {
 		}
 	}
 
-	traceStartup(runtimeCfg)
+	traceStartupFn(runtimeCfg)
 
 	cmd := subcommand(runtimeCfg)
 	if handler, ok := commandHandlers()[cmd]; ok {
@@ -115,8 +128,8 @@ func runWithDeps(deps MainDeps) (exitCode int) {
 		return 0
 	}
 
-	if err := app.Run(runtimeCfg.App); err != nil {
-		logging.Error(err)
+	if err := appRunFn(runtimeCfg.App); err != nil {
+		logErrorFn(err)
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		exitStatus = "error"
 		exitErr = err

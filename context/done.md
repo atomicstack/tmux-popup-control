@@ -2,6 +2,11 @@
 
 Here’s what’s happened so far:
 
+- Test-overhaul follow-up (uncommitted on `codex-test-overhaul-2026-04-12`):
+  - strengthened weak assertions in `internal/cmdhelp` and `internal/tmuxopts`
+  - added direct unit coverage for `internal/app`, `internal/backend`, `internal/data/dispatcher`, `internal/format/table`, `internal/shquote`, `internal/state`, `internal/ui/command`, and extra `main.go` startup paths
+  - fixed two test-exposed issues: `internal/format/table.Format` no longer panics on ragged rows, and `state.SessionStore` now deep-clones nested client slices
+
 - Command argument tab completion (completed on `feature/cmd-completion`):
   - Task 14 complete and feature implementation finished.
   - Follow-up user-testing fixes landed after the main feature commit:

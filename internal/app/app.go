@@ -17,6 +17,12 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
+var (
+	resolvePaneContentsFn = resurrect.ResolvePaneContents
+	resolveSaveDirFn      = resurrect.ResolveDir
+	latestSaveFn          = resurrect.LatestSave
+)
+
 // Config describes user-provided application options.
 type Config struct {
 	SocketPath          string
@@ -114,7 +120,7 @@ func colorProfileOverride() (colorprofile.Profile, bool) {
 func buildResurrectStart(cfg Config, socketPath, clientID string) menu.ResurrectStart {
 	rcfg := resurrect.Config{
 		SocketPath:          socketPath,
-		CapturePaneContents: cfg.RestorePaneContents || resurrect.ResolvePaneContents(socketPath),
+		CapturePaneContents: cfg.RestorePaneContents || resolvePaneContentsFn(socketPath),
 		Name:                cfg.ResurrectName,
 		ClientID:            clientID,
 	}
@@ -122,7 +128,7 @@ func buildResurrectStart(cfg Config, socketPath, clientID string) menu.Resurrect
 	if cfg.SessionStorageDir != "" {
 		rcfg.SaveDir = cfg.SessionStorageDir
 	} else {
-		if dir, err := resurrect.ResolveDir(socketPath); err == nil {
+		if dir, err := resolveSaveDirFn(socketPath); err == nil {
 			rcfg.SaveDir = dir
 		}
 	}
@@ -136,7 +142,7 @@ func buildResurrectStart(cfg Config, socketPath, clientID string) menu.Resurrect
 		if cfg.ResurrectFrom != "" {
 			start.SaveFile = cfg.ResurrectFrom
 		} else if dir := rcfg.SaveDir; dir != "" {
-			if path, err := resurrect.LatestSave(dir); err == nil {
+			if path, err := latestSaveFn(dir); err == nil {
 				start.SaveFile = path
 			}
 		}

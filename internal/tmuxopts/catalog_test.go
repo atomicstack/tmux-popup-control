@@ -49,8 +49,7 @@ func TestLookupCanonical(t *testing.T) {
 		t.Errorf("expected name 'status', got %q", opt.Name)
 	}
 	if opt.Type != TypeChoice && opt.Type != TypeFlag {
-		// status is historically a choice; guard against schema drift
-		t.Logf("note: 'status' option type is %q", opt.Type)
+		t.Fatalf("status type drifted to %q", opt.Type)
 	}
 }
 
