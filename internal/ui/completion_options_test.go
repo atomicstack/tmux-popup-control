@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func completionValues(h *Harness) []string {
@@ -224,27 +225,30 @@ func TestPrecedingPositionalWalksFlags(t *testing.T) {
 
 func TestDecorateShowOptionsLineDecoratesColourOption(t *testing.T) {
 	// status-bg is a TypeColour, session-scoped option in the catalog.
-	// The decorated line must carry both the session scope colour on the
-	// name (ANSI 256 index 39) and a red swatch (basic ANSI 31) on the
-	// value.
+	// The decorated line must carry the session scope colour on the name
+	// (ANSI 256 index 39) and the value "red" rendered in ANSI red (31).
 	decorated, ok := decorateShowOptionsLine("status-bg red", nil)
 	if !ok {
 		t.Fatal("expected decoration for 'status-bg red'")
 	}
-	if !strings.Contains(decorated, "█") {
-		t.Errorf("expected swatch in decorated line, got %q", decorated)
+	if strings.Contains(decorated, "█") {
+		t.Errorf("did not expect swatch block, got %q", decorated)
 	}
 	if !strings.Contains(decorated, "\x1b[31m") {
-		t.Errorf("expected ANSI red foreground in decorated line, got %q", decorated)
+		t.Errorf("expected ANSI red foreground on value text, got %q", decorated)
 	}
 	if !strings.Contains(decorated, "\x1b[38;5;39m") {
 		t.Errorf("expected session scope colour on name, got %q", decorated)
 	}
+	stripped := ansi.Strip(decorated)
+	if !strings.Contains(stripped, "red") {
+		t.Errorf("expected 'red' in stripped output, got %q", stripped)
+	}
 }
 
 func TestDecorateShowOptionsLineScopeColoursKnownOption(t *testing.T) {
-	// mouse is a session-scoped TypeFlag; no swatch applies but the name
-	// must still be rendered in the session scope colour.
+	// mouse is a session-scoped TypeFlag; no colour decoration applies
+	// but the name must still be rendered in the session scope colour.
 	decorated, ok := decorateShowOptionsLine("mouse on", nil)
 	if !ok {
 		t.Fatal("expected scope decoration for 'mouse on'")
@@ -253,7 +257,7 @@ func TestDecorateShowOptionsLineScopeColoursKnownOption(t *testing.T) {
 		t.Errorf("expected session scope colour on 'mouse', got %q", decorated)
 	}
 	if strings.Contains(decorated, "█") {
-		t.Errorf("did not expect swatch for non-colour option, got %q", decorated)
+		t.Errorf("did not expect swatch block for non-colour option, got %q", decorated)
 	}
 }
 
@@ -269,9 +273,58 @@ func TestDecorateShowOptionsLineScopeColoursUserOption(t *testing.T) {
 	}
 }
 
+func TestDecorateShowOptionsLineInheritedStarSuffix(t *testing.T) {
+	// show-options -A appends '*' to inherited option names. The decorator
+	// must strip the star for catalog lookup but preserve it in the output.
+	decorated, ok := decorateShowOptionsLine("display-panes-active-colour* red", nil)
+	if !ok {
+		t.Fatal("expected decoration for star-suffixed option")
+	}
+	stripped := ansi.Strip(decorated)
+	if !strings.Contains(stripped, "display-panes-active-colour*") {
+		t.Errorf("expected star preserved in output, got %q", stripped)
+	}
+	if !strings.Contains(decorated, "\x1b[31m") {
+		t.Errorf("expected ANSI red on value, got %q", decorated)
+	}
+}
+
+func TestDecorateShowOptionsLineStyleValue(t *testing.T) {
+	// Style values like "fg=colour33" should have the colour reference
+	// rendered in its own colour even when the option type is not TypeColour.
+	decorated, ok := decorateShowOptionsLine("message-style* fg=colour33", nil)
+	if !ok {
+		t.Fatal("expected decoration for style value with colour reference")
+	}
+	if !strings.Contains(decorated, "\x1b[38;5;33m") {
+		t.Errorf("expected colour33 rendered in ANSI 33, got %q", decorated)
+	}
+	stripped := ansi.Strip(decorated)
+	if !strings.Contains(stripped, "fg=colour33") {
+		t.Errorf("expected 'fg=colour33' in stripped output, got %q", stripped)
+	}
+}
+
+func TestDecorateShowOptionsLineStyleMultipleAttrs(t *testing.T) {
+	decorated, ok := decorateShowOptionsLine("status-style* fg=red,bg=#0000ff,bold", nil)
+	if !ok {
+		t.Fatal("expected decoration for multi-attr style value")
+	}
+	if !strings.Contains(decorated, "\x1b[31m") {
+		t.Errorf("expected ANSI red for fg, got %q", decorated)
+	}
+	if !strings.Contains(decorated, "\x1b[38;2;0;0;255m") {
+		t.Errorf("expected true-colour blue for bg, got %q", decorated)
+	}
+	stripped := ansi.Strip(decorated)
+	if !strings.Contains(stripped, "bold") {
+		t.Errorf("expected 'bold' preserved in stripped output, got %q", stripped)
+	}
+}
+
 func TestDecorateShowOptionsLineSkipsNameWithoutScope(t *testing.T) {
 	// A first token that is neither a catalog option nor @-prefixed has no
-	// scope and no swatch, so decoration should be skipped entirely.
+	// scope and no colour decoration, so decoration should be skipped entirely.
 	if _, ok := decorateShowOptionsLine("not-a-real-option value", nil); ok {
 		t.Fatal("expected no decoration for unknown non-user option name")
 	}

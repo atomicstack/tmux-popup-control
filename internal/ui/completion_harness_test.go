@@ -111,11 +111,10 @@ func TestFilterPromptDoesNotColourNonOptionCommand(t *testing.T) {
 	}
 }
 
-// TestCompletionColourSwatchForBasicNames verifies Phase D: value-completion
-// for a colour-typed option renders a coloured swatch block before each
-// basic colour name. Extended X11 names fall through without a swatch but
-// with padding so rows stay aligned.
-func TestCompletionColourSwatchForBasicNames(t *testing.T) {
+// TestCompletionColourLabelForBasicNames verifies Phase D: value-completion
+// for a colour-typed option renders each basic colour name in its own colour.
+// Extended X11 names fall through undecorated.
+func TestCompletionColourLabelForBasicNames(t *testing.T) {
 	h := setupCommandHarness(t)
 
 	sendKeys(h, "set-option")
@@ -138,21 +137,19 @@ func TestCompletionColourSwatchForBasicNames(t *testing.T) {
 	if redLabel == "" {
 		t.Fatalf("expected red in value candidates")
 	}
-	if !strings.Contains(redLabel, "█") {
-		t.Errorf("expected swatch block in red label, got %q", redLabel)
+	if strings.Contains(redLabel, "█") {
+		t.Errorf("did not expect swatch block in red label, got %q", redLabel)
 	}
-	// Any ANSI escape sequence before the block implies colour was applied.
+	// The label text should be rendered with an ANSI colour escape.
 	if !strings.Contains(redLabel, "\x1b[") {
 		t.Errorf("expected ANSI colour escape in red label, got %q", redLabel)
 	}
 	if aliceLabel == "" {
 		t.Fatalf("expected AliceBlue in value candidates")
 	}
+	// Extended names should be plain, no ANSI and no padding prefix.
 	if strings.Contains(aliceLabel, "█") {
 		t.Errorf("did not expect swatch block for extended name, got %q", aliceLabel)
-	}
-	if !strings.HasPrefix(aliceLabel, "  ") {
-		t.Errorf("expected two-space padding prefix on extended name, got %q", aliceLabel)
 	}
 }
 

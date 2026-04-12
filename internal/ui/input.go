@@ -239,13 +239,9 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	pos = max(pos, 0)
 	pos = min(pos, len(runes))
 
-	spanStart, spanEnd, scope, spanOK := m.currentOptionFilterSpan()
-	var scopeStyle *lipgloss.Style
-	if spanOK {
-		scopeStyle = scopeStyleFor(scope)
-	}
+	spans := m.filterColourSpans()
 
-	before := renderFilterSpan(runes[:pos], 0, spanStart, spanEnd, scopeStyle, render)
+	before := renderFilterSpans(runes[:pos], 0, spans, render)
 	ghost := m.autoCompleteGhost()
 	var caretRune string
 	if pos < len(runes) {
@@ -267,36 +263,61 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	} else {
 		caretRune = " "
 	}
-	if scopeStyle != nil && pos >= spanStart && pos < spanEnd {
-		m.filterCursor.TextStyle = *scopeStyle
+	if s := spanAt(spans, pos); s != nil {
+		m.filterCursor.TextStyle = *s
 	}
 	caret := m.renderFilterCursor(caretRune)
 	var after string
 	if pos+1 < len(runes) {
-		after = renderFilterSpan(runes[pos+1:], pos+1, spanStart, spanEnd, scopeStyle, render)
+		after = renderFilterSpans(runes[pos+1:], pos+1, spans, render)
 	}
 	return prompt + before + caret + after, nil
 }
 
-// renderFilterSpan renders a slice of filter runes, colouring any portion
-// that falls within the scope-coloured option span [spanStart, spanEnd).
-// offset is the position of runes[0] in the full filter text.
-func renderFilterSpan(runes []rune, offset int, spanStart, spanEnd int, scopeStyle *lipgloss.Style, render func(*lipgloss.Style, string) string) string {
-	if scopeStyle == nil || len(runes) == 0 {
-		return render(styles.Filter, string(runes))
+// filterSpan is a coloured region [Start, End) within the full filter text.
+type filterSpan struct {
+	Start, End int
+	Style      lipgloss.Style
+}
+
+// spanAt returns the style for the span covering rune position pos, or nil.
+func spanAt(spans []filterSpan, pos int) *lipgloss.Style {
+	for i := range spans {
+		if pos >= spans[i].Start && pos < spans[i].End {
+			return &spans[i].Style
+		}
 	}
-	lo := max(spanStart-offset, 0)
-	hi := min(spanEnd-offset, len(runes))
-	if lo >= hi {
+	return nil
+}
+
+// renderFilterSpans renders a slice of filter runes, colouring portions that
+// fall within any of the provided spans. offset is the position of runes[0]
+// in the full filter text.
+func renderFilterSpans(runes []rune, offset int, spans []filterSpan, render func(*lipgloss.Style, string) string) string {
+	if len(spans) == 0 || len(runes) == 0 {
 		return render(styles.Filter, string(runes))
 	}
 	var result string
-	if lo > 0 {
-		result += render(styles.Filter, string(runes[:lo]))
-	}
-	result += scopeStyle.Render(string(runes[lo:hi]))
-	if hi < len(runes) {
-		result += render(styles.Filter, string(runes[hi:]))
+	i := 0
+	for i < len(runes) {
+		absPos := offset + i
+		if s := spanAt(spans, absPos); s != nil {
+			// find contiguous run inside this span
+			j := i + 1
+			for j < len(runes) && spanAt(spans, offset+j) == s {
+				j++
+			}
+			result += s.Render(string(runes[i:j]))
+			i = j
+		} else {
+			// find contiguous run outside all spans
+			j := i + 1
+			for j < len(runes) && spanAt(spans, offset+j) == nil {
+				j++
+			}
+			result += render(styles.Filter, string(runes[i:j]))
+			i = j
+		}
 	}
 	return result
 }

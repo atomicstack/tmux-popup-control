@@ -172,8 +172,8 @@ func (m *Model) currentOptionFilterSpan() (start, end int, scope OptionScope, ok
 		return 0, 0, "", false
 	}
 
-	optToken, tokenByteStart := findOptionToken(schema, current.Filter, isOpt, isHook)
-	if optToken == "" {
+	ft := findFilterTokens(schema, current.Filter, isOpt, isHook)
+	if ft.Option == "" {
 		return 0, 0, "", false
 	}
 
@@ -192,28 +192,101 @@ func (m *Model) currentOptionFilterSpan() (start, end int, scope OptionScope, ok
 	if sc == "" {
 		catalog, err := tmuxopts.Default()
 		if err == nil && catalog != nil {
-			sc = primaryScope(catalog, optToken)
+			sc = primaryScope(catalog, ft.Option)
 		}
 	}
 	if sc == "" {
 		return 0, 0, "", false
 	}
-	runeStart := len([]rune(current.Filter[:tokenByteStart]))
-	runeEnd := runeStart + len([]rune(optToken))
+	runeStart := len([]rune(current.Filter[:ft.OptionByte]))
+	runeEnd := runeStart + len([]rune(ft.Option))
 	return runeStart, runeEnd, sc, true
 }
 
-// findOptionToken walks the filter tokens to locate the positional that
-// corresponds to an "option" or "hook" argument in the command schema.
-// It returns the token text and its byte offset in the filter string.
-func findOptionToken(schema *cmdparse.CommandSchema, filter string, isOpt, isHook bool) (token string, byteOffset int) {
+// filterColourSpans returns the set of coloured spans to apply in the filter
+// prompt: the option name in its scope colour, and (when applicable) the
+// value token rendered in its own colour for colour-typed options.
+func (m *Model) filterColourSpans() []filterSpan {
+	current := m.currentLevel()
+	if current == nil || current.Node == nil || !current.Node.FilterCommand {
+		return nil
+	}
+	if m.commandSchemas == nil {
+		return nil
+	}
+	schema := m.lookupCommandSchema(current.Filter)
+	if schema == nil {
+		return nil
+	}
+	isOpt := commandsCompletingOptions[schema.Name]
+	isHook := commandsCompletingHooks[schema.Name]
+	if !isOpt && !isHook {
+		return nil
+	}
+
+	ft := findFilterTokens(schema, current.Filter, isOpt, isHook)
+	if ft.Option == "" {
+		return nil
+	}
+
+	var spans []filterSpan
+
+	// option name span — scope colour
+	var sc OptionScope
+	if m.completion != nil && m.completion.visible && len(m.completion.filtered) > 0 {
+		idx := m.completion.cursor
+		if idx >= 0 && idx < len(m.completion.filtered) {
+			sc = m.completion.filtered[idx].Scope
+		}
+	}
+	if sc == "" {
+		catalog, err := tmuxopts.Default()
+		if err == nil && catalog != nil {
+			sc = primaryScope(catalog, ft.Option)
+		}
+	}
+	if ss := scopeStyleFor(sc); ss != nil {
+		runeStart := len([]rune(current.Filter[:ft.OptionByte]))
+		spans = append(spans, filterSpan{
+			Start: runeStart,
+			End:   runeStart + len([]rune(ft.Option)),
+			Style: *ss,
+		})
+	}
+
+	// value span — render in the colour the value represents
+	if ft.Value != "" && commandsCompletingOptionValues[schema.Name] {
+		if spec, ok := colourSpecForName(ft.Value); ok {
+			runeStart := len([]rune(current.Filter[:ft.ValueByte]))
+			spans = append(spans, filterSpan{
+				Start: runeStart,
+				End:   runeStart + len([]rune(ft.Value)),
+				Style: lipgloss.NewStyle().Foreground(lipgloss.Color(spec)),
+			})
+		}
+	}
+
+	return spans
+}
+
+// filterTokens holds the option and value tokens found in the filter text.
+type filterTokens struct {
+	Option     string
+	OptionByte int
+	Value      string
+	ValueByte  int
+}
+
+// findFilterTokens walks the filter tokens to locate the positionals that
+// correspond to "option"/"hook" and "value" arguments in the command schema.
+func findFilterTokens(schema *cmdparse.CommandSchema, filter string, isOpt, isHook bool) filterTokens {
 	tokens := strings.Fields(filter)
 	if len(tokens) < 2 {
-		return "", 0
+		return filterTokens{}
 	}
 
 	offsets := tokenByteOffsets(filter, tokens)
-
+	var result filterTokens
 	posIndex := 0
 	i := 1
 	for i < len(tokens) {
@@ -230,7 +303,12 @@ func findOptionToken(schema *cmdparse.CommandSchema, filter string, isOpt, isHoo
 
 		pos := cmdparse.PositionalAt(schema, posIndex)
 		if pos != nil && ((isOpt && pos.Name == "option") || (isHook && pos.Name == "hook")) {
-			return tok, offsets[i]
+			result.Option = tok
+			result.OptionByte = offsets[i]
+		} else if pos != nil && pos.Name == "value" && result.Option != "" {
+			result.Value = tok
+			result.ValueByte = offsets[i]
+			return result
 		}
 
 		if pos != nil && !pos.Variadic {
@@ -238,7 +316,7 @@ func findOptionToken(schema *cmdparse.CommandSchema, filter string, isOpt, isHoo
 		}
 		i++
 	}
-	return "", 0
+	return result
 }
 
 func tokenByteOffsets(s string, tokens []string) []int {
@@ -259,12 +337,12 @@ func tokenByteOffsets(s string, tokens []string) []int {
 // the form "optionName value" so it renders in keeping with the completion
 // dropdown's colour cues. The option name is rendered in its scope colour
 // when the name resolves to a known catalog entry or starts with "@" (user
-// option); additionally, a coloured swatch is prepended to the value when
-// the option is TypeColour and the value resolves to a renderable lipgloss
-// colour. The returned text contains ANSI escapes. ok is false when the
-// line is malformed (no space) or has no applicable decoration. bodyStyle —
-// when non-nil — wraps the undecorated text so decorated and undecorated
-// spans share consistent foreground/background.
+// option); additionally, when the option is TypeColour and the value
+// resolves to a renderable lipgloss colour, the value text itself is
+// rendered in that colour. The returned text contains ANSI escapes. ok is
+// false when the line is malformed (no space) or has no applicable
+// decoration. bodyStyle — when non-nil — wraps the undecorated text so
+// decorated and undecorated spans share consistent foreground/background.
 func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bool) {
 	sp := strings.IndexByte(line, ' ')
 	if sp <= 0 {
@@ -274,24 +352,35 @@ func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bo
 	rest := line[sp:] // leading space preserved
 	value := strings.TrimSpace(rest)
 
+	// Strip the trailing '*' that tmux appends for inherited values in
+	// show-options -A output before looking up the catalog entry.
+	lookupName := strings.TrimRight(name, "*")
+
 	catalog, err := tmuxopts.Default()
 	if err != nil || catalog == nil {
 		return "", false
 	}
 
-	scope := primaryScope(catalog, name)
+	scope := primaryScope(catalog, lookupName)
 	scopeStyle := scopeStyleFor(scope)
 
-	var swatch string
+	var valueRendered string
 	if value != "" {
-		if opt, _ := catalog.Lookup(name); opt != nil && opt.Type == tmuxopts.TypeColour {
+		opt, _ := catalog.Lookup(lookupName)
+		if opt != nil && opt.Type == tmuxopts.TypeColour {
+			// Bare colour value — render the whole value in its colour.
 			if spec, ok := colourSpecForName(value); ok {
-				swatch = lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render("█")
+				valueRendered = lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(value)
 			}
+		}
+		if valueRendered == "" {
+			// Try to colour inline colour references in style attributes
+			// (e.g. "fg=colour33", "bg=red,bold").
+			valueRendered = decorateStyleValue(value, bodyStyle)
 		}
 	}
 
-	if scopeStyle == nil && swatch == "" {
+	if scopeStyle == nil && valueRendered == "" {
 		return "", false
 	}
 
@@ -307,24 +396,59 @@ func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bo
 		nameRendered = scopeStyle.Render(name)
 	}
 
-	if swatch != "" {
-		return nameRendered + renderBody(" ") + swatch + renderBody(" "+value), true
+	if valueRendered != "" {
+		return nameRendered + renderBody(" ") + valueRendered, true
 	}
 	return nameRendered + renderBody(rest), true
 }
 
-// decorateColourLabel prepends a coloured swatch block to a colour value's
-// display label when the colour can be resolved by lipgloss. When the colour
-// name is an X11 extended name or otherwise unresolvable, a blank padding
-// space is prepended so rows still align visually. The swatch is two cells
-// wide ("█ ") to leave comfortable breathing room before the name.
+// decorateStyleValue colours inline colour references in tmux style values
+// like "fg=colour33", "bg=red,bold", "fg=#ff00ff,bg=blue". Each comma-
+// separated attribute is checked; those of the form key=colourValue have
+// the colour portion rendered in its own colour. Returns "" when no colour
+// references were found.
+func decorateStyleValue(value string, bodyStyle *lipgloss.Style) string {
+	renderBody := func(text string) string {
+		if bodyStyle == nil {
+			return text
+		}
+		return bodyStyle.Render(text)
+	}
+
+	attrs := strings.Split(value, ",")
+	any := false
+	var parts []string
+	for _, attr := range attrs {
+		if eq := strings.IndexByte(attr, '='); eq >= 0 {
+			key := attr[:eq]
+			colourName := attr[eq+1:]
+			if (key == "fg" || key == "bg") && colourName != "" {
+				if spec, ok := colourSpecForName(colourName); ok {
+					coloured := lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(colourName)
+					parts = append(parts, renderBody(key+"=")+coloured)
+					any = true
+					continue
+				}
+			}
+		}
+		parts = append(parts, renderBody(attr))
+	}
+	if !any {
+		return ""
+	}
+	return strings.Join(parts, renderBody(","))
+}
+
+// decorateColourLabel renders a colour value's display label in the colour
+// it represents when the colour can be resolved by lipgloss. When the colour
+// name is an X11 extended name or otherwise unresolvable, the label is
+// returned unchanged.
 func decorateColourLabel(label, value string) string {
 	spec, ok := colourSpecForName(value)
 	if !ok {
-		return "  " + label
+		return label
 	}
-	swatch := lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render("█")
-	return swatch + " " + label
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(label)
 }
 
 // colourSpecForName returns a lipgloss.Color-compatible spec for the given
@@ -332,14 +456,14 @@ func decorateColourLabel(label, value string) string {
 // an external name table:
 //
 //   - The 18 basic tmux names (black/red/…/white, bright variants, default,
-//     terminal) map to ANSI indices. "default" and "terminal" are treated
-//     as "no swatch" since they have no intrinsic colour.
+//     terminal) map to ANSI indices. "default" and "terminal" have no
+//     intrinsic colour and return ok=false.
 //   - "colourN" / "colorN" forms map to ANSI index N (0..255).
 //   - "#RRGGBB" / "#RGB" pass through unchanged.
 //
 // Extended X11 colour names (AliceBlue, cornflower blue, …) are NOT
 // supported here because lipgloss does not ship an X11 name table; callers
-// should present those without a swatch rather than mis-rendering them.
+// should present those without colour decoration rather than mis-rendering them.
 func colourSpecForName(name string) (string, bool) {
 	if name == "" {
 		return "", false
@@ -367,7 +491,7 @@ func colourSpecForName(name string) (string, bool) {
 
 // basicColourIndices maps the 18 tmux basic colour names to their ANSI
 // palette indices. "default" and "terminal" resolve to -1 to indicate
-// "no intrinsic swatch colour".
+// "no intrinsic colour".
 var basicColourIndices = map[string]int{
 	"default":       -1,
 	"terminal":      -1,
