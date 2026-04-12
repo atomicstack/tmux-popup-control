@@ -12,16 +12,30 @@ const (
 	completionMaxContentWidth = 50 // hard cap on popup content width, regardless of terminal size
 )
 
+// OptionScope categorises a tmux option by its primary scope. Blank means
+// "unknown/not an option" and suppresses scope-specific styling.
+type OptionScope string
+
+const (
+	ScopeServer  OptionScope = "server"
+	ScopeSession OptionScope = "session"
+	ScopeWindow  OptionScope = "window"
+	ScopePane    OptionScope = "pane"
+	ScopeUser    OptionScope = "user"
+)
+
 type completionItem struct {
 	Value       string
 	Label       string
 	Description string
+	Scope       OptionScope
 }
 
 type CompletionOptions struct {
 	Items        []string
 	Labels       map[string]string
 	Descriptions map[string]string
+	Scopes       map[string]OptionScope
 	ArgType      string
 	TypeLabel    string
 	Prefix       string
@@ -51,10 +65,15 @@ func newCompletionState(opts CompletionOptions) *completionState {
 		if opts.Descriptions != nil {
 			description = opts.Descriptions[item]
 		}
+		var scope OptionScope
+		if opts.Scopes != nil {
+			scope = opts.Scopes[item]
+		}
 		detailedItems = append(detailedItems, completionItem{
 			Value:       item,
 			Label:       label,
 			Description: description,
+			Scope:       scope,
 		})
 	}
 	return newCompletionStateWithItems(detailedItems, opts.ArgType, opts.TypeLabel, opts.AnchorCol)
@@ -129,11 +148,7 @@ func (cs *completionState) moveUp() {
 // sized to the visible viewport of the dropdown — the same completionMaxVisible
 // constant used when rendering — clamped to at least 1.
 func (cs *completionState) pageStep() int {
-	step := completionMaxVisible
-	if step < 1 {
-		step = 1
-	}
-	return step
+	return max(completionMaxVisible, 1)
 }
 
 // movePageDown advances the cursor by one viewport, clamping at the last item.
@@ -299,23 +314,43 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 		if pad := leftWidth - lipgloss.Width(label); pad > 0 {
 			label += strings.Repeat(" ", pad)
 		}
-		content := label
+		isSelected := start+idx == cs.cursor
+		segStyle := itemStyle
+		if isSelected {
+			segStyle = selectedStyle
+		}
+
+		// Compose the scope foreground over the segment background so the
+		// selected row keeps its scope colour instead of being repainted in
+		// the segment's own foreground.
+		labelStyle := *segStyle
+		if scopeStyle := scopeStyleFor(item.Scope); scopeStyle != nil {
+			composed := *scopeStyle
+			labelStyle = composed.Inherit(*segStyle)
+		}
+
+		description := ""
+		if hasDescriptions && rightWidth > 0 && item.Description != "" {
+			description = ansi.Truncate(item.Description, rightWidth, "…")
+		}
+		rawContent := label
 		if hasDescriptions && rightWidth > 0 {
-			description := ""
-			if item.Description != "" {
-				description = ansi.Truncate(item.Description, rightWidth, "…")
-			}
-			content += "  " + description
+			rawContent += "  " + description
 		}
-		if pad := contentWidth - lipgloss.Width(content); pad > 0 {
-			content += strings.Repeat(" ", pad)
+		padCount := max(contentWidth-lipgloss.Width(rawContent), 0)
+
+		// Render each segment independently so an inner ANSI reset from
+		// the scope-coloured label cannot kill the segment background of
+		// the surrounding cells.
+		line := segStyle.Render(" ") + labelStyle.Render(label)
+		if hasDescriptions && rightWidth > 0 {
+			line += segStyle.Render("  " + description)
 		}
-		body := " " + content + " "
-		if start+idx == cs.cursor {
-			lines = append(lines, selectedStyle.Render(body))
-		} else {
-			lines = append(lines, itemStyle.Render(body))
+		if padCount > 0 {
+			line += segStyle.Render(strings.Repeat(" ", padCount))
 		}
+		line += segStyle.Render(" ")
+		lines = append(lines, line)
 	}
 	listBlock := strings.Join(lines, "\n")
 
@@ -331,8 +366,63 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 		listBlock = lipgloss.JoinHorizontal(lipgloss.Top, listBlock, scrollColumn)
 	}
 
-	return lipgloss.NewStyle().
+	popup := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
 		Render(listBlock)
+
+	// Render a one-line scope legend underneath the popup (outside the
+	// border) when the dropdown is offering option-name candidates.
+	if cs.argType == "option" {
+		if legend := renderScopeLegend(); legend != "" {
+			popup = lipgloss.JoinVertical(lipgloss.Left, popup, legend)
+		}
+	}
+
+	return popup
+}
+
+// scopeStyleFor returns the theme style for an OptionScope or nil when
+// the scope is empty/unknown. The returned style is safe to call Render
+// on; a nil result means "no scope-specific styling applies".
+func scopeStyleFor(scope OptionScope) *lipgloss.Style {
+	switch scope {
+	case ScopeServer:
+		return styles.OptionScopeServer
+	case ScopeSession:
+		return styles.OptionScopeSession
+	case ScopeWindow:
+		return styles.OptionScopeWindow
+	case ScopePane:
+		return styles.OptionScopePane
+	case ScopeUser:
+		return styles.OptionScopeUser
+	}
+	return nil
+}
+
+// renderScopeLegend returns a single-line legend showing each scope
+// category rendered in its theme colour. The order matches the natural
+// tmux hierarchy so the eye can find the category without hunting.
+func renderScopeLegend() string {
+	parts := []struct {
+		label string
+		scope OptionScope
+	}{
+		{"server", ScopeServer},
+		{"session", ScopeSession},
+		{"window", ScopeWindow},
+		{"pane", ScopePane},
+		{"user", ScopeUser},
+	}
+	pieces := make([]string, 0, len(parts))
+	for _, p := range parts {
+		style := scopeStyleFor(p.scope)
+		if style == nil {
+			pieces = append(pieces, p.label)
+			continue
+		}
+		pieces = append(pieces, style.Render(p.label))
+	}
+	return " " + strings.Join(pieces, "  ") + " "
 }

@@ -31,6 +31,11 @@ type Styles struct {
 	CompletionBorder      *lipgloss.Style
 	CompletionItem        *lipgloss.Style
 	CompletionSelected    *lipgloss.Style
+	OptionScopeServer     *lipgloss.Style
+	OptionScopeSession    *lipgloss.Style
+	OptionScopeWindow     *lipgloss.Style
+	OptionScopePane       *lipgloss.Style
+	OptionScopeUser       *lipgloss.Style
 }
 
 var defaultStyles = Styles{
@@ -113,7 +118,22 @@ var defaultStyles = Styles{
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 	),
 	CompletionSelected: ptr(
-		lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("33")),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("240")),
+	),
+	OptionScopeServer: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
+	),
+	OptionScopeSession: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("39")),
+	),
+	OptionScopeWindow: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("170")),
+	),
+	OptionScopePane: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("84")),
+	),
+	OptionScopeUser: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
 	),
 }
 

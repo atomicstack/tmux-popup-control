@@ -129,6 +129,13 @@ type commandPreloadMsg struct {
 	err   error
 }
 
+// userOptionsPreloadMsg delivers the pre-fetched set of live @-prefixed
+// tmux option names so completion can merge them into catalog candidates.
+type userOptionsPreloadMsg struct {
+	names []string
+	err   error
+}
+
 // preloadCommandList fires an async command to fetch the command list.
 func preloadCommandList(socketPath string, loader menu.Loader) tea.Cmd {
 	return func() tea.Msg {
@@ -142,6 +149,15 @@ func preloadCommandList(socketPath string, loader menu.Loader) tea.Cmd {
 		span.AddAttr("item_count", len(items))
 		span.End(err)
 		return commandPreloadMsg{items: items, err: err}
+	}
+}
+
+// preloadUserOptions fires an async command to fetch the set of live
+// @-prefixed tmux option names.
+func preloadUserOptions(socketPath string) tea.Cmd {
+	return func() tea.Msg {
+		names, err := menu.LoadUserOptions(menu.Context{SocketPath: socketPath})
+		return userOptionsPreloadMsg{names: names, err: err}
 	}
 }
 
@@ -160,6 +176,21 @@ func (m *Model) handleCommandPreloadMsg(msg tea.Msg) tea.Cmd {
 		labels = append(labels, item.Label)
 	}
 	m.commandSchemas = cmdparse.BuildRegistry(labels)
+	return nil
+}
+
+func (m *Model) handleUserOptionsPreloadMsg(msg tea.Msg) tea.Cmd {
+	preload, ok := msg.(userOptionsPreloadMsg)
+	if !ok {
+		return nil
+	}
+	if preload.err != nil {
+		// Non-fatal: the catalog still covers the common case. Log and
+		// leave m.userOptionNames empty.
+		logging.Error(preload.err)
+		return nil
+	}
+	m.userOptionNames = preload.names
 	return nil
 }
 

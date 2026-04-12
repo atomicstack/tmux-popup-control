@@ -238,7 +238,7 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	pos := current.FilterCursorPos()
 	pos = max(pos, 0)
 	pos = min(pos, len(runes))
-	before := render(styles.Filter, string(runes[:pos]))
+	before := m.renderFilterBefore(runes[:pos], render)
 	ghost := m.autoCompleteGhost()
 	var caretRune string
 	if pos < len(runes) {
@@ -268,6 +268,25 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		after = ""
 	}
 	return prompt + before + caret + after, nil
+}
+
+// renderFilterBefore renders the portion of the filter text that sits before
+// the cursor. When the user is typing a tmux option or hook name, the matching
+// rune span is rendered in its scope colour so the token visibly tracks its
+// dropdown category. Everything else falls through to the normal filter style.
+func (m *Model) renderFilterBefore(runes []rune, render func(*lipgloss.Style, string) string) string {
+	text := string(runes)
+	start, end, scope, ok := m.currentOptionFilterSpan()
+	if !ok || end != len(runes) || start < 0 || start > end {
+		return render(styles.Filter, text)
+	}
+	head := string(runes[:start])
+	token := string(runes[start:end])
+	scopeStyle := scopeStyleFor(scope)
+	if scopeStyle == nil {
+		return render(styles.Filter, text)
+	}
+	return render(styles.Filter, head) + scopeStyle.Render(token)
 }
 
 // autoCompleteGhost returns the ghost text suffix for autocomplete, or "" if

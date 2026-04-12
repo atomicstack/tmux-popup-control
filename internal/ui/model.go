@@ -107,6 +107,7 @@ type Model struct {
 	commandItemsCache          []menu.Item
 	commandSchemas             map[string]*cmdparse.CommandSchema
 	commandHelp                map[string]cmdhelp.CommandHelp
+	userOptionNames            []string
 	completion                 *completionState
 	completionSuppressedFilter string
 	noPreview                  bool
@@ -238,6 +239,9 @@ func (m *Model) Init() tea.Cmd {
 			cmds = append(cmds, preloadCommandList(m.socketPath, node.Loader))
 		}
 	}
+	if m.userOptionNames == nil {
+		cmds = append(cmds, preloadUserOptions(m.socketPath))
+	}
 	if cmd := m.startRestoreRefreshIfNeeded(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -325,6 +329,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeFor[backendEventMsg]():            m.handleBackendEventMsg,
 		reflect.TypeFor[backendDoneMsg]():             m.handleBackendDoneMsg,
 		reflect.TypeFor[commandPreloadMsg]():          m.handleCommandPreloadMsg,
+		reflect.TypeFor[userOptionsPreloadMsg]():      m.handleUserOptionsPreloadMsg,
 		reflect.TypeFor[previewTickMsg]():             m.handlePreviewTickMsg,
 		reflect.TypeFor[previewLoadedMsg]():           m.handlePreviewLoadedMsg,
 		reflect.TypeFor[layoutAppliedMsg]():           m.handleLayoutAppliedMsg,

@@ -217,6 +217,72 @@ func TestCompletionViewAlignsDescriptions(t *testing.T) {
 	}
 }
 
+func TestCompletionViewRendersScopeColoursAndLegend(t *testing.T) {
+	cs := newCompletionStateWithItems([]completionItem{
+		{Value: "status", Label: "status", Scope: ScopeSession},
+		{Value: "mouse", Label: "mouse", Scope: ScopeSession},
+		{Value: "@plugin", Label: "@plugin", Scope: ScopeUser},
+	}, "option", "option", 0)
+
+	view := cs.view(60, 10)
+	if view == "" {
+		t.Fatal("expected non-empty view")
+	}
+
+	// Session scope colour is ANSI 256 index 39, user scope is 220.
+	// Lipgloss emits these as `\x1b[38;5;Nm` sequences.
+	for _, seq := range []string{"\x1b[38;5;39m", "\x1b[38;5;220m"} {
+		if !strings.Contains(view, seq) {
+			t.Errorf("expected view to contain scope colour sequence %q, got:\n%s", seq, view)
+		}
+	}
+
+	// All five legend labels must appear somewhere (they render inside the
+	// bordered popup underneath the list).
+	stripped := ansi.Strip(view)
+	for _, label := range []string{"server", "session", "window", "pane", "user"} {
+		if !strings.Contains(stripped, label) {
+			t.Errorf("expected legend label %q in view, got:\n%s", label, stripped)
+		}
+	}
+}
+
+// TestCompletionViewSelectedRowKeepsScopeColour guards the rule that a
+// scope-coloured row, when selected, retains its scope foreground colour
+// instead of being repainted in the selected segment's own foreground.
+// It also pins the selected background to the 240 grey used elsewhere in
+// the app.
+func TestCompletionViewSelectedRowKeepsScopeColour(t *testing.T) {
+	cs := newCompletionStateWithItems([]completionItem{
+		{Value: "status", Label: "status", Scope: ScopeSession},
+	}, "option", "option", 0)
+	cs.cursor = 0
+
+	view := cs.view(60, 10)
+	// Lipgloss combines fg+bg into a single SGR, so the selected row's
+	// scope-coloured label should carry both session fg (39) and the
+	// selected bg (240) in one escape.
+	if !strings.Contains(view, "\x1b[38;5;39;48;5;240m") {
+		t.Errorf("expected selected row to keep scope fg composed with selected bg, got:\n%s", view)
+	}
+}
+
+func TestCompletionViewLegendHiddenForNonOptionArgType(t *testing.T) {
+	cs := newCompletionStateWithItems([]completionItem{
+		{Value: "main", Label: "main"},
+		{Value: "work", Label: "work"},
+	}, "target-session", "target-session", 0)
+
+	stripped := ansi.Strip(cs.view(60, 10))
+	// The legend is a single line containing every scope label separated by
+	// spaces. The presence of any single label (e.g. "session") would be
+	// ambiguous because "main" and the scope word could overlap. Instead,
+	// assert the full legend sentence is not present.
+	if strings.Contains(stripped, "server  session  window  pane  user") {
+		t.Fatalf("legend should not appear for non-option argType, got:\n%s", stripped)
+	}
+}
+
 func TestCompletionViewLeavesPlainValuesUnchanged(t *testing.T) {
 	cs := newCompletionStateWithItems([]completionItem{
 		{Value: "main:0", Label: "main:0"},
