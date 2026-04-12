@@ -2,6 +2,7 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -218,6 +219,67 @@ func TestPrecedingPositionalWalksFlags(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("precedingPositional(%q, %d) = %q, want %q", tc.filter, tc.idx, got, tc.want)
 		}
+	}
+}
+
+func TestDecorateShowOptionsLineDecoratesColourOption(t *testing.T) {
+	// status-bg is a TypeColour, session-scoped option in the catalog.
+	// The decorated line must carry both the session scope colour on the
+	// name (ANSI 256 index 39) and a red swatch (basic ANSI 31) on the
+	// value.
+	decorated, ok := decorateShowOptionsLine("status-bg red", nil)
+	if !ok {
+		t.Fatal("expected decoration for 'status-bg red'")
+	}
+	if !strings.Contains(decorated, "█") {
+		t.Errorf("expected swatch in decorated line, got %q", decorated)
+	}
+	if !strings.Contains(decorated, "\x1b[31m") {
+		t.Errorf("expected ANSI red foreground in decorated line, got %q", decorated)
+	}
+	if !strings.Contains(decorated, "\x1b[38;5;39m") {
+		t.Errorf("expected session scope colour on name, got %q", decorated)
+	}
+}
+
+func TestDecorateShowOptionsLineScopeColoursKnownOption(t *testing.T) {
+	// mouse is a session-scoped TypeFlag; no swatch applies but the name
+	// must still be rendered in the session scope colour.
+	decorated, ok := decorateShowOptionsLine("mouse on", nil)
+	if !ok {
+		t.Fatal("expected scope decoration for 'mouse on'")
+	}
+	if !strings.Contains(decorated, "\x1b[38;5;39m") {
+		t.Errorf("expected session scope colour on 'mouse', got %q", decorated)
+	}
+	if strings.Contains(decorated, "█") {
+		t.Errorf("did not expect swatch for non-colour option, got %q", decorated)
+	}
+}
+
+func TestDecorateShowOptionsLineScopeColoursUserOption(t *testing.T) {
+	// @-prefixed names resolve to ScopeUser (220) even without a catalog
+	// entry.
+	decorated, ok := decorateShowOptionsLine("@my-plugin red", nil)
+	if !ok {
+		t.Fatal("expected scope decoration for '@my-plugin red'")
+	}
+	if !strings.Contains(decorated, "\x1b[38;5;220m") {
+		t.Errorf("expected user scope colour on '@my-plugin', got %q", decorated)
+	}
+}
+
+func TestDecorateShowOptionsLineSkipsNameWithoutScope(t *testing.T) {
+	// A first token that is neither a catalog option nor @-prefixed has no
+	// scope and no swatch, so decoration should be skipped entirely.
+	if _, ok := decorateShowOptionsLine("not-a-real-option value", nil); ok {
+		t.Fatal("expected no decoration for unknown non-user option name")
+	}
+}
+
+func TestDecorateShowOptionsLineSkipsMalformedLine(t *testing.T) {
+	if _, ok := decorateShowOptionsLine("no-space-in-this-line", nil); ok {
+		t.Fatal("expected no decoration for a line with no value")
 	}
 }
 

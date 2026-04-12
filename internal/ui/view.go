@@ -385,6 +385,10 @@ func (m *Model) viewCommandOutput(header string) string {
 			bodyStyle = styles.PreviewBody
 		}
 		for _, line := range m.commandOutputLines[start:end] {
+			if decorated, ok := decorateShowOptionsLine(line, bodyStyle); ok {
+				lines = append(lines, styledLine{text: decorated, raw: true})
+				continue
+			}
 			lines = append(lines, styledLine{text: line, style: bodyStyle})
 		}
 	}

@@ -211,6 +211,64 @@ func (m *Model) currentOptionFilterSpan() (start, end int, scope OptionScope, ok
 	return cursor - prefixLen, cursor, sc, true
 }
 
+// decorateShowOptionsLine decorates a single `show-options` output line of
+// the form "optionName value" so it renders in keeping with the completion
+// dropdown's colour cues. The option name is rendered in its scope colour
+// when the name resolves to a known catalog entry or starts with "@" (user
+// option); additionally, a coloured swatch is prepended to the value when
+// the option is TypeColour and the value resolves to a renderable lipgloss
+// colour. The returned text contains ANSI escapes. ok is false when the
+// line is malformed (no space) or has no applicable decoration. bodyStyle —
+// when non-nil — wraps the undecorated text so decorated and undecorated
+// spans share consistent foreground/background.
+func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bool) {
+	sp := strings.IndexByte(line, ' ')
+	if sp <= 0 {
+		return "", false
+	}
+	name := line[:sp]
+	rest := line[sp:] // leading space preserved
+	value := strings.TrimSpace(rest)
+
+	catalog, err := tmuxopts.Default()
+	if err != nil || catalog == nil {
+		return "", false
+	}
+
+	scope := primaryScope(catalog, name)
+	scopeStyle := scopeStyleFor(scope)
+
+	var swatch string
+	if value != "" {
+		if opt, _ := catalog.Lookup(name); opt != nil && opt.Type == tmuxopts.TypeColour {
+			if spec, ok := colourSpecForName(value); ok {
+				swatch = lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render("█")
+			}
+		}
+	}
+
+	if scopeStyle == nil && swatch == "" {
+		return "", false
+	}
+
+	renderBody := func(text string) string {
+		if bodyStyle == nil {
+			return text
+		}
+		return bodyStyle.Render(text)
+	}
+
+	nameRendered := renderBody(name)
+	if scopeStyle != nil {
+		nameRendered = scopeStyle.Render(name)
+	}
+
+	if swatch != "" {
+		return nameRendered + renderBody(" ") + swatch + renderBody(" "+value), true
+	}
+	return nameRendered + renderBody(rest), true
+}
+
 // decorateColourLabel prepends a coloured swatch block to a colour value's
 // display label when the colour can be resolved by lipgloss. When the colour
 // name is an X11 extended name or otherwise unresolvable, a blank padding
