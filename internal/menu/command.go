@@ -116,6 +116,9 @@ func showOptionEmptyPlaceholder(args []string) string {
 	if scope := showOptionScopeFlag(args[1:]); scope != "" {
 		return fmt.Sprintf("[no %ss found in scope %s]", kind, scope)
 	}
+	if kind == "hook" {
+		return "[no hooks found]"
+	}
 	return ""
 }
 

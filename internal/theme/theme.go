@@ -36,6 +36,7 @@ type Styles struct {
 	OptionScopeWindow     *lipgloss.Style
 	OptionScopePane       *lipgloss.Style
 	OptionScopeUser       *lipgloss.Style
+	OptionScopeHook       *lipgloss.Style
 }
 
 var defaultStyles = Styles{
@@ -134,6 +135,9 @@ var defaultStyles = Styles{
 	),
 	OptionScopeUser: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
+	),
+	OptionScopeHook: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("139")),
 	),
 }
 

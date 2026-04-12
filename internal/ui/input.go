@@ -402,6 +402,8 @@ var scopeWords = map[string]OptionScope{
 	"panes":    ScopePane,
 	"user":     ScopeUser,
 	"users":    ScopeUser,
+	"hook":     ScopeHook,
+	"hooks":    ScopeHook,
 }
 
 func decorateScopeSummary(summary string, baseStyle *lipgloss.Style) string {

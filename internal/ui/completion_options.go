@@ -344,13 +344,15 @@ func tokenByteOffsets(s string, tokens []string) []int {
 // decoration. bodyStyle — when non-nil — wraps the undecorated text so
 // decorated and undecorated spans share consistent foreground/background.
 func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bool) {
+	var name, rest, value string
 	sp := strings.IndexByte(line, ' ')
-	if sp <= 0 {
-		return "", false
+	if sp > 0 {
+		name = line[:sp]
+		rest = line[sp:]
+		value = strings.TrimSpace(rest)
+	} else {
+		name = line
 	}
-	name := line[:sp]
-	rest := line[sp:] // leading space preserved
-	value := strings.TrimSpace(rest)
 
 	// Strip the trailing '*' that tmux appends for inherited values in
 	// show-options -A output before looking up the catalog entry.
@@ -544,6 +546,9 @@ func primaryScope(catalog *tmuxopts.Catalog, name string) OptionScope {
 			return ScopeUser
 		}
 		return ""
+	}
+	if opt.Kind == tmuxopts.KindHook {
+		return ScopeHook
 	}
 	scopes := opt.Scope.Scopes
 	// Rank: pane is the most specific, then window, then session, then server.

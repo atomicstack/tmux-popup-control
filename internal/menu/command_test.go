@@ -154,6 +154,7 @@ func TestRunCommandShowOptionsEmptyScopeSynthesizesPlaceholder(t *testing.T) {
 		{"show-options -gq", "[no options found in scope -g]"},
 		{"show-window-options -g", "[no options found in scope -g]"},
 		{"show-hooks -g", "[no hooks found in scope -g]"},
+		{"show-hooks", "[no hooks found]"},
 	}
 	for _, tc := range cases {
 		cmd := RunCommand("/tmp/test.sock", tc.command)

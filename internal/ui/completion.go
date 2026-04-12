@@ -22,6 +22,7 @@ const (
 	ScopeWindow  OptionScope = "window"
 	ScopePane    OptionScope = "pane"
 	ScopeUser    OptionScope = "user"
+	ScopeHook    OptionScope = "hook"
 )
 
 type completionItem struct {
@@ -397,6 +398,8 @@ func scopeStyleFor(scope OptionScope) *lipgloss.Style {
 		return styles.OptionScopePane
 	case ScopeUser:
 		return styles.OptionScopeUser
+	case ScopeHook:
+		return styles.OptionScopeHook
 	}
 	return nil
 }
@@ -414,6 +417,7 @@ func renderScopeLegend() string {
 		{"window", ScopeWindow},
 		{"pane", ScopePane},
 		{"user", ScopeUser},
+		{"hook", ScopeHook},
 	}
 	pieces := make([]string, 0, len(parts))
 	for _, p := range parts {
