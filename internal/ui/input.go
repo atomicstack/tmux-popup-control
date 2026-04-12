@@ -238,7 +238,14 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	pos := current.FilterCursorPos()
 	pos = max(pos, 0)
 	pos = min(pos, len(runes))
-	before := m.renderFilterBefore(runes[:pos], render)
+
+	spanStart, spanEnd, scope, spanOK := m.currentOptionFilterSpan()
+	var scopeStyle *lipgloss.Style
+	if spanOK {
+		scopeStyle = scopeStyleFor(scope)
+	}
+
+	before := renderFilterSpan(runes[:pos], 0, spanStart, spanEnd, scopeStyle, render)
 	ghost := m.autoCompleteGhost()
 	var caretRune string
 	if pos < len(runes) {
@@ -260,33 +267,38 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	} else {
 		caretRune = " "
 	}
+	if scopeStyle != nil && pos >= spanStart && pos < spanEnd {
+		m.filterCursor.TextStyle = *scopeStyle
+	}
 	caret := m.renderFilterCursor(caretRune)
 	var after string
-	if pos < len(runes) {
-		after = render(styles.Filter, string(runes[pos+1:]))
-	} else {
-		after = ""
+	if pos+1 < len(runes) {
+		after = renderFilterSpan(runes[pos+1:], pos+1, spanStart, spanEnd, scopeStyle, render)
 	}
 	return prompt + before + caret + after, nil
 }
 
-// renderFilterBefore renders the portion of the filter text that sits before
-// the cursor. When the user is typing a tmux option or hook name, the matching
-// rune span is rendered in its scope colour so the token visibly tracks its
-// dropdown category. Everything else falls through to the normal filter style.
-func (m *Model) renderFilterBefore(runes []rune, render func(*lipgloss.Style, string) string) string {
-	text := string(runes)
-	start, end, scope, ok := m.currentOptionFilterSpan()
-	if !ok || end != len(runes) || start < 0 || start > end {
-		return render(styles.Filter, text)
+// renderFilterSpan renders a slice of filter runes, colouring any portion
+// that falls within the scope-coloured option span [spanStart, spanEnd).
+// offset is the position of runes[0] in the full filter text.
+func renderFilterSpan(runes []rune, offset int, spanStart, spanEnd int, scopeStyle *lipgloss.Style, render func(*lipgloss.Style, string) string) string {
+	if scopeStyle == nil || len(runes) == 0 {
+		return render(styles.Filter, string(runes))
 	}
-	head := string(runes[:start])
-	token := string(runes[start:end])
-	scopeStyle := scopeStyleFor(scope)
-	if scopeStyle == nil {
-		return render(styles.Filter, text)
+	lo := max(spanStart-offset, 0)
+	hi := min(spanEnd-offset, len(runes))
+	if lo >= hi {
+		return render(styles.Filter, string(runes))
 	}
-	return render(styles.Filter, head) + scopeStyle.Render(token)
+	var result string
+	if lo > 0 {
+		result += render(styles.Filter, string(runes[:lo]))
+	}
+	result += scopeStyle.Render(string(runes[lo:hi]))
+	if hi < len(runes) {
+		result += render(styles.Filter, string(runes[hi:]))
+	}
+	return result
 }
 
 // autoCompleteGhost returns the ghost text suffix for autocomplete, or "" if

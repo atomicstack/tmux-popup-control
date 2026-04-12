@@ -150,17 +150,13 @@ func (m *Model) tmuxOptCompletion(schema *cmdparse.CommandSchema, ctx cmdparse.C
 }
 
 // currentOptionFilterSpan reports the rune range in the current filter text
-// that is a tmux option (or hook) name being typed, together with its
-// display scope. ok is false when no such span applies — either because
-// the context is wrong, the prefix is empty, or the prefix has no known
-// scope. The returned span always ends at the cursor position, so callers
-// can splice a scope-coloured render for runes[start:end].
+// that is a tmux option (or hook) name, together with its display scope.
+// ok is false when no such span applies. The span covers the full option
+// token regardless of cursor position — once an option name has been typed,
+// it stays coloured even after the user moves on to type a value.
 func (m *Model) currentOptionFilterSpan() (start, end int, scope OptionScope, ok bool) {
 	current := m.currentLevel()
 	if current == nil || current.Node == nil || !current.Node.FilterCommand {
-		return 0, 0, "", false
-	}
-	if current.FilterCursorPos() != len([]rune(current.Filter)) {
 		return 0, 0, "", false
 	}
 	if m.commandSchemas == nil {
@@ -170,19 +166,14 @@ func (m *Model) currentOptionFilterSpan() (start, end int, scope OptionScope, ok
 	if schema == nil {
 		return 0, 0, "", false
 	}
-	if !commandsCompletingOptions[schema.Name] && !commandsCompletingHooks[schema.Name] {
+	isOpt := commandsCompletingOptions[schema.Name]
+	isHook := commandsCompletingHooks[schema.Name]
+	if !isOpt && !isHook {
 		return 0, 0, "", false
 	}
-	ctx := cmdparse.Analyse(m.commandSchemas, current.Filter)
-	ctx.ArgType = m.adjustCompletionArgType(schema, ctx)
-	if ctx.Kind != cmdparse.ContextPositionalValue {
-		return 0, 0, "", false
-	}
-	if ctx.ArgType != "option" && ctx.ArgType != "hook" {
-		return 0, 0, "", false
-	}
-	prefixLen := len([]rune(ctx.Prefix))
-	if prefixLen == 0 {
+
+	optToken, tokenByteStart := findOptionToken(schema, current.Filter, isOpt, isHook)
+	if optToken == "" {
 		return 0, 0, "", false
 	}
 
@@ -201,14 +192,67 @@ func (m *Model) currentOptionFilterSpan() (start, end int, scope OptionScope, ok
 	if sc == "" {
 		catalog, err := tmuxopts.Default()
 		if err == nil && catalog != nil {
-			sc = primaryScope(catalog, ctx.Prefix)
+			sc = primaryScope(catalog, optToken)
 		}
 	}
 	if sc == "" {
 		return 0, 0, "", false
 	}
-	cursor := current.FilterCursorPos()
-	return cursor - prefixLen, cursor, sc, true
+	runeStart := len([]rune(current.Filter[:tokenByteStart]))
+	runeEnd := runeStart + len([]rune(optToken))
+	return runeStart, runeEnd, sc, true
+}
+
+// findOptionToken walks the filter tokens to locate the positional that
+// corresponds to an "option" or "hook" argument in the command schema.
+// It returns the token text and its byte offset in the filter string.
+func findOptionToken(schema *cmdparse.CommandSchema, filter string, isOpt, isHook bool) (token string, byteOffset int) {
+	tokens := strings.Fields(filter)
+	if len(tokens) < 2 {
+		return "", 0
+	}
+
+	offsets := tokenByteOffsets(filter, tokens)
+
+	posIndex := 0
+	i := 1
+	for i < len(tokens) {
+		tok := tokens[i]
+		if strings.HasPrefix(tok, "-") && len(tok) >= 2 {
+			flag := rune(tok[1])
+			if cmdparse.SchemaHasArgFlag(schema, flag) {
+				i += 2
+				continue
+			}
+			i++
+			continue
+		}
+
+		pos := cmdparse.PositionalAt(schema, posIndex)
+		if pos != nil && ((isOpt && pos.Name == "option") || (isHook && pos.Name == "hook")) {
+			return tok, offsets[i]
+		}
+
+		if pos != nil && !pos.Variadic {
+			posIndex++
+		}
+		i++
+	}
+	return "", 0
+}
+
+func tokenByteOffsets(s string, tokens []string) []int {
+	offsets := make([]int, len(tokens))
+	pos := 0
+	for i, tok := range tokens {
+		idx := strings.Index(s[pos:], tok)
+		if idx < 0 {
+			break
+		}
+		offsets[i] = pos + idx
+		pos += idx + len(tok)
+	}
+	return offsets
 }
 
 // decorateShowOptionsLine decorates a single `show-options` output line of

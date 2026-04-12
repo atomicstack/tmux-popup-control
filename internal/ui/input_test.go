@@ -140,6 +140,68 @@ func TestCurrentCommandSummaryUsesResolvedCommand(t *testing.T) {
 	}
 }
 
+func TestOptionFilterSpanCursorNotAtEnd(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "set-option", Label: "set-option [-aFgoqpsUuw] [-t target-pane] option [value]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	current := newLevel("command", "command", items, node)
+	filter := "set-option mouse"
+	current.SetFilter(filter, len([]rune("set-option mo")))
+	m.stack = []*level{current}
+
+	start, end, scope, ok := m.currentOptionFilterSpan()
+	if !ok {
+		t.Fatal("expected span to be reported even with cursor not at end")
+	}
+	if scope == "" {
+		t.Fatal("expected non-empty scope")
+	}
+	runes := []rune(filter)
+	token := string(runes[start:end])
+	if token != "mouse" {
+		t.Fatalf("expected span to cover 'mouse', got %q", token)
+	}
+}
+
+func TestOptionFilterSpanCursorAtEnd(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "set-option", Label: "set-option [-aFgoqpsUuw] [-t target-pane] option [value]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	current := newLevel("command", "command", items, node)
+	filter := "set-option mouse"
+	current.SetFilter(filter, len([]rune(filter)))
+	m.stack = []*level{current}
+
+	start, end, scope, ok := m.currentOptionFilterSpan()
+	if !ok {
+		t.Fatal("expected span to be reported with cursor at end")
+	}
+	if scope == "" {
+		t.Fatal("expected non-empty scope")
+	}
+	runes := []rune(filter)
+	token := string(runes[start:end])
+	if token != "mouse" {
+		t.Fatalf("expected span to cover 'mouse', got %q", token)
+	}
+}
+
 func TestTriggerCompletionIncludesFlagDescriptions(t *testing.T) {
 	m := NewModel(ModelConfig{})
 	node, ok := m.registry.Find("command")
