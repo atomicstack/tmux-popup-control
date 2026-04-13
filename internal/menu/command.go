@@ -131,7 +131,11 @@ func showOptionEmptyPlaceholder(args []string) string {
 	}
 	target := showOptionPositional(args[1:])
 	if target != "" {
-		return fmt.Sprintf("[%s %s has no value]", kind, target)
+		scope := showOptionScopeFlag(args[1:])
+		if scope != "" {
+			return fmt.Sprintf("[%s %s has no value in scope %s]", kind, target, scope)
+		}
+		return fmt.Sprintf("[%s %s has no value in %s]", kind, target, implicitScope(args[0]))
 	}
 	if scope := showOptionScopeFlag(args[1:]); scope != "" {
 		return fmt.Sprintf("[no %ss found in scope %s]", kind, scope)
@@ -140,6 +144,17 @@ func showOptionEmptyPlaceholder(args []string) string {
 		return "[no hooks found]"
 	}
 	return ""
+}
+
+// implicitScope returns the human-readable default scope for a show-* command
+// when no explicit scope flag is given.
+func implicitScope(cmd string) string {
+	switch cmd {
+	case "show-window-options", "showw":
+		return "window scope"
+	default:
+		return "session scope"
+	}
 }
 
 // showOptionPositional walks the argument list for a `show-*` command and

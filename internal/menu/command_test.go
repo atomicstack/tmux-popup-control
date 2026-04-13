@@ -79,7 +79,7 @@ func TestRunCommandShowOptionsInvalidOptionUsesPlaceholder(t *testing.T) {
 	if result.Err != nil {
 		t.Fatalf("expected no error for invalid option, got %v", result.Err)
 	}
-	if result.Output != "[option @extrakto_copy_key has no value]" {
+	if result.Output != "[option @extrakto_copy_key has no value in session scope]" {
 		t.Fatalf("expected placeholder, got %q", result.Output)
 	}
 }
@@ -101,7 +101,7 @@ func TestRunCommandShowOptionsInvalidOptionWithScope(t *testing.T) {
 	if result.Err != nil {
 		t.Fatalf("expected no error, got %v", result.Err)
 	}
-	if result.Output != "[option @extrakto_copy_key has no value]" {
+	if result.Output != "[option @extrakto_copy_key has no value in scope -g]" {
 		t.Fatalf("expected placeholder, got %q", result.Output)
 	}
 }
@@ -231,11 +231,14 @@ func TestRunCommandShowOptionsEmptyOutputSynthesizesPlaceholder(t *testing.T) {
 		command string
 		want    string
 	}{
-		{"show-options -g mouse", "[option mouse has no value]"},
-		{"show-window-options -g main-pane-width", "[option main-pane-width has no value]"},
-		{"show-options -gq status-left", "[option status-left has no value]"},
-		{"show -g mouse", "[option mouse has no value]"},
-		{"show-hooks -g pane-focus-in", "[hook pane-focus-in has no value]"},
+		{"show-options -g mouse", "[option mouse has no value in scope -g]"},
+		{"show-window-options -g main-pane-width", "[option main-pane-width has no value in scope -g]"},
+		{"show-options -gq status-left", "[option status-left has no value in scope -g]"},
+		{"show -g mouse", "[option mouse has no value in scope -g]"},
+		{"show-hooks -g pane-focus-in", "[hook pane-focus-in has no value in scope -g]"},
+		{"show-options mouse", "[option mouse has no value in session scope]"},
+		{"show-window-options main-pane-width", "[option main-pane-width has no value in window scope]"},
+		{"show-hooks pane-focus-in", "[hook pane-focus-in has no value in session scope]"},
 	}
 	for _, tc := range cases {
 		cmd := RunCommand("/tmp/test.sock", tc.command)
