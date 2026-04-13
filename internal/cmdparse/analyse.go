@@ -1,6 +1,10 @@
 package cmdparse
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/atomicstack/tmux-popup-control/internal/shquote"
+)
 
 // Analyse inspects the user's partial command input and returns a
 // CompletionContext describing what kind of value is expected at the cursor
@@ -10,8 +14,8 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 		return CompletionContext{Kind: ContextCommandName}
 	}
 
-	trailingSpace := strings.HasSuffix(input, " ")
-	tokens := strings.Fields(input)
+	trailingSpace := shquote.TrailingSpace(input)
+	tokens := shquote.Fields(input)
 
 	if len(tokens) == 0 {
 		return CompletionContext{Kind: ContextCommandName}

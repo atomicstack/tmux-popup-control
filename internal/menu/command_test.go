@@ -79,6 +79,61 @@ func TestRunCommandReturnsActionResult(t *testing.T) {
 	}
 }
 
+func TestRunCommandStripsQuotes(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	var captured []string
+	runCommandOutputFn = func(_ string, args ...string) ([]byte, error) {
+		captured = args
+		return []byte(""), nil
+	}
+
+	cases := []struct {
+		command string
+		want    []string
+	}{
+		{
+			command: "set-option -g status-left 'test'",
+			want:    []string{"set-option", "-g", "status-left", "test"},
+		},
+		{
+			command: `set-option -g status-left "test "`,
+			want:    []string{"set-option", "-g", "status-left", "test "},
+		},
+		{
+			command: `set-option -g status-left hello\ world`,
+			want:    []string{"set-option", "-g", "status-left", "hello world"},
+		},
+		{
+			command: "set-option -g status-left ' hello '",
+			want:    []string{"set-option", "-g", "status-left", " hello "},
+		},
+		{
+			command: `set-option -g status-left " hello "`,
+			want:    []string{"set-option", "-g", "status-left", " hello "},
+		},
+		{
+			command: "set-option -g mouse on",
+			want:    []string{"set-option", "-g", "mouse", "on"},
+		},
+	}
+	for _, tc := range cases {
+		captured = nil
+		cmd := RunCommand("/tmp/test.sock", tc.command)
+		cmd()
+		if len(captured) != len(tc.want) {
+			t.Errorf("%s: got %d args %v, want %d %v", tc.command, len(captured), captured, len(tc.want), tc.want)
+			continue
+		}
+		for i := range captured {
+			if captured[i] != tc.want[i] {
+				t.Errorf("%s: arg[%d] = %q, want %q", tc.command, i, captured[i], tc.want[i])
+			}
+		}
+	}
+}
+
 func TestRunCommandReturnsOutputOnSuccess(t *testing.T) {
 	restore := runCommandOutputFn
 	t.Cleanup(func() { runCommandOutputFn = restore })
