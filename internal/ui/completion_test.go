@@ -217,11 +217,11 @@ func TestCompletionViewAlignsDescriptions(t *testing.T) {
 	}
 }
 
-func TestCompletionViewRendersScopeColoursAndLegend(t *testing.T) {
+func TestCompletionViewRendersScopeColoursAndSelectedHelp(t *testing.T) {
 	cs := newCompletionStateWithItems([]completionItem{
-		{Value: "status", Label: "status", Scope: ScopeSession},
-		{Value: "mouse", Label: "mouse", Scope: ScopeSession},
-		{Value: "@plugin", Label: "@plugin", Scope: ScopeUser},
+		{Value: "status", Label: "status", Description: "style of the status line", Scope: ScopeSession},
+		{Value: "mouse", Label: "mouse", Description: "enable mouse support", Scope: ScopeSession},
+		{Value: "@plugin", Label: "@plugin", Description: "user-defined option", Scope: ScopeUser},
 	}, "option", "option", 0)
 
 	view := cs.view(60, 10)
@@ -237,13 +237,11 @@ func TestCompletionViewRendersScopeColoursAndLegend(t *testing.T) {
 		}
 	}
 
-	// All five legend labels must appear somewhere (they render inside the
-	// bordered popup underneath the list).
+	// The selected item's description should appear underneath the popup
+	// as unclipped help text.
 	stripped := ansi.Strip(view)
-	for _, label := range []string{"server", "session", "window", "pane", "user"} {
-		if !strings.Contains(stripped, label) {
-			t.Errorf("expected legend label %q in view, got:\n%s", label, stripped)
-		}
+	if !strings.Contains(stripped, "style of the status line") {
+		t.Errorf("expected selected item help text below popup, got:\n%s", stripped)
 	}
 }
 
@@ -267,19 +265,17 @@ func TestCompletionViewSelectedRowKeepsScopeColour(t *testing.T) {
 	}
 }
 
-func TestCompletionViewLegendHiddenForNonOptionArgType(t *testing.T) {
+func TestCompletionViewSelectedHelpShowsForAnyArgType(t *testing.T) {
 	cs := newCompletionStateWithItems([]completionItem{
-		{Value: "main", Label: "main"},
-		{Value: "work", Label: "work"},
+		{Value: "main", Label: "main", Description: "main session"},
+		{Value: "work", Label: "work", Description: "work session"},
 	}, "target-session", "target-session", 0)
 
 	stripped := ansi.Strip(cs.view(60, 10))
-	// The legend is a single line containing every scope label separated by
-	// spaces. The presence of any single label (e.g. "session") would be
-	// ambiguous because "main" and the scope word could overlap. Instead,
-	// assert the full legend sentence is not present.
-	if strings.Contains(stripped, "server  session  window  pane  user") {
-		t.Fatalf("legend should not appear for non-option argType, got:\n%s", stripped)
+	// The selected item's description should appear below the popup
+	// regardless of argType.
+	if !strings.Contains(stripped, "main session") {
+		t.Errorf("expected selected item help text below popup, got:\n%s", stripped)
 	}
 }
 

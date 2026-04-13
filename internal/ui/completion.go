@@ -181,6 +181,13 @@ func (cs *completionState) selected() string {
 	return cs.filtered[cs.cursor].Value
 }
 
+func (cs *completionState) selectedDescription() string {
+	if cs == nil || len(cs.filtered) == 0 || cs.cursor < 0 || cs.cursor >= len(cs.filtered) {
+		return ""
+	}
+	return cs.filtered[cs.cursor].Description
+}
+
 func (cs *completionState) hasExactMatch(prefix string) bool {
 	if cs == nil || prefix == "" {
 		return false
@@ -345,7 +352,8 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 		// the surrounding cells.
 		line := segStyle.Render(" ") + labelStyle.Render(label)
 		if hasDescriptions && rightWidth > 0 {
-			line += segStyle.Render("  " + description)
+			descRendered := renderScopeColouredText(description, segStyle)
+			line += segStyle.Render("  ") + descRendered
 		}
 		if padCount > 0 {
 			line += segStyle.Render(strings.Repeat(" ", padCount))
@@ -372,12 +380,12 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 		BorderForeground(borderColor).
 		Render(listBlock)
 
-	// Render a one-line scope legend underneath the popup (outside the
-	// border) when the dropdown is offering option-name candidates.
-	if cs.argType == "option" {
-		if legend := renderScopeLegend(); legend != "" {
-			popup = lipgloss.JoinVertical(lipgloss.Left, popup, legend)
-		}
+	// Render the selected item's full description underneath the popup
+	// (outside the border) when it would otherwise be truncated in the
+	// second column, giving the user unclipped help text.
+	if desc := cs.selectedDescription(); desc != "" {
+		helpLine := " " + renderScopeColouredText(desc, styles.FilterPlaceholder) + " "
+		popup = lipgloss.JoinVertical(lipgloss.Left, popup, helpLine)
 	}
 
 	return popup
@@ -404,29 +412,50 @@ func scopeStyleFor(scope OptionScope) *lipgloss.Style {
 	return nil
 }
 
-// renderScopeLegend returns a single-line legend showing each scope
-// category rendered in its theme colour. The order matches the natural
-// tmux hierarchy so the eye can find the category without hunting.
-func renderScopeLegend() string {
-	parts := []struct {
-		label string
-		scope OptionScope
-	}{
-		{"server", ScopeServer},
-		{"session", ScopeSession},
-		{"window", ScopeWindow},
-		{"pane", ScopePane},
-		{"user", ScopeUser},
-		{"hook", ScopeHook},
+// renderScopeColouredText returns text with recognised scope words
+// (server, session, window, pane, user, hook and their plurals)
+// rendered in their theme colour. Non-scope words are rendered with
+// baseStyle. If baseStyle is nil, non-scope words are left unstyled.
+// The text is lowercased before rendering so that capitalised scope
+// words (e.g. "Pane") are matched correctly.
+// Spaces between words are also rendered with baseStyle so the
+// background colour is continuous.
+func renderScopeColouredText(text string, baseStyle *lipgloss.Style) string {
+	text = strings.ToLower(text)
+	words := strings.Fields(text)
+	sep := " "
+	if baseStyle != nil {
+		sep = baseStyle.Render(" ")
 	}
-	pieces := make([]string, 0, len(parts))
-	for _, p := range parts {
-		style := scopeStyleFor(p.scope)
-		if style == nil {
-			pieces = append(pieces, p.label)
-			continue
+	parts := make([]string, 0, len(words))
+	for _, w := range words {
+		bare := strings.TrimRight(w, ",.")
+		if scope, ok := scopeWords[bare]; ok {
+			if ss := scopeStyleFor(scope); ss != nil {
+				// Compose scope foreground over the base style so the
+				// scope word inherits the base background instead of
+				// resetting to default (black).
+				renderStyle := *ss
+				if baseStyle != nil {
+					renderStyle = ss.Inherit(*baseStyle)
+				}
+				coloured := renderStyle.Render(bare)
+				if bare != w {
+					if baseStyle != nil {
+						coloured += baseStyle.Render(w[len(bare):])
+					} else {
+						coloured += w[len(bare):]
+					}
+				}
+				parts = append(parts, coloured)
+				continue
+			}
 		}
-		pieces = append(pieces, style.Render(p.label))
+		if baseStyle != nil {
+			parts = append(parts, baseStyle.Render(w))
+		} else {
+			parts = append(parts, w)
+		}
 	}
-	return " " + strings.Join(pieces, "  ") + " "
+	return strings.Join(parts, sep)
 }

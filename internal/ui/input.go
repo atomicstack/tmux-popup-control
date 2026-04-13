@@ -407,36 +407,20 @@ var scopeWords = map[string]OptionScope{
 }
 
 func decorateScopeSummary(summary string, baseStyle *lipgloss.Style) string {
-	words := strings.Fields(summary)
-	var parts []string
-	decorated := false
-	for _, w := range words {
-		bare := strings.TrimRight(w, ",")
-		if scope, ok := scopeWords[bare]; ok {
-			if ss := scopeStyleFor(scope); ss != nil {
-				coloured := ss.Render(bare)
-				if bare != w {
-					coloured += w[len(bare):]
-				}
-				if baseStyle != nil {
-					parts = append(parts, baseStyle.Render("")+coloured)
-				} else {
-					parts = append(parts, coloured)
-				}
-				decorated = true
-				continue
-			}
-		}
-		if baseStyle != nil {
-			parts = append(parts, baseStyle.Render(w))
-		} else {
-			parts = append(parts, w)
+	// Check whether any scope words are present before rendering —
+	// callers rely on "" to detect "nothing to decorate".
+	hasScopeWord := false
+	for _, w := range strings.Fields(summary) {
+		bare := strings.ToLower(strings.TrimRight(w, ",."))
+		if _, ok := scopeWords[bare]; ok {
+			hasScopeWord = true
+			break
 		}
 	}
-	if !decorated {
+	if !hasScopeWord {
 		return ""
 	}
-	return strings.Join(parts, " ")
+	return renderScopeColouredText(summary, baseStyle)
 }
 
 func (m *Model) lookupCommandHelp(name string) (cmdhelp.CommandHelp, bool) {
