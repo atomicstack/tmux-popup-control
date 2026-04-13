@@ -64,7 +64,7 @@ release: ensure-dirs
 		cp "$$f" "$$stage_dir/$(BINARY)"; \
 		cp $(addprefix ../,$(RELEASE_SUPPORT_FILES)) "$$stage_dir/"; \
 		chmod +x "$$stage_dir/$(BINARY)" "$$stage_dir/main.sh" "$$stage_dir/main.tmux"; \
-		COPYFILE_DISABLE=1 tar czf "$$f.tar.gz" -C "$$stage_dir" .; \
+		COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$$f.tar.gz" -C "$$stage_dir" .; \
 		rm -rf "$$stage_dir" "$$f"; \
 	done
 	cd $(RELEASE_DIR) && shasum -a 256 *.tar.gz > checksums.txt
