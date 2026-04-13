@@ -443,6 +443,89 @@ func TestExactMatchValueCompletionDismissesDropdown(t *testing.T) {
 	}
 }
 
+func TestTriggerCompletionMidTextShowsFlags(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "set-option", Label: "set-option [-aFgopqsuUw] [-t target-pane] option [value]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	// Simulate: user typed "set-option status-left", moved cursor back to
+	// between "set-option " and "status-left", then typed "-".
+	// Filter is now "set-option - status-left" with cursor at 12 (after "-").
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("set-option - status-left", 12)
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if m.completion == nil {
+		t.Fatal("expected completion to trigger for mid-text flag prefix")
+	}
+	if !m.completionVisible() {
+		t.Fatal("expected completion to be visible")
+	}
+
+	// Should offer flag candidates.
+	var values []string
+	for _, item := range m.completion.filtered {
+		values = append(values, item.Value)
+	}
+	if len(values) == 0 {
+		t.Fatal("expected flag candidates")
+	}
+}
+
+func TestAcceptCompletionMidText(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+
+	items := []menu.Item{
+		{ID: "set-option", Label: "set-option [-aFgopqsuUw] [-t target-pane] option [value]"},
+	}
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	// "set-option - status-left" cursor at 12 (after the "-")
+	current := newLevel("command", "command", items, node)
+	current.SetFilter("set-option - status-left", 12)
+	m.stack = []*level{current}
+
+	m.triggerCompletion()
+	if m.completion == nil {
+		t.Fatal("expected completion state")
+	}
+
+	// Select -g and accept.
+	for _, item := range m.completion.filtered {
+		if item.Value == "-g" {
+			break
+		}
+		m.completion.moveDown()
+	}
+	if m.completion.selected() != "-g" {
+		t.Fatalf("expected -g selected, got %q", m.completion.selected())
+	}
+
+	_ = m.acceptCompletion()
+
+	// Accepting -g should replace the "-" prefix at the cursor, producing
+	// "set-option -g status-left" with cursor right after "-g".
+	wantFilter := "set-option -g status-left"
+	if current.Filter != wantFilter {
+		t.Fatalf("expected filter %q, got %q", wantFilter, current.Filter)
+	}
+	if pos := current.FilterCursorPos(); pos != 13 {
+		t.Fatalf("expected cursor at 13, got %d", pos)
+	}
+}
+
 func TestExactMatchFlagCompletionStaysVisibleUntilCommitted(t *testing.T) {
 	m := NewModel(ModelConfig{})
 	node, ok := m.registry.Find("command")

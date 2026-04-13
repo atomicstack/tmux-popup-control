@@ -455,10 +455,6 @@ func (m *Model) triggerCompletion() {
 		m.dismissCompletion()
 		return
 	}
-	if current.FilterCursorPos() != len([]rune(current.Filter)) {
-		m.dismissCompletion()
-		return
-	}
 	if m.commandSchemas == nil {
 		m.dismissCompletion()
 		return
@@ -468,7 +464,13 @@ func (m *Model) triggerCompletion() {
 		return
 	}
 
-	ctx := cmdparse.Analyse(m.commandSchemas, current.Filter)
+	// Analyse only the text up to the cursor so that mid-text editing
+	// still triggers completion for the token being typed.
+	runes := []rune(current.Filter)
+	cursorPos := current.FilterCursorPos()
+	inputForAnalysis := string(runes[:cursorPos])
+
+	ctx := cmdparse.Analyse(m.commandSchemas, inputForAnalysis)
 	schema := m.lookupCommandSchema(current.Filter)
 	ctx.ArgType = m.adjustCompletionArgType(schema, ctx)
 	typeLabel := ctx.TypeLabel
@@ -608,9 +610,7 @@ func (m *Model) dismissCompletionIfCursorMovedAway(current *level) {
 	if current == nil {
 		return
 	}
-	if current.FilterCursorPos() != len([]rune(current.Filter)) {
-		m.dismissCompletion()
-	}
+	m.triggerCompletion()
 }
 
 func (m *Model) lookupCommandSchema(input string) *cmdparse.CommandSchema {
@@ -670,14 +670,27 @@ func (m *Model) acceptCompletion() tea.Cmd {
 		return nil
 	}
 
-	filter := current.Filter
+	runes := []rune(current.Filter)
+	cursorPos := current.FilterCursorPos()
 	prefix := m.completion.prefix
-	if prefix != "" && strings.HasSuffix(filter, prefix) {
-		filter = filter[:len(filter)-len(prefix)]
+	prefixLen := len([]rune(prefix))
+	prefixStart := cursorPos - prefixLen
+	if prefixStart < 0 {
+		prefixStart = 0
 	}
-	newFilter := filter + selected
+
+	// Replace the prefix at the cursor with the selected value,
+	// preserving any text after the cursor.
+	selectedRunes := []rune(selected)
+	newRunes := make([]rune, 0, len(runes)-prefixLen+len(selectedRunes))
+	newRunes = append(newRunes, runes[:prefixStart]...)
+	newRunes = append(newRunes, selectedRunes...)
+	newRunes = append(newRunes, runes[cursorPos:]...)
+	newFilter := string(newRunes)
+	newCursor := prefixStart + len(selectedRunes)
+
 	before := current.FilterCursorPos()
-	current.SetFilter(newFilter, len([]rune(newFilter)))
+	current.SetFilter(newFilter, newCursor)
 	m.noteFilterCursorChange(current, before)
 	m.syncFilterViewport(current)
 	m.completionSuppressedFilter = current.Filter
