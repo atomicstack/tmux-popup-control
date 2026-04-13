@@ -70,6 +70,17 @@ func RunCommand(socketPath, command string) tea.Cmd {
 		span.AddAttr("output_bytes", len(out))
 		if err != nil {
 			detail := strings.TrimSpace(string(out))
+			// "invalid option" from show-options means the option wasn't
+			// found in the queried scope — not a real error. Fall through
+			// to the placeholder path instead.
+			if strings.HasPrefix(detail, "invalid option:") && isShowOptionCommand(args[0]) {
+				span.End(nil)
+				result := ActionResult{Info: fmt.Sprintf("Ran: %s", command)}
+				if placeholder := showOptionEmptyPlaceholder(args); placeholder != "" {
+					result.Output = placeholder
+				}
+				return result
+			}
 			ran := "tmux " + strings.Join(args, " ")
 			span.End(err)
 			if detail != "" {
@@ -86,6 +97,14 @@ func RunCommand(socketPath, command string) tea.Cmd {
 		}
 		return result
 	}
+}
+
+func isShowOptionCommand(cmd string) bool {
+	switch cmd {
+	case "show-options", "show", "show-window-options", "showw", "show-hooks":
+		return true
+	}
+	return false
 }
 
 // showOptionEmptyPlaceholder returns a human-readable placeholder for empty

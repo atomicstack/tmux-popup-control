@@ -62,6 +62,69 @@ func TestLoadCommandMenuEmptyOutput(t *testing.T) {
 	}
 }
 
+func TestRunCommandShowOptionsInvalidOptionUsesPlaceholder(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	runCommandOutputFn = func(_ string, args ...string) ([]byte, error) {
+		return []byte("invalid option: @extrakto_copy_key"), fmt.Errorf("exit status 1")
+	}
+
+	cmd := RunCommand("/tmp/test.sock", "show-options @extrakto_copy_key")
+	msg := cmd()
+	result, ok := msg.(ActionResult)
+	if !ok {
+		t.Fatalf("expected ActionResult, got %T", msg)
+	}
+	if result.Err != nil {
+		t.Fatalf("expected no error for invalid option, got %v", result.Err)
+	}
+	if result.Output != "[option @extrakto_copy_key has no value]" {
+		t.Fatalf("expected placeholder, got %q", result.Output)
+	}
+}
+
+func TestRunCommandShowOptionsInvalidOptionWithScope(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	runCommandOutputFn = func(_ string, args ...string) ([]byte, error) {
+		return []byte("invalid option: @extrakto_copy_key"), fmt.Errorf("exit status 1")
+	}
+
+	cmd := RunCommand("/tmp/test.sock", "show-options -g @extrakto_copy_key")
+	msg := cmd()
+	result, ok := msg.(ActionResult)
+	if !ok {
+		t.Fatalf("expected ActionResult, got %T", msg)
+	}
+	if result.Err != nil {
+		t.Fatalf("expected no error, got %v", result.Err)
+	}
+	if result.Output != "[option @extrakto_copy_key has no value]" {
+		t.Fatalf("expected placeholder, got %q", result.Output)
+	}
+}
+
+func TestRunCommandNonShowOptionsErrorStaysError(t *testing.T) {
+	restore := runCommandOutputFn
+	t.Cleanup(func() { runCommandOutputFn = restore })
+
+	runCommandOutputFn = func(_ string, args ...string) ([]byte, error) {
+		return []byte("session not found: bogus"), fmt.Errorf("exit status 1")
+	}
+
+	cmd := RunCommand("/tmp/test.sock", "kill-session -t bogus")
+	msg := cmd()
+	result, ok := msg.(ActionResult)
+	if !ok {
+		t.Fatalf("expected ActionResult, got %T", msg)
+	}
+	if result.Err == nil {
+		t.Fatal("expected error for non-show-options command")
+	}
+}
+
 func TestRunCommandReturnsActionResult(t *testing.T) {
 	cmd := RunCommand("/tmp/nonexistent.sock", "display-message hello")
 	if cmd == nil {
