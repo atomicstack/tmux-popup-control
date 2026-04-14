@@ -167,6 +167,12 @@ func (m *Model) treeExpand(current *level, ts *menu.TreeState) tea.Cmd {
 // For tree levels, we bypass the generic filter (which would strip ancestor
 // nodes) and use FilterTreeItems which preserves the ancestor chain.
 func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
+	previousItems := current.Items
+	hadItems := len(current.Items) > 0
+	previousAutoCursor := 0
+	if hadItems {
+		previousAutoCursor = m.initialSessionTreeCursor(previousItems)
+	}
 	cursorID := ""
 	if current.Cursor >= 0 && current.Cursor < len(current.Items) {
 		cursorID = current.Items[current.Cursor].ID
@@ -187,6 +193,21 @@ func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
 	// which would strip ancestor nodes that don't match the filter query.
 	current.Full = items
 	current.Items = items
+	newAutoCursor := 0
+	if len(current.Items) > 0 {
+		newAutoCursor = m.initialSessionTreeCursor(current.Items)
+	}
+	startupCursor := current.ID == "session:tree" &&
+		current.Filter == "" &&
+		len(current.Items) > 0 &&
+		(!hadItems ||
+			(current.Cursor == previousAutoCursor &&
+				treeItemDepth(current.Items[newAutoCursor].ID) > treeItemDepth(previousItems[previousAutoCursor].ID)))
+	if startupCursor {
+		current.Cursor = newAutoCursor
+		m.syncViewport(current)
+		return
+	}
 	// Restore cursor to the same item if possible.
 	if cursorID != "" {
 		for i, it := range current.Items {
@@ -206,6 +227,19 @@ func (m *Model) rebuildTreeItems(current *level, ts *menu.TreeState) {
 	m.syncViewport(current)
 }
 
+func treeItemDepth(id string) int {
+	switch menu.TreeItemKind(id) {
+	case "pane":
+		return 3
+	case "window":
+		return 2
+	case "session":
+		return 1
+	default:
+		return 0
+	}
+}
+
 // syncTreeFilter rebuilds tree items after filter text changes.
 // Must be called after any filter modification on a tree level.
 func (m *Model) syncTreeFilter(current *level) {
@@ -217,6 +251,61 @@ func (m *Model) syncTreeFilter(current *level) {
 		return
 	}
 	m.rebuildTreeItems(current, ts)
+}
+
+func (m *Model) initialSessionTreeCursor(items []menu.Item) int {
+	if len(items) == 0 {
+		return 0
+	}
+
+	candidates := make([]string, 0, 3)
+
+	if paneID := strings.TrimSpace(m.panes.CurrentID()); paneID != "" {
+		for _, pane := range m.panes.Entries() {
+			if pane.ID != paneID {
+				continue
+			}
+			session := strings.TrimSpace(pane.Session)
+			if session == "" {
+				break
+			}
+			candidates = append(candidates, menu.TreePaneID(session, pane.WindowIdx, pane.ID))
+			break
+		}
+	}
+
+	windowSession := strings.TrimSpace(m.windows.CurrentSession())
+	windowID := strings.TrimSpace(m.windows.CurrentID())
+	if windowID != "" {
+		for _, window := range m.windows.Entries() {
+			if window.ID != windowID {
+				continue
+			}
+			session := strings.TrimSpace(window.Session)
+			if session == "" {
+				session = windowSession
+			}
+			if session == "" {
+				break
+			}
+			candidates = append(candidates, menu.TreeWindowID(session, window.Index))
+			break
+		}
+	}
+
+	if session := strings.TrimSpace(m.sessions.Current()); session != "" {
+		candidates = append(candidates, menu.TreeSessionID(session))
+	}
+
+	for _, candidate := range candidates {
+		for i, item := range items {
+			if item.ID == candidate {
+				return i
+			}
+		}
+	}
+
+	return 0
 }
 
 // populatePullTreeData fills pullTreeSessions and pullTreeWindows

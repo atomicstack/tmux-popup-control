@@ -522,10 +522,10 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	if update.id == "session:tree" {
 		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
 		level.Data = menu.NewTreeState(allExpanded)
-		level.Cursor = 0
 		m.treeSessions = m.sessions.Entries()
 		m.treeWindows = m.windows.Entries()
 		m.treePanes = m.panes.Entries()
+		level.Cursor = m.initialSessionTreeCursor(level.Items)
 	}
 	if update.id == "window:pull-from-session" {
 		level.Data = menu.NewTreeState(false)
@@ -654,10 +654,10 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	if node.ID == "session:tree" {
 		allExpanded := strings.TrimSpace(m.menuArgs) == "expanded"
 		root.Data = menu.NewTreeState(allExpanded)
-		root.Cursor = 0
 		m.treeSessions = m.sessions.Entries()
 		m.treeWindows = m.windows.Entries()
 		m.treePanes = m.panes.Entries()
+		root.Cursor = m.initialSessionTreeCursor(root.Items)
 	}
 	if node.ID == "window:pull-from-session" {
 		root.Data = menu.NewTreeState(false)

@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/backend"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool) *Model {
@@ -22,6 +24,198 @@ func testTreeModel(sessions []menu.SessionEntry, windows []menu.WindowEntry, pan
 	m.stack = append(m.stack, lvl)
 	m.syncViewport(lvl)
 	return m
+}
+
+func seedSessionTreeStores(
+	m *Model,
+	sessions []menu.SessionEntry,
+	windows []menu.WindowEntry,
+	panes []menu.PaneEntry,
+	currentSession string,
+	currentWindowID string,
+	currentWindowLabel string,
+	currentWindowSession string,
+	currentPaneID string,
+	currentPaneLabel string,
+) {
+	m.sessions.SetEntries(sessions)
+	m.sessions.SetCurrent(currentSession)
+	m.windows.SetEntries(windows)
+	m.windows.SetCurrent(currentWindowID, currentWindowLabel, currentWindowSession)
+	m.panes.SetEntries(panes)
+	m.panes.SetCurrent(currentPaneID, currentPaneLabel)
+	m.treeSessions = sessions
+	m.treeWindows = windows
+	m.treePanes = panes
+}
+
+func buildSessionTreeItems(allExpanded bool, sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry) []menu.Item {
+	return menu.NewTreeState(allExpanded).BuildTreeItems(menu.TreeItemsInput{
+		Sessions: sessions,
+		Windows:  windows,
+		Panes:    panes,
+	})
+}
+
+func TestSessionTreeStartsOnCurrentSessionCollapsedViaRootMenu(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
+	sessions := []menu.SessionEntry{
+		{Name: "alpha", Label: "alpha"},
+		{Name: "beta", Label: "beta", Current: true},
+	}
+	seedSessionTreeStores(m, sessions, nil, nil, "beta", "", "", "", "", "")
+
+	m.applyRootMenuOverride("session:tree")
+
+	current := m.currentLevel()
+	if current.Cursor != 1 {
+		t.Fatalf("expected cursor on current session at index 1, got %d", current.Cursor)
+	}
+	if got := current.Items[current.Cursor].ID; got != menu.TreeSessionID("beta") {
+		t.Fatalf("expected current item %q, got %q", menu.TreeSessionID("beta"), got)
+	}
+}
+
+func TestSessionTreeStartsOnCurrentWindowWhenVisibleViaLoadedMsg(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 24, MenuArgs: "expanded"})
+	sessions := []menu.SessionEntry{{Name: "alpha", Label: "alpha", Current: true}}
+	windows := []menu.WindowEntry{
+		{ID: "alpha:0", Session: "alpha", Index: 0, Name: "bash", Label: "0: bash"},
+		{ID: "alpha:1", Session: "alpha", Index: 1, Name: "vim", Label: "1: vim", Current: true},
+	}
+	seedSessionTreeStores(m, sessions, windows, nil, "alpha", "alpha:1", "1: vim", "alpha", "", "")
+	m.pendingID = "session:tree"
+
+	m.handleCategoryLoadedMsg(categoryLoadedMsg{
+		id:     "session:tree",
+		title:  "tree",
+		items:  buildSessionTreeItems(true, sessions, windows, nil),
+		err:    nil,
+	})
+
+	current := m.currentLevel()
+	if current.Cursor != 2 {
+		t.Fatalf("expected cursor on current window at index 2, got %d", current.Cursor)
+	}
+	if got := current.Items[current.Cursor].ID; got != menu.TreeWindowID("alpha", 1) {
+		t.Fatalf("expected current item %q, got %q", menu.TreeWindowID("alpha", 1), got)
+	}
+}
+
+func TestSessionTreeStartsOnCurrentPaneWhenVisibleViaLoadedMsg(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 24, MenuArgs: "expanded"})
+	sessions := []menu.SessionEntry{{Name: "alpha", Label: "alpha", Current: true}}
+	windows := []menu.WindowEntry{
+		{ID: "alpha:0", Session: "alpha", Index: 0, Name: "bash", Label: "0: bash", Current: true},
+	}
+	panes := []menu.PaneEntry{
+		{ID: "%0", Session: "alpha", WindowIdx: 0, Index: 0, Label: "0: sh"},
+		{ID: "%1", Session: "alpha", WindowIdx: 0, Index: 1, Label: "1: vim", Current: true},
+	}
+	seedSessionTreeStores(m, sessions, windows, panes, "alpha", "alpha:0", "0: bash", "alpha", "%1", "1: vim")
+	m.pendingID = "session:tree"
+
+	m.handleCategoryLoadedMsg(categoryLoadedMsg{
+		id:     "session:tree",
+		title:  "tree",
+		items:  buildSessionTreeItems(true, sessions, windows, panes),
+		err:    nil,
+	})
+
+	current := m.currentLevel()
+	if current.Cursor != 3 {
+		t.Fatalf("expected cursor on current pane at index 3, got %d", current.Cursor)
+	}
+	if got := current.Items[current.Cursor].ID; got != menu.TreePaneID("alpha", 0, "%1") {
+		t.Fatalf("expected current item %q, got %q", menu.TreePaneID("alpha", 0, "%1"), got)
+	}
+}
+
+func TestSessionTreeStartsAtFirstItemWhenCurrentPathNotVisibleViaLoadedMsg(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 24, MenuArgs: "expanded"})
+	sessions := []menu.SessionEntry{
+		{Name: "alpha", Label: "alpha"},
+		{Name: "beta", Label: "beta"},
+	}
+	windows := []menu.WindowEntry{
+		{ID: "alpha:0", Session: "alpha", Index: 0, Name: "bash", Label: "0: bash"},
+		{ID: "beta:0", Session: "beta", Index: 0, Name: "zsh", Label: "0: zsh"},
+	}
+	seedSessionTreeStores(m, sessions, windows, nil, "missing", "missing:0", "0: missing", "missing", "", "")
+	m.pendingID = "session:tree"
+
+	m.handleCategoryLoadedMsg(categoryLoadedMsg{
+		id:     "session:tree",
+		title:  "tree",
+		items:  buildSessionTreeItems(true, sessions, windows, nil),
+		err:    nil,
+	})
+
+	current := m.currentLevel()
+	if current.Cursor != 0 {
+		t.Fatalf("expected cursor to fall back to the first visible item, got %d", current.Cursor)
+	}
+	if got := current.Items[current.Cursor].ID; got != menu.TreeSessionID("alpha") {
+		t.Fatalf("expected first visible item %q, got %q", menu.TreeSessionID("alpha"), got)
+	}
+}
+
+func TestSessionTreeRootMenuStartupSelectsCurrentPaneAfterBackendLoad(t *testing.T) {
+	m := NewModel(ModelConfig{
+		Width:    80,
+		Height:   24,
+		RootMenu: "session:tree",
+		MenuArgs: "expanded",
+	})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	h.Send(backendEventMsg{event: backend.Event{
+		Kind: backend.KindSessions,
+		Data: tmux.SessionSnapshot{
+			Sessions: []tmux.Session{
+				{Name: "alpha", Label: "alpha", Current: true},
+			},
+			Current:        "alpha",
+			IncludeCurrent: true,
+		},
+	}})
+	h.Send(backendEventMsg{event: backend.Event{
+		Kind: backend.KindWindows,
+		Data: tmux.WindowSnapshot{
+			Windows: []tmux.Window{
+				{ID: "alpha:0", Session: "alpha", Index: 0, Name: "bash", Label: "0: bash", Current: true},
+			},
+			CurrentID:      "alpha:0",
+			CurrentLabel:   "0: bash",
+			CurrentSession: "alpha",
+			IncludeCurrent: true,
+		},
+	}})
+	h.Send(backendEventMsg{event: backend.Event{
+		Kind: backend.KindPanes,
+		Data: tmux.PaneSnapshot{
+			Panes: []tmux.Pane{
+				{ID: "%0", PaneID: "%0", Session: "alpha", WindowIdx: 0, Index: 0, Label: "0: sh"},
+				{ID: "%1", PaneID: "%1", Session: "alpha", WindowIdx: 0, Index: 1, Label: "1: vim", Current: true},
+			},
+			CurrentID:      "%1",
+			CurrentLabel:   "1: vim",
+			IncludeCurrent: true,
+			CurrentWindow:  "alpha:0",
+		},
+	}})
+
+	current := h.Model().currentLevel()
+	if current == nil {
+		t.Fatal("expected current level after backend load")
+	}
+	if current.Cursor != 3 {
+		t.Fatalf("expected cursor on current pane at index 3, got %d", current.Cursor)
+	}
+	if got := current.Items[current.Cursor].ID; got != menu.TreePaneID("alpha", 0, "%1") {
+		t.Fatalf("expected current item %q, got %q", menu.TreePaneID("alpha", 0, "%1"), got)
+	}
 }
 
 func testTreeModelWithSize(sessions []menu.SessionEntry, windows []menu.WindowEntry, panes []menu.PaneEntry, allExpanded bool, width int, height int) *Model {
