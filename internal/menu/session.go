@@ -483,7 +483,7 @@ func loadSessionRestoreFromMenu(ctx Context) ([]Item, error) {
 		}
 		age := resurrect.RelativeTime(e.Timestamp, now)
 		date := e.Timestamp.Format("2006-01-02")
-		timeStr := e.Timestamp.Format("15:04")
+		timeStr := e.Timestamp.Format("15:04:05")
 		size := humanizeSaveSize(e.Size)
 		info := fmt.Sprintf("%2ds %3dw %3dp", e.SessionCount, e.WindowCount, e.PaneCount)
 		if e.HasPaneContents {
