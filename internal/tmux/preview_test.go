@@ -276,3 +276,40 @@ func TestPanePreviewKeepsSingleVisibleLineWithBlankRowsBelow(t *testing.T) {
 		t.Fatalf("expected cursor on retained line, got %+v", data)
 	}
 }
+
+func TestFetchPreviewTopology(t *testing.T) {
+	t.Setenv("TMUX_PANE", "")
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_ID", "")
+
+	fake := &fakeClient{
+		listPanesFormatLines: []string{
+			"%1\tdev\t0\t0\t0",
+			"%2\tdev\t0\t1\t0",
+			"%3\tdev\t1\t0\t1",
+			"%4\tdev\t1\t1\t1",
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	snap, err := FetchPreviewTopology("")
+	if err != nil {
+		t.Fatalf("FetchPreviewTopology returned error: %v", err)
+	}
+
+	t.Run("session active window", func(t *testing.T) {
+		if got := snap.ActiveWindowIDForSession("dev"); got != "dev:1" {
+			t.Fatalf("expected topology to choose the active window for the session, got %q", got)
+		}
+	})
+	t.Run("window active pane", func(t *testing.T) {
+		if got := snap.ActivePaneIDForWindow("dev:1"); got != "%4" {
+			t.Fatalf("expected topology to choose only the active pane for the window, got %q", got)
+		}
+	})
+	t.Run("session pane from active window", func(t *testing.T) {
+		if got := snap.ActivePaneIDForSession("dev"); got != "%4" {
+			t.Fatalf("expected topology session pane to come from the active window, got %q", got)
+		}
+	})
+}

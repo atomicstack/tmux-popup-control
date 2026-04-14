@@ -19,6 +19,104 @@ type PanePreviewData struct {
 	CursorY       int
 }
 
+// PreviewTopology describes the preview-relevant tmux topology for a popup
+// level.
+type PreviewTopology struct {
+	SessionActiveWindowIDs map[string]string
+	SessionActivePaneIDs   map[string]string
+	WindowActivePaneIDs    map[string]string
+}
+
+func FetchPreviewTopology(socketPath string) (PreviewTopology, error) {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return PreviewTopology{}, err
+	}
+	format := strings.Join([]string{
+		"#{pane_id}",
+		"#{session_name}",
+		"#{window_index}",
+		"#{?pane_active,1,0}",
+		"#{?window_active,1,0}",
+	}, "\t")
+	lines, err := client.ListPanesFormat("", "", format)
+	if err != nil {
+		return PreviewTopology{}, fmt.Errorf("list-panes preview topology: %w", err)
+	}
+	return parsePreviewTopology(lines), nil
+}
+
+func (p PreviewTopology) ActivePaneIDForSession(session string) string {
+	if p.SessionActivePaneIDs == nil {
+		return ""
+	}
+	return p.SessionActivePaneIDs[strings.TrimSpace(session)]
+}
+
+func (p PreviewTopology) ActiveWindowIDForSession(session string) string {
+	if p.SessionActiveWindowIDs == nil {
+		return ""
+	}
+	return p.SessionActiveWindowIDs[strings.TrimSpace(session)]
+}
+
+func (p PreviewTopology) ActivePaneIDForWindow(window string) string {
+	if p.WindowActivePaneIDs == nil {
+		return ""
+	}
+	return p.WindowActivePaneIDs[strings.TrimSpace(window)]
+}
+
+func parsePreviewTopology(lines []string) PreviewTopology {
+	topology := PreviewTopology{
+		SessionActiveWindowIDs: make(map[string]string),
+		SessionActivePaneIDs:   make(map[string]string),
+		WindowActivePaneIDs:    make(map[string]string),
+	}
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		paneID, session, windowIndex, paneActive, windowActive, ok := parsePreviewTopologyLine(line)
+		if !ok {
+			continue
+		}
+		windowTarget := fmt.Sprintf("%s:%d", session, windowIndex)
+		if windowTarget == ":" {
+			continue
+		}
+		if paneActive {
+			topology.WindowActivePaneIDs[windowTarget] = paneID
+		}
+		if windowActive {
+			topology.SessionActiveWindowIDs[session] = windowTarget
+			if paneActive {
+				topology.SessionActivePaneIDs[session] = paneID
+			}
+		}
+	}
+	for session, windowTarget := range topology.SessionActiveWindowIDs {
+		if topology.SessionActivePaneIDs[session] == "" {
+			topology.SessionActivePaneIDs[session] = topology.WindowActivePaneIDs[windowTarget]
+		}
+	}
+	return topology
+}
+
+func parsePreviewTopologyLine(line string) (paneID, session string, windowIndex int, paneActive, windowActive, ok bool) {
+	parts := strings.Split(line, "\t")
+	if len(parts) != 5 {
+		return "", "", 0, false, false, false
+	}
+	paneID = strings.TrimSpace(parts[0])
+	session = strings.TrimSpace(parts[1])
+	windowIndex, _ = strconv.Atoi(strings.TrimSpace(parts[2]))
+	paneActive = strings.TrimSpace(parts[3]) == "1"
+	windowActive = strings.TrimSpace(parts[4]) == "1"
+	return paneID, session, windowIndex, paneActive, windowActive, paneID != "" && session != ""
+}
+
 // PanePreview captures the contents of a pane for display via control-mode.
 func PanePreview(socketPath, pane string) (PanePreviewData, error) {
 	target := strings.TrimSpace(pane)

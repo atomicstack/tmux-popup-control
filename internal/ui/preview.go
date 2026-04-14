@@ -46,6 +46,9 @@ type previewData struct {
 	cursorVisible bool
 	cursorX       int
 	cursorY       int
+	levelRef      *level
+	topology      tmux.PreviewTopology
+	topologyReady bool
 }
 
 type previewLoadedMsg struct {
@@ -62,8 +65,9 @@ type previewLoadedMsg struct {
 }
 
 var (
-	panePreviewFn   = tmux.PanePreview
-	layoutPreviewFn = tmux.SelectLayout
+	panePreviewFn          = tmux.PanePreview
+	layoutPreviewFn        = tmux.SelectLayout
+	fetchPreviewTopologyFn = tmux.FetchPreviewTopology
 )
 
 type layoutAppliedMsg struct {
@@ -114,25 +118,31 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	}
 
 	existing, ok := m.preview[level.ID]
-	if ok && existing.target == item.ID && existing.loading {
+	if ok && existing.levelRef == level && existing.target == item.ID && existing.loading {
 		return nil // already fetching this target
 	}
 	m.previewSeq++
 	seq := m.previewSeq
 	if ok {
+		if existing.levelRef != level {
+			existing.topology = tmux.PreviewTopology{}
+			existing.topologyReady = false
+		}
 		// Reuse entry — old lines stay visible until the new data arrives.
 		existing.kind = kind
 		existing.target = item.ID
 		existing.label = item.Label
 		existing.loading = true
 		existing.seq = seq
+		existing.levelRef = level
 	} else {
 		m.preview[level.ID] = &previewData{
-			kind:    kind,
-			target:  item.ID,
-			label:   item.Label,
-			loading: true,
-			seq:     seq,
+			kind:     kind,
+			target:   item.ID,
+			label:    item.Label,
+			loading:  true,
+			seq:      seq,
+			levelRef: level,
 		}
 	}
 	socket := m.socketPath
@@ -158,7 +168,7 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 			}
 		}
 	case previewKindSession:
-		paneID := m.activePaneIDForSession(target)
+		paneID := m.previewPaneIDForSession(level, target)
 		if paneID == "" {
 			lines := m.sessionPreviewLines(target)
 			return func() tea.Msg {
@@ -181,7 +191,7 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 			}
 		}
 	case previewKindWindow:
-		paneID := m.activePaneIDForWindow(target)
+		paneID := m.previewPaneIDForWindow(level, target)
 		if paneID == "" {
 			lines := m.windowPreviewLines(target)
 			return func() tea.Msg {
@@ -293,8 +303,53 @@ func (m *Model) activePaneIDForWindow(window string) string {
 	return fallback
 }
 
+func (m *Model) previewTopologyForLevel(level *level) tmux.PreviewTopology {
+	if level == nil || m.preview == nil {
+		return tmux.PreviewTopology{}
+	}
+	data, ok := m.preview[level.ID]
+	if !ok {
+		return tmux.PreviewTopology{}
+	}
+	if data.levelRef != level {
+		data.levelRef = level
+		data.topology = tmux.PreviewTopology{}
+		data.topologyReady = false
+	}
+	if data.topologyReady {
+		return data.topology
+	}
+	topology, err := fetchPreviewTopologyFn(m.socketPath)
+	if err != nil {
+		return tmux.PreviewTopology{}
+	}
+	data.topology = topology
+	data.topologyReady = true
+	return topology
+}
+
+func (m *Model) previewPaneIDForSession(level *level, session string) string {
+	topology := m.previewTopologyForLevel(level)
+	if paneID := topology.ActivePaneIDForSession(session); paneID != "" {
+		return paneID
+	}
+	return m.activePaneIDForSession(session)
+}
+
+func (m *Model) previewPaneIDForWindow(level *level, window string) string {
+	topology := m.previewTopologyForLevel(level)
+	if paneID := topology.ActivePaneIDForWindow(window); paneID != "" {
+		return paneID
+	}
+	return m.activePaneIDForWindow(window)
+}
+
 // treePreviewCmd returns a preview command appropriate for the tree item type.
 func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) tea.Cmd {
+	var level *level
+	if data, ok := m.preview[levelID]; ok {
+		level = data.levelRef
+	}
 	kind := menu.TreeItemKind(target)
 	switch kind {
 	case "pane":
@@ -327,7 +382,7 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 		}
 		session, windowIdx := parts[0], parts[1]
 		windowTarget := session + ":" + windowIdx
-		paneID := m.activePaneIDForWindow(windowTarget)
+		paneID := m.previewPaneIDForWindow(level, windowTarget)
 		if paneID == "" {
 			lines := m.windowPreviewLines(windowTarget)
 			return func() tea.Msg {
@@ -351,7 +406,7 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 		}
 	case "session":
 		session := strings.TrimPrefix(target, menu.TreePrefixSession)
-		paneID := m.activePaneIDForSession(session)
+		paneID := m.previewPaneIDForSession(level, session)
 		if paneID == "" {
 			lines := m.sessionPreviewLines(session)
 			return func() tea.Msg {

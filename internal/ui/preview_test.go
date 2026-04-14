@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -127,6 +128,251 @@ func TestWindowPreviewUsesPaneCaptureWhenPanesAvailable(t *testing.T) {
 	// Active pane (Current=true) should be preferred over the first pane.
 	if capturedTarget != "dev:1.1" {
 		t.Fatalf("expected pane capture target dev:1.1, got %q", capturedTarget)
+	}
+}
+
+func TestSessionPreviewUsesSessionActivePaneFromTopology(t *testing.T) {
+	lvl := newLevel("session:switch", "Sessions", []menu.Item{{ID: "dev", Label: "Dev"}}, nil)
+	m := NewModel(ModelConfig{})
+	m.stack = []*level{lvl}
+	m.preview = make(map[string]*previewData)
+	m.windows.SetEntries([]menu.WindowEntry{
+		{ID: "dev:0", Session: "dev", Index: 0, Name: "main", Current: false},
+		{ID: "dev:1", Session: "dev", Index: 1, Name: "logs", Current: true},
+	})
+	m.panes.SetEntries([]menu.PaneEntry{
+		{ID: "dev:0.0", Session: "dev", Window: "main", WindowIdx: 0, Index: 0},
+		{ID: "dev:1.0", Session: "dev", Window: "logs", WindowIdx: 1, Index: 0},
+		{ID: "dev:1.1", Session: "dev", Window: "logs", WindowIdx: 1, Index: 1},
+	})
+
+	topologyFetchCalls := 0
+	oldTopology := fetchPreviewTopologyFn
+	fetchPreviewTopologyFn = func(string) (tmux.PreviewTopology, error) {
+		topologyFetchCalls++
+		return tmux.PreviewTopology{
+			SessionActivePaneIDs: map[string]string{"dev": "dev:1.1"},
+			WindowActivePaneIDs:  map[string]string{"dev:1": "dev:1.1"},
+		}, nil
+	}
+	capturedTarget := ""
+	old := panePreviewFn
+	panePreviewFn = func(_, pane string) (tmux.PanePreviewData, error) {
+		capturedTarget = pane
+		return tmux.PanePreviewData{Lines: []string{"topology"}}, nil
+	}
+	defer func() {
+		panePreviewFn = old
+		fetchPreviewTopologyFn = oldTopology
+	}()
+
+	cmd := m.ensurePreviewForLevel(lvl)
+	if cmd == nil {
+		t.Fatalf("expected preview command")
+	}
+	_ = cmd()
+
+	if capturedTarget != "dev:1.1" {
+		t.Fatalf("expected topology-resolved active pane dev:1.1, got %q", capturedTarget)
+	}
+	if topologyFetchCalls != 1 {
+		t.Fatalf("expected topology fetch helper to be called once, got %d", topologyFetchCalls)
+	}
+}
+
+func TestWindowPreviewUsesWindowActivePaneFromTopology(t *testing.T) {
+	lvl := newLevel("window:switch", "Windows", []menu.Item{{ID: "dev:1", Label: "main"}}, nil)
+	m := NewModel(ModelConfig{})
+	m.stack = []*level{lvl}
+	m.preview = make(map[string]*previewData)
+	m.panes.SetEntries([]menu.PaneEntry{
+		{ID: "dev:1.0", Session: "dev", Window: "main", WindowIdx: 1, Index: 0},
+		{ID: "dev:1.1", Session: "dev", Window: "main", WindowIdx: 1, Index: 1},
+	})
+
+	oldTopology := fetchPreviewTopologyFn
+	fetchPreviewTopologyFn = func(string) (tmux.PreviewTopology, error) {
+		return tmux.PreviewTopology{
+			WindowActivePaneIDs: map[string]string{"dev:1": "dev:1.1"},
+		}, nil
+	}
+	capturedTarget := ""
+	old := panePreviewFn
+	panePreviewFn = func(_, pane string) (tmux.PanePreviewData, error) {
+		capturedTarget = pane
+		return tmux.PanePreviewData{Lines: []string{"topology"}}, nil
+	}
+	defer func() {
+		panePreviewFn = old
+		fetchPreviewTopologyFn = oldTopology
+	}()
+
+	cmd := m.ensurePreviewForLevel(lvl)
+	if cmd == nil {
+		t.Fatalf("expected preview command")
+	}
+	_ = cmd()
+
+	if capturedTarget != "dev:1.1" {
+		t.Fatalf("expected topology-resolved active pane dev:1.1, got %q", capturedTarget)
+	}
+}
+
+func TestTreeSessionPreviewUsesSessionActivePaneFromTopology(t *testing.T) {
+	lvl := newLevel("session:tree", "tree", []menu.Item{{ID: menu.TreeSessionID("dev"), Label: "dev"}}, nil)
+	m := NewModel(ModelConfig{})
+	m.stack = []*level{lvl}
+	m.preview = make(map[string]*previewData)
+	m.windows.SetEntries([]menu.WindowEntry{
+		{ID: "dev:0", Session: "dev", Index: 0, Name: "main", Current: false},
+		{ID: "dev:1", Session: "dev", Index: 1, Name: "logs", Current: true},
+	})
+	m.panes.SetEntries([]menu.PaneEntry{
+		{ID: "dev:0.0", Session: "dev", Window: "main", WindowIdx: 0, Index: 0},
+		{ID: "dev:1.0", Session: "dev", Window: "logs", WindowIdx: 1, Index: 0},
+		{ID: "dev:1.1", Session: "dev", Window: "logs", WindowIdx: 1, Index: 1},
+	})
+
+	oldTopology := fetchPreviewTopologyFn
+	fetchPreviewTopologyFn = func(string) (tmux.PreviewTopology, error) {
+		return tmux.PreviewTopology{
+			SessionActivePaneIDs: map[string]string{"dev": "dev:1.1"},
+		}, nil
+	}
+	capturedTarget := ""
+	old := panePreviewFn
+	panePreviewFn = func(_, pane string) (tmux.PanePreviewData, error) {
+		capturedTarget = pane
+		return tmux.PanePreviewData{Lines: []string{"topology"}}, nil
+	}
+	defer func() {
+		panePreviewFn = old
+		fetchPreviewTopologyFn = oldTopology
+	}()
+
+	cmd := m.ensurePreviewForLevel(lvl)
+	if cmd == nil {
+		t.Fatalf("expected preview command")
+	}
+	_ = cmd()
+
+	if capturedTarget != "dev:1.1" {
+		t.Fatalf("expected topology-resolved active pane dev:1.1, got %q", capturedTarget)
+	}
+}
+
+func TestPreviewTopologyCacheReusedWhileLevelLoading(t *testing.T) {
+	lvl := newLevel("session:switch", "Sessions", []menu.Item{{ID: "dev", Label: "Dev"}}, nil)
+	m := NewModel(ModelConfig{})
+	m.stack = []*level{lvl}
+	m.preview = make(map[string]*previewData)
+	m.windows.SetEntries([]menu.WindowEntry{
+		{ID: "dev:0", Session: "dev", Index: 0, Name: "main", Current: false},
+		{ID: "dev:1", Session: "dev", Index: 1, Name: "logs", Current: true},
+	})
+	m.panes.SetEntries([]menu.PaneEntry{
+		{ID: "dev:0.0", Session: "dev", Window: "main", WindowIdx: 0, Index: 0},
+		{ID: "dev:1.0", Session: "dev", Window: "logs", WindowIdx: 1, Index: 0},
+		{ID: "dev:1.1", Session: "dev", Window: "logs", WindowIdx: 1, Index: 1},
+	})
+
+	topologyCalls := 0
+	oldTopology := fetchPreviewTopologyFn
+	fetchPreviewTopologyFn = func(string) (tmux.PreviewTopology, error) {
+		topologyCalls++
+		return tmux.PreviewTopology{
+			SessionActivePaneIDs: map[string]string{"dev": "dev:1.1"},
+			WindowActivePaneIDs:  map[string]string{"dev:1": "dev:1.1"},
+		}, nil
+	}
+	old := panePreviewFn
+	panePreviewFn = func(_, pane string) (tmux.PanePreviewData, error) {
+		return tmux.PanePreviewData{Lines: []string{"topology"}}, nil
+	}
+	defer func() {
+		panePreviewFn = old
+		fetchPreviewTopologyFn = oldTopology
+	}()
+
+	if cmd := m.ensurePreviewForLevel(lvl); cmd == nil {
+		t.Fatalf("expected first preview command")
+	} else {
+		_ = cmd()
+	}
+	if cmd := m.ensurePreviewForLevel(lvl); cmd != nil {
+		t.Fatalf("expected second ensurePreviewForLevel call to reuse the in-flight preview and return nil")
+	}
+
+	if topologyCalls != 1 {
+		t.Fatalf("expected topology fetch helper to be called once while the level is loading, got %d calls", topologyCalls)
+	}
+}
+
+func TestPreviewTopologyFetchErrorRetriedForSameLevel(t *testing.T) {
+	lvl := newLevel("session:switch", "Sessions", []menu.Item{{ID: "dev", Label: "Dev"}}, nil)
+	m := NewModel(ModelConfig{})
+	m.stack = []*level{lvl}
+	m.preview = make(map[string]*previewData)
+	m.panes.SetEntries([]menu.PaneEntry{
+		{ID: "dev:1.0", Session: "dev", Window: "logs", WindowIdx: 1, Index: 0, Current: true},
+		{ID: "dev:1.1", Session: "dev", Window: "logs", WindowIdx: 1, Index: 1, Current: false},
+	})
+
+	topologyCalls := 0
+	oldTopology := fetchPreviewTopologyFn
+	fetchPreviewTopologyFn = func(string) (tmux.PreviewTopology, error) {
+		topologyCalls++
+		if topologyCalls == 1 {
+			return tmux.PreviewTopology{}, errors.New("tmux unavailable")
+		}
+		return tmux.PreviewTopology{
+			SessionActivePaneIDs: map[string]string{"dev": "dev:1.1"},
+		}, nil
+	}
+	var capturedTargets []string
+	oldPanePreview := panePreviewFn
+	panePreviewFn = func(_, pane string) (tmux.PanePreviewData, error) {
+		capturedTargets = append(capturedTargets, pane)
+		return tmux.PanePreviewData{Lines: []string{"preview"}}, nil
+	}
+	defer func() {
+		fetchPreviewTopologyFn = oldTopology
+		panePreviewFn = oldPanePreview
+	}()
+
+	cmd := m.ensurePreviewForLevel(lvl)
+	if cmd == nil {
+		t.Fatalf("expected first preview command")
+	}
+	rawMsg := cmd()
+	msg, ok := rawMsg.(previewLoadedMsg)
+	if !ok {
+		t.Fatalf("expected first previewLoadedMsg, got %T", rawMsg)
+	}
+	m.handlePreviewLoadedMsg(msg)
+
+	cmd = m.ensurePreviewForLevel(lvl)
+	if cmd == nil {
+		t.Fatalf("expected second preview command")
+	}
+	rawMsg = cmd()
+	msg, ok = rawMsg.(previewLoadedMsg)
+	if !ok {
+		t.Fatalf("expected second previewLoadedMsg, got %T", rawMsg)
+	}
+	m.handlePreviewLoadedMsg(msg)
+
+	if topologyCalls != 2 {
+		t.Fatalf("expected topology fetch to retry after error, got %d calls", topologyCalls)
+	}
+	if len(capturedTargets) != 2 {
+		t.Fatalf("expected 2 pane captures, got %v", capturedTargets)
+	}
+	if capturedTargets[0] != "dev:1.0" {
+		t.Fatalf("expected first capture to use pane-store fallback, got %q", capturedTargets[0])
+	}
+	if capturedTargets[1] != "dev:1.1" {
+		t.Fatalf("expected second capture to use retried topology result, got %q", capturedTargets[1])
 	}
 }
 
