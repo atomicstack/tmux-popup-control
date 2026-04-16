@@ -342,6 +342,65 @@ func TestRunAutoSaveCommandSleepsUntilDueThenPrintsIconAndClears(t *testing.T) {
 	}
 }
 
+func TestRunAutoSaveCommandWaitsFullIntervalOnFirstSaveAfterServerStart(t *testing.T) {
+	dir := t.TempDir()
+
+	// Last autosave is from a previous tmux server lifetime — well before
+	// the current server started. Without the first-save guard the worker
+	// would save immediately on startup, snapshotting a near-empty session.
+	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 9, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("WriteAutoSaveState: %v", err)
+	}
+
+	serverStart := time.Date(2026, 4, 5, 16, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 4, 5, 16, 0, 5, 0, time.UTC)
+
+	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
+	defer restoreFetchSessions()
+	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
+	defer restoreFetchWindows()
+	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return makePanes("main", 0), nil })
+	defer restoreFetchPanes()
+	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil })
+	defer restoreWindowOpts()
+	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
+	defer restoreClientInfo()
+	restoreNow := withAutosaveNowFn(func() time.Time { return now })
+	defer restoreNow()
+	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
+		return critical()
+	})
+	defer restoreLock()
+
+	var sleeps []time.Duration
+	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
+		sleeps = append(sleeps, d)
+		now = now.Add(d)
+	})
+	defer restoreSleep()
+
+	var out bytes.Buffer
+	err := RunAutoSaveCommand(StatusConfig{
+		SocketPath:      "/tmp/tmux.sock",
+		SaveDir:         dir,
+		IntervalMinutes: 5,
+		Max:             5,
+		IconSeconds:     10,
+		Icon:            "X ",
+		ServerStart:     serverStart,
+	}, &out)
+	if err != nil {
+		t.Fatalf("RunAutoSaveCommand: %v", err)
+	}
+
+	if len(sleeps) == 0 {
+		t.Fatalf("expected at least one sleep, got %#v", sleeps)
+	}
+	if sleeps[0] != 5*time.Minute {
+		t.Fatalf("expected first sleep to be full interval 5m, got %v", sleeps[0])
+	}
+}
+
 func TestRunAutoSaveCommandFallsBackToDefaultIcon(t *testing.T) {
 	dir := t.TempDir()
 

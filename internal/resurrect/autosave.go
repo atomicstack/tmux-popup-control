@@ -23,6 +23,12 @@ type StatusConfig struct {
 	Max                 int
 	IconSeconds         int
 	Icon                string
+	// ServerStart is the tmux server's start time. When the last successful
+	// autosave predates ServerStart, this is the first save of a fresh tmux
+	// server lifetime and the worker waits the full interval before saving,
+	// so we don't snapshot a near-empty session. Zero = unknown; normal
+	// scheduling applies.
+	ServerStart time.Time
 }
 
 type autoSaveState struct {
@@ -139,7 +145,13 @@ func runAutoSaveCommandLocked(cfg StatusConfig, output io.Writer) error {
 		return writeAutoSaveLine(output, "")
 	}
 
-	if sleepFor := timeUntilNextAutoSave(lastSuccess, now, cfg.IntervalMinutes); sleepFor > 0 {
+	sleepFor := timeUntilNextAutoSave(lastSuccess, now, cfg.IntervalMinutes)
+	if !cfg.ServerStart.IsZero() && lastSuccess.Before(cfg.ServerStart) {
+		// first save of this tmux server's lifetime — force the full interval
+		// so a freshly-started (empty) session isn't captured immediately.
+		sleepFor = time.Duration(cfg.IntervalMinutes) * time.Minute
+	}
+	if sleepFor > 0 {
 		autosaveSleepFn(sleepFor)
 	}
 

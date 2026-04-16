@@ -505,6 +505,7 @@ func buildAutoSaveConfig(cfg config.Config, deps MainDeps) (resurrect.StatusConf
 	if err != nil {
 		return resurrect.StatusConfig{}, fmt.Errorf("resolving save dir: %w", err)
 	}
+	serverStart, _ := tmux.ServerStartTime(resolvedSocketPath)
 	return resurrect.StatusConfig{
 		SocketPath:          resolvedSocketPath,
 		SaveDir:             saveDir,
@@ -513,6 +514,7 @@ func buildAutoSaveConfig(cfg config.Config, deps MainDeps) (resurrect.StatusConf
 		Max:                 deps.ResolveAutosaveMax(resolvedSocketPath),
 		Icon:                deps.ResolveAutosaveIcon(resolvedSocketPath),
 		IconSeconds:         deps.ResolveAutosaveIconSeconds(resolvedSocketPath),
+		ServerStart:         serverStart,
 	}, nil
 }
 
