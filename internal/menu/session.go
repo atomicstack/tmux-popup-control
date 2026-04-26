@@ -231,6 +231,7 @@ func NewSessionForm(prompt SessionPrompt) *SessionForm {
 func (f *SessionForm) Context() Context     { return f.ctx }
 func (f *SessionForm) Value() string        { return strings.TrimSpace(f.input.Value()) }
 func (f *SessionForm) InputView() string    { return f.input.View() }
+func (f *SessionForm) Cursor() *tea.Cursor  { return f.input.Cursor() }
 func (f *SessionForm) Error() string        { return f.err }
 func (f *SessionForm) ErrorIsWarning() bool { return f.errWarning }
 func (f *SessionForm) Action() string       { return f.action }

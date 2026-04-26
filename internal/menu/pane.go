@@ -406,8 +406,9 @@ func (f *PaneRenameForm) Target() string    { return f.target }
 func (f *PaneRenameForm) Title() string     { return f.title }
 func (f *PaneRenameForm) Help() string      { return f.help }
 func (f *PaneRenameForm) Value() string     { return strings.TrimSpace(f.input.Value()) }
-func (f *PaneRenameForm) InputView() string { return f.input.View() }
-func (f *PaneRenameForm) FocusCmd() tea.Cmd { return f.input.Focus() }
+func (f *PaneRenameForm) InputView() string   { return f.input.View() }
+func (f *PaneRenameForm) Cursor() *tea.Cursor { return f.input.Cursor() }
+func (f *PaneRenameForm) FocusCmd() tea.Cmd   { return f.input.Focus() }
 
 func (f *PaneRenameForm) ActionID() string { return "pane:rename" }
 
@@ -515,8 +516,9 @@ func NewPaneCaptureForm(prompt PaneCapturePrompt) *PaneCaptureForm {
 
 func (f *PaneCaptureForm) Context() Context   { return f.ctx }
 func (f *PaneCaptureForm) Value() string      { return f.input.Value() }
-func (f *PaneCaptureForm) InputView() string  { return f.input.View() }
-func (f *PaneCaptureForm) EscSeqs() bool      { return f.escSeqs }
+func (f *PaneCaptureForm) InputView() string   { return f.input.View() }
+func (f *PaneCaptureForm) Cursor() *tea.Cursor { return f.input.Cursor() }
+func (f *PaneCaptureForm) EscSeqs() bool       { return f.escSeqs }
 func (f *PaneCaptureForm) Preview() string    { return f.preview }
 func (f *PaneCaptureForm) PreviewErr() string { return f.previewErr }
 func (f *PaneCaptureForm) Seq() int           { return f.seq }

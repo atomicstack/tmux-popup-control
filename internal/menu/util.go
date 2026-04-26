@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
@@ -16,7 +17,10 @@ func styleFormInput(ti *textinput.Model) {
 	s.Focused.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true)
 	s.Blurred.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true)
 	s.Cursor.Color = lipgloss.Color("33")
+	s.Cursor.Shape = tea.CursorBlock
+	s.Cursor.Blink = true
 	ti.SetStyles(s)
+	ti.SetVirtualCursor(false)
 }
 
 func splitLines(input string) []string {
