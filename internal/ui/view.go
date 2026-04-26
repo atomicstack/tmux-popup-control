@@ -131,10 +131,14 @@ func (m *Model) View() (view tea.View) {
 	}
 	if m.hasSidePreview() {
 		content = m.viewSideBySide(header)
-		return m.wrapView(content)
+		v := m.wrapView(content)
+		m.attachFilterCursor(&v)
+		return v
 	}
 	content = m.viewVertical(header)
-	return m.wrapView(content)
+	v := m.wrapView(content)
+	m.attachFilterCursor(&v)
+	return v
 }
 
 // viewVertical is the standard single-column layout with an optional inline
@@ -1139,4 +1143,25 @@ func truncateText(text string, width int) string {
 		return string(runes[:1])
 	}
 	return string(runes[:width-1]) + "…"
+}
+
+// attachFilterCursor sets v.Cursor based on the current filter state. The
+// cursor is placed on the prompt row of the bottom bar; column comes from
+// promptCursorColumn. Modes without a focused filter (or with a nil level)
+// leave v.Cursor untouched.
+func (m *Model) attachFilterCursor(v *tea.View) {
+	current := m.currentLevel()
+	col, ok := promptCursorColumn(current)
+	if !ok {
+		return
+	}
+	row := m.height - m.bottomBarRows() + 1
+	if row < 0 {
+		row = 0
+	}
+	v.Cursor = &tea.Cursor{
+		Position: tea.Position{X: col, Y: row},
+		Shape:    tea.CursorBlock,
+		Blink:    true,
+	}
 }

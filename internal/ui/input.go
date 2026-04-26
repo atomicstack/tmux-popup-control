@@ -207,33 +207,14 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		}
 		return style.Render(value)
 	}
-	if styles.Cursor != nil {
-		m.filterCursor.Style = *styles.Cursor
-	}
-	if styles.Filter != nil {
-		m.filterCursor.TextStyle = *styles.Filter
-	} else {
-		m.filterCursor.TextStyle = lipgloss.Style{}
-	}
 	prompt := "» "
 	if styles.FilterPrompt != nil {
 		prompt = styles.FilterPrompt.Render(prompt)
 	}
 	text := current.Filter
 	if text == "" {
-		placeholder := "(type to search)"
-		runes := []rune(placeholder)
-		var caretRune string
-		var rest string
-		if len(runes) > 0 {
-			caretRune = string(runes[0])
-			rest = string(runes[1:])
-		}
-		if styles.FilterPlaceholder != nil {
-			m.filterCursor.TextStyle = *styles.FilterPlaceholder
-		}
-		caret := m.renderFilterCursor(caretRune)
-		return prompt + caret + render(styles.FilterPlaceholder, rest), nil
+		// Render the placeholder in full; the terminal cursor sits on top.
+		return prompt + render(styles.FilterPlaceholder, "(type to search)"), nil
 	}
 	runes := []rune(text)
 	pos := current.FilterCursorPos()
@@ -241,38 +222,15 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 	pos = min(pos, len(runes))
 
 	spans := m.filterColourSpans()
-
 	before := renderFilterSpans(runes[:pos], 0, spans, render)
+	after := renderFilterSpans(runes[pos:], pos, spans, render)
 	ghost := m.autoCompleteGhost()
-	var caretRune string
-	if pos < len(runes) {
-		caretRune = string(runes[pos])
-	} else if ghost != "" {
-		// Use first ghost character as the cursor caret so there is no
-		// visible gap between typed text and the autocomplete hint.
-		ghostRunes := []rune(ghost)
-		if styles.FilterPlaceholder != nil {
-			m.filterCursor.TextStyle = *styles.FilterPlaceholder
-		}
-		caretRune = string(ghostRunes[0])
-		caret := m.renderFilterCursor(caretRune)
-		ghostTail := ""
-		if len(ghostRunes) > 1 {
-			ghostTail = render(styles.FilterPlaceholder, string(ghostRunes[1:]))
-		}
-		return prompt + before + caret + ghostTail, nil
-	} else {
-		caretRune = " "
+	if ghost != "" && pos == len(runes) {
+		// Ghost text is rendered as placeholder after the cursor position;
+		// the terminal cursor sits on the first ghost character.
+		return prompt + before + render(styles.FilterPlaceholder, ghost), nil
 	}
-	if s := spanAt(spans, pos); s != nil {
-		m.filterCursor.TextStyle = *s
-	}
-	caret := m.renderFilterCursor(caretRune)
-	var after string
-	if pos+1 < len(runes) {
-		after = renderFilterSpans(runes[pos+1:], pos+1, spans, render)
-	}
-	return prompt + before + caret + after, nil
+	return prompt + before + after, nil
 }
 
 // filterSpan is a coloured region [Start, End) within the full filter text.
@@ -681,28 +639,6 @@ func (m *Model) acceptCompletion() tea.Cmd {
 	m.completionSuppressedFilter = current.Filter
 	m.dismissCompletion()
 	return nil
-}
-
-func (m *Model) renderFilterCursor(char string) string {
-	if char == "" {
-		char = " "
-	}
-	m.filterCursor.SetChar(char)
-
-	base := m.filterCursor.TextStyle
-	base = base.Inline(true)
-
-	if m.filterCursor.IsBlinked {
-		return base.Render(char)
-	}
-
-	if styles.Cursor != nil {
-		cursorStyle := lipgloss.NewStyle().Inherit(*styles.Cursor).Inline(true)
-		base = base.Inherit(cursorStyle).Blink(false)
-		return base.Render(char)
-	}
-
-	return base.Reverse(true).Render(char)
 }
 
 // promptCursorColumn returns the column (0-indexed) of the filter cursor

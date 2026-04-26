@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/charmbracelet/x/ansi"
@@ -321,5 +322,30 @@ func TestViewDisplaysPreviewCursorBlockPastLineEnd(t *testing.T) {
 	view := ansi.Strip(m.View().Content)
 	if !strings.Contains(view, "abcd█") {
 		t.Fatalf("expected cursor block after trimmed line end, got:\n%s", view)
+	}
+}
+
+func TestViewSetsFilterCursorAtPromptColumn(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 16})
+	lvl := newLevel("root", "Main Menu", []menu.Item{{ID: "a", Label: "Alpha"}}, nil)
+	lvl.SetFilter("ab", 2)
+	m.stack = []*level{lvl}
+
+	v := m.View()
+	if v.Cursor == nil {
+		t.Fatalf("expected view.Cursor to be set when filter is active")
+	}
+	if got, want := v.Cursor.Position.X, 4; got != want { // 2 (prompt) + 2 (ab)
+		t.Fatalf("cursor X = %d; want %d", got, want)
+	}
+	wantY := m.height - m.bottomBarRows() + 1
+	if got := v.Cursor.Position.Y; got != wantY {
+		t.Fatalf("cursor Y = %d; want %d", got, wantY)
+	}
+	if v.Cursor.Shape != tea.CursorBlock {
+		t.Fatalf("cursor shape = %v; want CursorBlock", v.Cursor.Shape)
+	}
+	if !v.Cursor.Blink {
+		t.Fatalf("cursor should blink")
 	}
 }
