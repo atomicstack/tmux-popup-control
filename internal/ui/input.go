@@ -11,6 +11,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/cmdhelp"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func (m *Model) updateFilterCursorModel(msg tea.Msg) tea.Cmd {
@@ -702,4 +703,30 @@ func (m *Model) renderFilterCursor(char string) string {
 	}
 
 	return base.Reverse(true).Render(char)
+}
+
+// promptCursorColumn returns the column (0-indexed) of the filter cursor
+// relative to the prompt's leftmost cell. ok is false when the level has no
+// filter context (nil level).
+//
+// The prompt prefix is "» " (2 cells); the filter text follows. The rune
+// offset stored on the level is converted to a string prefix via rune slicing,
+// then to a display-width column via ansi.StringWidth, so wide runes count as
+// 2 cells.
+func promptCursorColumn(l *level) (int, bool) {
+	if l == nil {
+		return 0, false
+	}
+	const promptPrefixWidth = 2 // "» "
+	runes := []rune(l.Filter)
+	runeOff := l.FilterCursor
+	if runeOff < 0 {
+		runeOff = 0
+	}
+	if runeOff > len(runes) {
+		runeOff = len(runes)
+	}
+	prefix := string(runes[:runeOff])
+	col := promptPrefixWidth + ansi.StringWidth(prefix)
+	return col, true
 }
