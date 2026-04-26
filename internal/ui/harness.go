@@ -66,3 +66,12 @@ func (h *Harness) View() string {
 func (h *Harness) Model() *Model {
 	return h.model
 }
+
+// Cursor returns the cursor metadata from the latest View. Returns nil when
+// no input is focused.
+func (h *Harness) Cursor() *tea.Cursor {
+	if h.model == nil {
+		return nil
+	}
+	return h.model.View().Cursor
+}
