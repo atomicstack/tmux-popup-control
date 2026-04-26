@@ -853,7 +853,7 @@ func previewDisplayLines(data *previewData) ([]string, int) {
 }
 
 func (m *Model) previewCursorVisible() bool {
-	return !m.filterCursor.IsBlinked
+	return !m.previewBlink.IsBlinked
 }
 
 func renderPreviewLine(preview *previewData, line string, absoluteRow int, bodyStyle *lipgloss.Style, cursorOn bool) (string, bool) {

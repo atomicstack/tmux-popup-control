@@ -14,9 +14,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func (m *Model) updateFilterCursorModel(msg tea.Msg) tea.Cmd {
+func (m *Model) updatePreviewBlinkModel(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
-	m.filterCursor, cmd = m.filterCursor.Update(msg)
+	m.previewBlink, cmd = m.previewBlink.Update(msg)
 	return cmd
 }
 
@@ -25,7 +25,7 @@ func (m *Model) noteFilterCursorChange(l *level, before int) {
 		return
 	}
 	if before != l.FilterCursorPos() {
-		m.filterCursorDirty = true
+		m.previewBlinkDirty = true
 	}
 }
 

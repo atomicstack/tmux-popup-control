@@ -111,8 +111,8 @@ type Model struct {
 	completion                 *completionState
 	completionSuppressedFilter string
 	noPreview                  bool
-	filterCursor               cursor.Model
-	filterCursorDirty          bool
+	previewBlink               cursor.Model
+	previewBlinkDirty          bool
 	commandOutputTitle         string
 	commandOutputLines         []string
 	commandOutputOffset        int
@@ -206,15 +206,7 @@ func NewModel(cfg ModelConfig) *Model {
 		m.height = cfg.Height
 		m.fixedHeight = true
 	}
-	c := cursor.New()
-	if styles.Cursor != nil {
-		c.Style = *styles.Cursor
-	}
-	if styles.Filter != nil {
-		c.TextStyle = *styles.Filter
-	}
-	c.SetChar(" ")
-	m.filterCursor = c
+	m.previewBlink = cursor.New()
 	m.applyRootMenuOverride(cfg.RootMenu)
 	m.registerHandlers()
 	return m
@@ -226,7 +218,7 @@ func (m *Model) Init() tea.Cmd {
 	if m.backend != nil {
 		cmds = append(cmds, waitForBackendEvent(m.backend))
 	}
-	if cmd := m.filterCursor.Focus(); cmd != nil {
+	if cmd := m.previewBlink.Focus(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	if m.initCmd != nil {
@@ -269,7 +261,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	defer span.End(nil)
 
 	cmds := make([]tea.Cmd, 0, 4)
-	if cmd := m.updateFilterCursorModel(msg); cmd != nil {
+	if cmd := m.updatePreviewBlinkModel(msg); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	if handled, cmd := m.handleActiveForm(msg); handled {
@@ -369,9 +361,9 @@ func (m *Model) handlerFor(msg tea.Msg) msgHandler {
 }
 
 func (m *Model) finishUpdate(cmds []tea.Cmd) tea.Cmd {
-	if m.filterCursorDirty {
-		m.filterCursorDirty = false
-		if cmd := m.filterCursor.Blink(); cmd != nil {
+	if m.previewBlinkDirty {
+		m.previewBlinkDirty = false
+		if cmd := m.previewBlink.Blink(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}

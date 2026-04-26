@@ -163,7 +163,7 @@ func TestViewShowsCommandOutputScreen(t *testing.T) {
 
 func TestViewDisplaysPreviewCursorBlock(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 16})
-	m.filterCursor.Focus()
+	m.previewBlink.Focus()
 	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
 	m.stack = []*level{lvl}
 	m.preview["pane:switch"] = &previewData{
@@ -202,7 +202,7 @@ func TestViewOmitsPreviewCursorBlockWhenNotVisible(t *testing.T) {
 
 func TestViewHidesPreviewCursorBlockWhenBlinkPhaseIsOff(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 16})
-	m.filterCursor.Focus()
+	m.previewBlink.Focus()
 	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
 	m.stack = []*level{lvl}
 	m.preview["pane:switch"] = &previewData{
@@ -214,7 +214,7 @@ func TestViewHidesPreviewCursorBlockWhenBlinkPhaseIsOff(t *testing.T) {
 		cursorY:       1,
 		seq:           1,
 	}
-	m.filterCursor.IsBlinked = true
+	m.previewBlink.IsBlinked = true
 
 	view := ansi.Strip(m.View().Content)
 	if strings.Contains(view, "wx█z") {
@@ -306,7 +306,7 @@ func TestViewDoesNotEllipsizeStyledLabelThatFitsVisibly(t *testing.T) {
 
 func TestViewDisplaysPreviewCursorBlockPastLineEnd(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 16})
-	m.filterCursor.Focus()
+	m.previewBlink.Focus()
 	lvl := newLevel("pane:switch", "Panes", []menu.Item{{ID: "dev:1.0", Label: "Pane"}}, nil)
 	m.stack = []*level{lvl}
 	m.preview["pane:switch"] = &previewData{
