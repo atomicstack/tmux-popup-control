@@ -1145,9 +1145,10 @@ func truncateText(text string, width int) string {
 	return string(runes[:width-1]) + "…"
 }
 
-// attachFilterCursor sets v.Cursor based on the current filter state. The
-// cursor is placed on the prompt row of the bottom bar; column comes from
-// promptCursorColumn. Modes without a focused filter (or with a nil level)
+// attachFilterCursor sets v.Cursor on the prompt row of the bottom bar; the
+// column comes from promptCursorColumn. The cursor is shown whenever
+// promptCursorColumn returns ok (currently: any non-nil current level —
+// including empty-filter, since the user can type). Cases with a nil level
 // leave v.Cursor untouched.
 func (m *Model) attachFilterCursor(v *tea.View) {
 	current := m.currentLevel()
@@ -1155,10 +1156,7 @@ func (m *Model) attachFilterCursor(v *tea.View) {
 	if !ok {
 		return
 	}
-	row := m.height - m.bottomBarRows() + 1
-	if row < 0 {
-		row = 0
-	}
+	row := max(m.height-m.bottomBarRows()+1, 0)
 	v.Cursor = &tea.Cursor{
 		Position: tea.Position{X: col, Y: row},
 		Shape:    tea.CursorBlock,
