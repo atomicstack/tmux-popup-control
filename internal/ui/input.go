@@ -20,7 +20,7 @@ func (m *Model) updatePreviewBlinkModel(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) noteFilterCursorChange(l *level, before int) {
+func (m *Model) kickPreviewBlinkOnFilterChange(l *level, before int) {
 	if l == nil {
 		return
 	}
@@ -44,7 +44,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		}
 		before := current.FilterCursorPos()
 		current.SetFilter("", 0)
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
 		m.clearCompletionSuppression()
@@ -58,7 +58,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if !current.DeleteFilterWordBackward() {
 			return false, nil
 		}
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.forceClearInfo()
 		m.errMsg = ""
 		m.clearCompletionSuppression()
@@ -72,7 +72,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if !current.MoveFilterCursorStart() {
 			return false, nil
 		}
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
@@ -81,7 +81,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if !current.MoveFilterCursorEnd() {
 			return false, nil
 		}
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
@@ -90,7 +90,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if !current.MoveFilterCursorWordBackward() {
 			return false, nil
 		}
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
 		return true, nil
@@ -99,7 +99,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if !current.MoveFilterCursorWordForward() {
 			return false, nil
 		}
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.CursorWord(current.ID, current.FilterCursor)
 		return true, nil
@@ -118,7 +118,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if !current.MoveFilterCursorRuneBackward() {
 			return false, nil
 		}
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
@@ -127,7 +127,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if !current.MoveFilterCursorRuneForward() {
 			return false, nil
 		}
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.dismissCompletionIfCursorMovedAway(current)
 		events.Filter.Cursor(current.ID, current.FilterCursor)
 		return true, nil
@@ -165,7 +165,7 @@ func (m *Model) appendToFilter(text string) bool {
 	if !current.InsertFilterText(text) {
 		return false
 	}
-	m.noteFilterCursorChange(current, before)
+	m.kickPreviewBlinkOnFilterChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
 	m.clearCompletionSuppression()
@@ -185,7 +185,7 @@ func (m *Model) removeFilterRune() bool {
 	if !current.DeleteFilterRuneBackward() {
 		return false
 	}
-	m.noteFilterCursorChange(current, before)
+	m.kickPreviewBlinkOnFilterChange(current, before)
 	m.forceClearInfo()
 	m.errMsg = ""
 	m.clearCompletionSuppression()
@@ -634,7 +634,7 @@ func (m *Model) acceptCompletion() tea.Cmd {
 
 	before := current.FilterCursorPos()
 	current.SetFilter(newFilter, newCursor)
-	m.noteFilterCursorChange(current, before)
+	m.kickPreviewBlinkOnFilterChange(current, before)
 	m.syncFilterViewport(current)
 	m.completionSuppressedFilter = current.Filter
 	m.dismissCompletion()

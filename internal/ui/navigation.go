@@ -81,7 +81,7 @@ func (m *Model) handleEnterKey() tea.Cmd {
 		}
 		beforeCursor := current.FilterCursorPos()
 		current.SetFilter("", 0)
-		m.noteFilterCursorChange(current, beforeCursor)
+		m.kickPreviewBlinkOnFilterChange(current, beforeCursor)
 		m.loading = true
 		m.pendingID = "command"
 		m.pendingLabel = filterText
@@ -109,7 +109,7 @@ func (m *Model) handleEnterKey() tea.Cmd {
 	}
 	beforeCursor := current.FilterCursorPos()
 	current.SetFilter("", 0)
-	m.noteFilterCursorChange(current, beforeCursor)
+	m.kickPreviewBlinkOnFilterChange(current, beforeCursor)
 	if current.ID == "window:swap-target" && m.pendingWindowSwap != nil {
 		first := *m.pendingWindowSwap
 		m.pendingWindowSwap = nil
@@ -382,7 +382,7 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 			if ghost := m.autoCompleteGhost(); ghost != "" {
 				before := current.FilterCursorPos()
 				current.SetFilter(current.Filter+ghost, len([]rune(current.Filter+ghost)))
-				m.noteFilterCursorChange(current, before)
+				m.kickPreviewBlinkOnFilterChange(current, before)
 				m.syncFilterViewport(current)
 				return nil
 			}
@@ -456,7 +456,7 @@ func (m *Model) replaceCommandTokenUnderCursor() bool {
 		replacement := current.Items[current.Cursor].ID
 		before := current.FilterCursorPos()
 		current.SetFilter(replacement, len([]rune(replacement)))
-		m.noteFilterCursorChange(current, before)
+		m.kickPreviewBlinkOnFilterChange(current, before)
 		m.clearCompletionSuppression()
 		m.triggerCompletion()
 		m.syncFilterViewport(current)
@@ -491,7 +491,7 @@ func (m *Model) replaceCommandTokenUnderCursor() bool {
 
 	before := current.FilterCursorPos()
 	current.SetFilter(string(updated), start+len(replacement))
-	m.noteFilterCursorChange(current, before)
+	m.kickPreviewBlinkOnFilterChange(current, before)
 	m.clearCompletionSuppression()
 	m.triggerCompletion()
 	m.syncFilterViewport(current)
