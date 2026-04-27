@@ -282,7 +282,10 @@ func (m *Model) viewPaneCaptureForm(header string) (string, int) {
 		lines = append(lines, f.Title())
 	}
 	lines = append(lines, "", f.InputView(), "")
-	inputRow := 2 // title + ""
+	// inputRow=2 (title + ""); no +1 for header because the header is merged
+	// into the title line above (header+menuHeaderSeparator+title), unlike
+	// viewFormWithHeader which prepends the header as a separate line.
+	inputRow := 2
 
 	// Checkbox line.
 	checkboxLine := f.CheckboxView()

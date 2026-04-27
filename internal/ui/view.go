@@ -93,15 +93,15 @@ func (m *Model) View() (view tea.View) {
 	switch m.mode {
 	case ModePaneForm:
 		if m.paneForm != nil {
-			content2, inputRow := m.viewPaneFormWithHeader(header)
-			v := m.wrapView(content2)
+			content, inputRow := m.viewPaneFormWithHeader(header)
+			v := m.wrapView(content)
 			attachFormCursor(&v, m.paneForm.Cursor(), inputRow)
 			return v
 		}
 	case ModePaneCaptureForm:
 		if m.paneCaptureForm != nil {
-			content2, inputRow := m.viewPaneCaptureForm(header)
-			v := m.wrapView(content2)
+			content, inputRow := m.viewPaneCaptureForm(header)
+			v := m.wrapView(content)
 			attachFormCursor(&v, m.paneCaptureForm.Cursor(), inputRow)
 			return v
 		}
@@ -110,15 +110,15 @@ func (m *Model) View() (view tea.View) {
 		return m.wrapView(content)
 	case ModeWindowForm:
 		if m.windowForm != nil {
-			content2, inputRow := m.viewWindowFormWithHeader(header)
-			v := m.wrapView(content2)
+			content, inputRow := m.viewWindowFormWithHeader(header)
+			v := m.wrapView(content)
 			attachFormCursor(&v, m.windowForm.Cursor(), inputRow)
 			return v
 		}
 	case ModeSessionForm:
 		if m.sessionForm != nil {
-			content2, inputRow := m.viewSessionFormWithHeader(header)
-			v := m.wrapView(content2)
+			content, inputRow := m.viewSessionFormWithHeader(header)
+			v := m.wrapView(content)
 			attachFormCursor(&v, m.sessionForm.Cursor(), inputRow)
 			return v
 		}
@@ -133,12 +133,12 @@ func (m *Model) View() (view tea.View) {
 		return m.wrapView(content)
 	case ModeSessionSaveForm:
 		if m.saveForm != nil {
-			content2, inputRow := m.viewSaveForm()
-			v := m.wrapView(content2)
+			content, inputRow := m.viewSaveForm()
+			v := m.wrapView(content)
 			attachFormCursor(&v, m.saveForm.Cursor(), inputRow)
 			return v
 		}
-		return m.wrapView(content)
+		return m.wrapView("")
 	}
 	if m.hasSidePreview() {
 		content = m.viewSideBySide(header)
