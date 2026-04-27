@@ -338,9 +338,17 @@ func TestViewSetsFilterCursorAtPromptColumn(t *testing.T) {
 	if got, want := v.Cursor.Position.X, 4; got != want { // 2 (prompt) + 2 (ab)
 		t.Fatalf("cursor X = %d; want %d", got, want)
 	}
-	wantY := m.height - m.bottomBarRows() + 1
-	if got := v.Cursor.Position.Y; got != wantY {
-		t.Fatalf("cursor Y = %d; want %d", got, wantY)
+	// The cursor must land on whichever line actually contains the filter
+	// prompt — viewVertical doesn't pad short menus, so the prompt's row
+	// follows the rendered content. Verify by inspecting v.Content.
+	rendered := ansi.Strip(v.Content)
+	lines := strings.Split(rendered, "\n")
+	if v.Cursor.Position.Y < 0 || v.Cursor.Position.Y >= len(lines) {
+		t.Fatalf("cursor Y = %d out of bounds (content has %d lines)", v.Cursor.Position.Y, len(lines))
+	}
+	if !strings.HasPrefix(lines[v.Cursor.Position.Y], "» ") {
+		t.Fatalf("cursor Y = %d does not point to a prompt line; line content = %q\nfull content:\n%s",
+			v.Cursor.Position.Y, lines[v.Cursor.Position.Y], rendered)
 	}
 	if v.Cursor.Shape != tea.CursorBlock {
 		t.Fatalf("cursor shape = %v; want CursorBlock", v.Cursor.Shape)

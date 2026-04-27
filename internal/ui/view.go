@@ -141,21 +141,23 @@ func (m *Model) View() (view tea.View) {
 		return m.wrapView("")
 	}
 	if m.hasSidePreview() {
-		content = m.viewSideBySide(header)
+		content, promptRow := m.viewSideBySide(header)
 		v := m.wrapView(content)
-		m.attachFilterCursor(&v)
+		m.attachFilterCursor(&v, promptRow)
 		return v
 	}
-	content = m.viewVertical(header)
+	content, promptRow := m.viewVertical(header)
 	v := m.wrapView(content)
-	m.attachFilterCursor(&v)
+	m.attachFilterCursor(&v, promptRow)
 	return v
 }
 
 // viewVertical is the standard single-column layout with an optional inline
 // preview block below the menu items (used when the terminal is too narrow for
-// side-by-side, or on non-preview menu levels).
-func (m *Model) viewVertical(header string) string {
+// side-by-side, or on non-preview menu levels). It returns the rendered
+// content and the 0-indexed row of the filter prompt within that content
+// (the prompt sits second in the bottom bar, after the statusLine).
+func (m *Model) viewVertical(header string) (string, int) {
 	lines := make([]styledLine, 0, 16)
 	if header != "" {
 		lines = append(lines, styledLine{text: header, style: styles.Header})
@@ -252,13 +254,19 @@ func (m *Model) viewVertical(header string) string {
 	lines = limitHeight(lines, m.height-m.bottomBarRows(), m.width)
 	lines = applyWidth(lines, m.width)
 
-	// Bottom bar: error/status line + filter prompt.
+	// Bottom bar: error/status line + filter prompt. The prompt is the
+	// second line of the bottom bar (statusLine, prompt, [summary]).
+	promptRow := len(lines) + 1
 	lines = append(lines, m.renderBottomBarLines()...)
-	return m.overlayCompletion(renderLines(lines))
+	return m.overlayCompletion(renderLines(lines)), promptRow
 }
 
 // viewSideBySide renders the menu on the left and a preview panel on the right.
-func (m *Model) viewSideBySide(header string) string {
+// It returns the rendered content and the 0-indexed row of the filter prompt
+// within that content. Unlike viewVertical, the left column is padded to
+// `panelH = m.height - bottomBarRows` rows, so the bottom bar always lands at
+// the configured popup bottom.
+func (m *Model) viewSideBySide(header string) (string, int) {
 	menuW := m.menuColumnWidth()
 	prevW := m.previewPanelWidth()
 
@@ -364,7 +372,10 @@ func (m *Model) viewSideBySide(header string) string {
 
 	bottomStr := renderLines(m.renderBottomBarLines())
 
-	return m.overlayCompletion(topSection + "\n" + bottomStr)
+	// topSection has panelH lines; bottom bar starts immediately after.
+	// The prompt is the second line of the bottom bar (statusLine, prompt).
+	promptRow := panelH + 1
+	return m.overlayCompletion(topSection + "\n" + bottomStr), promptRow
 }
 
 func (m *Model) viewCommandOutput(header string) string {
@@ -1168,18 +1179,22 @@ func attachFormCursor(v *tea.View, c *tea.Cursor, inputRow int) {
 	v.Cursor = c
 }
 
-// attachFilterCursor sets v.Cursor on the prompt row of the bottom bar; the
-// column comes from promptCursorColumn. The cursor is shown whenever
-// promptCursorColumn returns ok (currently: any non-nil current level —
-// including empty-filter, since the user can type). Cases with a nil level
-// leave v.Cursor untouched.
-func (m *Model) attachFilterCursor(v *tea.View) {
+// attachFilterCursor sets v.Cursor on the prompt row at the column reported
+// by promptCursorColumn. The caller passes promptRow because the renderer
+// (viewVertical / viewSideBySide) is the only thing that knows where it
+// placed the bottom bar — viewVertical doesn't pad short menus, so the
+// prompt's row depends on the rendered content length.
+//
+// The cursor is shown whenever promptCursorColumn returns ok (currently:
+// any non-nil current level — including empty-filter, since the user can
+// type). Cases with a nil level leave v.Cursor untouched.
+func (m *Model) attachFilterCursor(v *tea.View, promptRow int) {
 	current := m.currentLevel()
 	col, ok := promptCursorColumn(current)
 	if !ok {
 		return
 	}
-	row := max(m.height-m.bottomBarRows()+1, 0)
+	row := max(promptRow, 0)
 	v.Cursor = &tea.Cursor{
 		Position: tea.Position{X: col, Y: row},
 		Shape:    tea.CursorBlock,
