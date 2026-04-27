@@ -93,26 +93,34 @@ func (m *Model) View() (view tea.View) {
 	switch m.mode {
 	case ModePaneForm:
 		if m.paneForm != nil {
-			content = m.viewPaneFormWithHeader(header)
-			return m.wrapView(content)
+			content2, inputRow := m.viewPaneFormWithHeader(header)
+			v := m.wrapView(content2)
+			attachFormCursor(&v, m.paneForm.Cursor(), inputRow)
+			return v
 		}
 	case ModePaneCaptureForm:
 		if m.paneCaptureForm != nil {
-			content = m.viewPaneCaptureForm(header)
-			return m.wrapView(content)
+			content2, inputRow := m.viewPaneCaptureForm(header)
+			v := m.wrapView(content2)
+			attachFormCursor(&v, m.paneCaptureForm.Cursor(), inputRow)
+			return v
 		}
 	case ModeCommandOutput:
 		content = m.viewCommandOutput(header)
 		return m.wrapView(content)
 	case ModeWindowForm:
 		if m.windowForm != nil {
-			content = m.viewWindowFormWithHeader(header)
-			return m.wrapView(content)
+			content2, inputRow := m.viewWindowFormWithHeader(header)
+			v := m.wrapView(content2)
+			attachFormCursor(&v, m.windowForm.Cursor(), inputRow)
+			return v
 		}
 	case ModeSessionForm:
 		if m.sessionForm != nil {
-			content = m.viewSessionFormWithHeader(header)
-			return m.wrapView(content)
+			content2, inputRow := m.viewSessionFormWithHeader(header)
+			v := m.wrapView(content2)
+			attachFormCursor(&v, m.sessionForm.Cursor(), inputRow)
+			return v
 		}
 	case ModePluginConfirm:
 		content = m.pluginConfirmView()
@@ -125,7 +133,10 @@ func (m *Model) View() (view tea.View) {
 		return m.wrapView(content)
 	case ModeSessionSaveForm:
 		if m.saveForm != nil {
-			content = m.viewSaveForm()
+			content2, inputRow := m.viewSaveForm()
+			v := m.wrapView(content2)
+			attachFormCursor(&v, m.saveForm.Cursor(), inputRow)
+			return v
 		}
 		return m.wrapView(content)
 	}
@@ -1143,6 +1154,18 @@ func truncateText(text string, width int) string {
 		return string(runes[:1])
 	}
 	return string(runes[:width-1]) + "…"
+}
+
+// attachFormCursor lifts a form's relative *tea.Cursor (already containing
+// shape/color/blink and column relative to the input field's start) and
+// translates Y by the input row within the form's rendered content. Forms
+// render at column 0, so X is unchanged.
+func attachFormCursor(v *tea.View, c *tea.Cursor, inputRow int) {
+	if c == nil {
+		return
+	}
+	c.Position.Y += inputRow
+	v.Cursor = c
 }
 
 // attachFilterCursor sets v.Cursor on the prompt row of the bottom bar; the

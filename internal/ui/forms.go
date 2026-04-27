@@ -107,19 +107,19 @@ func (m *Model) handleRenameForm(msg tea.Msg, form renameForm, quitOnCancel bool
 	return true, nil
 }
 
-func (m *Model) viewPaneForm() string {
+func (m *Model) viewPaneForm() (string, int) {
 	return m.viewFormWithHeader(m.paneForm.Title(), m.paneForm.InputView(), m.paneForm.Help(), "")
 }
 
-func (m *Model) viewPaneFormWithHeader(header string) string {
+func (m *Model) viewPaneFormWithHeader(header string) (string, int) {
 	return m.viewFormWithHeader(m.paneForm.Title(), m.paneForm.InputView(), m.paneForm.Help(), header)
 }
 
-func (m *Model) viewWindowFormWithHeader(header string) string {
+func (m *Model) viewWindowFormWithHeader(header string) (string, int) {
 	return m.viewFormWithHeader(m.windowForm.Title(), m.windowForm.InputView(), m.windowForm.Help(), header)
 }
 
-func (m *Model) viewSessionFormWithHeader(header string) string {
+func (m *Model) viewSessionFormWithHeader(header string) (string, int) {
 	lines := []string{}
 	title := m.sessionForm.Title()
 	if header != "" && title != "" {
@@ -130,6 +130,7 @@ func (m *Model) viewSessionFormWithHeader(header string) string {
 		lines = append(lines, title)
 	}
 	lines = append(lines, "", m.sessionForm.InputView())
+	inputRow := 2 // title + ""
 	if err := m.sessionForm.Error(); err != "" {
 		style := styles.Error
 		if m.sessionForm.ErrorIsWarning() && styles.Warning != nil {
@@ -138,7 +139,7 @@ func (m *Model) viewSessionFormWithHeader(header string) string {
 		lines = append(lines, "", style.Render(err))
 	}
 	lines = append(lines, "", m.sessionForm.Help())
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), inputRow
 }
 
 func (m *Model) handleSaveForm(msg tea.Msg) (bool, tea.Cmd) {
@@ -189,17 +190,20 @@ func (m *Model) handleSaveAsPromptMsg(msg tea.Msg) tea.Cmd {
 	return m.startSaveForm(prompt)
 }
 
-func (m *Model) viewSaveForm() string {
+func (m *Model) viewSaveForm() (string, int) {
 	subtitle := lipgloss.NewStyle().Faint(true).Render(m.saveForm.Subtitle())
 	lines := []string{m.saveForm.Title(), subtitle, "", m.saveForm.InputView()}
+	inputRow := 3 // title + subtitle + ""
 	if err := m.saveForm.Error(); err != "" {
 		lines = append(lines, "", styles.Info.Render(err))
 	}
 	lines = append(lines, "", m.saveForm.Help())
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), inputRow
 }
 
-func (m *Model) viewFormWithHeader(title, input, help, header string) string {
+// viewFormWithHeader returns the rendered form content and the 0-indexed row
+// of the input field within that content.
+func (m *Model) viewFormWithHeader(title, input, help, header string) (string, int) {
 	lines := []string{
 		title,
 		"",
@@ -207,10 +211,12 @@ func (m *Model) viewFormWithHeader(title, input, help, header string) string {
 		"",
 		help,
 	}
+	inputRow := 2 // title + ""
 	if header != "" {
 		lines = append([]string{header}, lines...)
+		inputRow++
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), inputRow
 }
 
 func (m *Model) handlePaneCaptureForm(msg tea.Msg) (bool, tea.Cmd) {
@@ -266,7 +272,7 @@ func (m *Model) startPaneCaptureForm(prompt menu.PaneCapturePrompt) tea.Cmd {
 	return m.paneCaptureForm.FocusCmd()
 }
 
-func (m *Model) viewPaneCaptureForm(header string) string {
+func (m *Model) viewPaneCaptureForm(header string) (string, int) {
 	f := m.paneCaptureForm
 	lines := []string{}
 	if header != "" {
@@ -276,6 +282,7 @@ func (m *Model) viewPaneCaptureForm(header string) string {
 		lines = append(lines, f.Title())
 	}
 	lines = append(lines, "", f.InputView(), "")
+	inputRow := 2 // title + ""
 
 	// Checkbox line.
 	checkboxLine := f.CheckboxView()
@@ -294,5 +301,5 @@ func (m *Model) viewPaneCaptureForm(header string) string {
 		lines = append(lines, preview)
 	}
 	lines = append(lines, "", f.Help())
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), inputRow
 }
