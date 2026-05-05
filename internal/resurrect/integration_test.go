@@ -125,8 +125,12 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 	testutil.RequireTmux(t)
 
 	// ── server 1: build the source structure ────────────────────────────
+	// Both servers must be isolated from any package-shared pool because
+	// the test relies on each starting empty (no leaked sessions from
+	// earlier tests in the same binary) and on rename-session mutating
+	// the keepalive without disturbing other tests.
 
-	socket1, cleanup1, logDir1 := testutil.StartTmuxServer(t)
+	socket1, cleanup1, logDir1 := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup1()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
 
@@ -204,7 +208,7 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 
 	// ── server 2: restore into a fresh instance ─────────────────────────
 
-	socket2, cleanup2, logDir2 := testutil.StartTmuxServer(t)
+	socket2, cleanup2, logDir2 := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup2()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
 
@@ -291,7 +295,7 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 func TestSessionOptionRoundTripIntegration(t *testing.T) {
 	testutil.RequireTmux(t)
 
-	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	socket, cleanup, logDir := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir) })
 
@@ -362,7 +366,7 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 
 	// ── build a save file from a clean server ────────────────────────────
 
-	socket1, cleanup1, logDir1 := testutil.StartTmuxServer(t)
+	socket1, cleanup1, logDir1 := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup1()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
 
@@ -397,7 +401,7 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 
 	// ── restore into a server that already has session "work" ────────────
 
-	socket2, cleanup2, logDir2 := testutil.StartTmuxServer(t)
+	socket2, cleanup2, logDir2 := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup2()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
 
@@ -502,7 +506,7 @@ func TestRestoreSessionPathIntegration(t *testing.T) {
 
 	// ── server 1: build a session with windows in different directories ──
 
-	socket1, cleanup1, logDir1 := testutil.StartTmuxServer(t)
+	socket1, cleanup1, logDir1 := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup1()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
 
@@ -581,7 +585,7 @@ func TestRestoreSessionPathIntegration(t *testing.T) {
 
 	// ── server 2: restore into a fresh instance ──────────────────────────
 
-	socket2, cleanup2, logDir2 := testutil.StartTmuxServer(t)
+	socket2, cleanup2, logDir2 := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup2()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
 
@@ -635,7 +639,7 @@ func TestRestoreWithUserConfigIntegration(t *testing.T) {
 
 	// ── build source save file using a clean server ─────────────────────
 
-	socket1, cleanup1, logDir1 := testutil.StartTmuxServer(t)
+	socket1, cleanup1, logDir1 := testutil.StartIsolatedTmuxServer(t)
 	defer cleanup1()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
 

@@ -63,9 +63,12 @@ func TestNavigationOpensSubmenuAndEscapeReturns(t *testing.T) {
 		t.Fatalf("expected root menu after Escape, got:\n%s", output)
 	}
 
-	// Escape at the root exits the binary.
+	// Escape at the root exits the binary. Use a fresh context so any
+	// budget consumed by the polling above doesn't truncate the exit wait.
 	SendKeys(t, socket, pane, "Escape")
-	_ = waitForExit(t, ctx, exitFile)
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer exitCancel()
+	_ = waitForExit(t, exitCtx, exitFile)
 	_ = TmuxCommand(socket, "kill-session", "-t", "nav-session").Run()
 }
 
@@ -108,8 +111,13 @@ func TestFilterNarrowsSessionList(t *testing.T) {
 	}
 
 	// Escape at the root (session:switch is the root here) exits the binary.
+	// Use a fresh context for the exit wait so a tight budget on the assertion
+	// context above (consumed by polling loops under load) doesn't bleed into
+	// the binary-shutdown timeout.
 	SendKeys(t, socket, pane, "Escape")
-	_ = waitForExit(t, ctx, exitFile)
+	exitCtx, exitCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer exitCancel()
+	_ = waitForExit(t, exitCtx, exitFile)
 	_ = TmuxCommand(socket, "kill-session", "-t", "filter-session").Run()
 }
 

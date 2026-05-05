@@ -8,14 +8,92 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
-
-	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
 var ErrPaneUnavailable = errors.New("tmux pane unavailable")
+
+// Per-package shared tmux server. Each test binary (one per Go test
+// package) starts at most one tmux server for its lifetime via
+// sync.Once. StartTmuxServer hands out the same socket to every test
+// in the package; cleanup kills only the sessions a given test added.
+//
+// Why: spawning a fresh tmux server per test (the prior model) caused
+// 11–13 concurrent tmux server processes at peak under `make test`
+// because async cleanup left old servers dying in the background while
+// the next test spawned its own. The fork+exec churn dominated test
+// wall-clock and produced enough CPU contention to time out the
+// timing-sensitive integration tests.
+var (
+	sharedServerOnce   sync.Once
+	sharedServerMu     sync.Mutex
+	sharedServerSocket string
+	sharedServerLogDir string
+	sharedServerErr    error
+)
+
+// keepaliveSession is the long-lived session created by the shared server
+// at startup. It exists solely to keep the tmux server process alive
+// across tests. Tests must not delete it; cleanup excludes it from the
+// kill set.
+const keepaliveSession = "tmux-popup-control-test"
+
+func startSharedServer() {
+	baseDir, err := os.MkdirTemp("/tmp", "tmux-popup-control-pool-*")
+	if err != nil {
+		sharedServerErr = fmt.Errorf("mktemp: %w", err)
+		return
+	}
+	socketPath := filepath.Join(baseDir, "tmux-test.sock")
+	// sleep is long enough to outlive any reasonable `make test` run; if
+	// ShutdownSharedServer is called it gets killed sooner.
+	cmd := TmuxCommand(socketPath, "-f", "/dev/null", "-vv", "new-session", "-d", "-s", keepaliveSession, "sleep", "3600")
+	if err := cmd.Run(); err != nil {
+		sharedServerErr = fmt.Errorf("tmux new-session: %w", err)
+		_ = os.RemoveAll(baseDir)
+		return
+	}
+	sharedServerSocket = socketPath
+	sharedServerLogDir = baseDir
+}
+
+// ShutdownSharedServer kills the package-shared tmux server and removes
+// its log directory. Call from TestMain when you want to clean up at
+// process exit; otherwise the server's keepalive `sleep 3600` will hold
+// it open for an hour.
+func ShutdownSharedServer() {
+	sharedServerMu.Lock()
+	socket := sharedServerSocket
+	dir := sharedServerLogDir
+	sharedServerMu.Unlock()
+	if socket == "" {
+		return
+	}
+	_ = TmuxCommand(socket, "kill-server").Run()
+	if dir != "" {
+		_ = os.RemoveAll(dir)
+	}
+}
+
+// listSessionNames returns the current set of session names on socket,
+// or nil if the lookup fails.
+func listSessionNames(socket string) []string {
+	out, err := TmuxCommand(socket, "list-sessions", "-F", "#{session_name}").Output()
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
 
 // RequireTmux aborts the calling test when tmux is not present on PATH.
 func RequireTmux(t *testing.T) string {
@@ -27,38 +105,65 @@ func RequireTmux(t *testing.T) string {
 	return path
 }
 
-// StartTmuxServer boots a temporary tmux server bound to a unique socket.
-// The returned cleanup function terminates the server and removes any
-// temporary files that were created during setup.
-func StartTmuxServer(t *testing.T) (string, func(), string) {
+// StartIsolatedTmuxServer spawns a fresh, dedicated tmux server with a
+// unique socket. Use this only for tests that explicitly need an isolated
+// server (e.g. cross-server save/restore round-trip tests); other tests
+// should use the cheaper pooled StartTmuxServer.
+func StartIsolatedTmuxServer(t *testing.T) (string, func(), string) {
 	t.Helper()
 	RequireTmux(t)
-	baseDir, err := os.MkdirTemp("/tmp", "tmux-popup-control-*")
+	baseDir, err := os.MkdirTemp("/tmp", "tmux-popup-control-iso-*")
 	if err != nil {
 		t.Fatalf("failed to create tmux temp dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(baseDir) })
 	socketPath := filepath.Join(baseDir, "tmux-test.sock")
-	cmd := TmuxCommand(socketPath, "-f", "/dev/null", "-vv", "new-session", "-d", "-s", "tmux-popup-control-test", "sleep", "600")
+	cmd := TmuxCommand(socketPath, "-f", "/dev/null", "-vv", "new-session", "-d", "-s", keepaliveSession, "sleep", "600")
 	if err := cmd.Run(); err != nil {
 		t.Skipf("skipping: failed to start tmux server: %v", err)
 	}
-	serverPID := ""
 	if out, err := TmuxCommand(socketPath, "display-message", "-p", "#{pid}").Output(); err == nil {
-		serverPID = strings.TrimSpace(string(out))
-		if serverPID != "" {
-			t.Logf("started tmux test server pid=%s socket=%s", serverPID, socketPath)
+		if pid := strings.TrimSpace(string(out)); pid != "" {
+			t.Logf("started isolated tmux test server pid=%s socket=%s", pid, socketPath)
 		}
 	}
 	cleanup := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := killTmuxServerControl(ctx, socketPath); err != nil {
-			t.Logf("control-mode kill failed for socket %s: %v; falling back to tmux kill-server", socketPath, err)
-			_ = TmuxCommand(socketPath, "kill-server").Run()
-		}
+		_ = TmuxCommand(socketPath, "kill-server").Run()
 	}
 	return socketPath, cleanup, baseDir
+}
+
+// StartTmuxServer returns a tmux socket and per-test cleanup func. The
+// socket points at a long-lived tmux server shared across every test in
+// the calling test binary (one per Go package). Cleanup tears down only
+// the sessions created during this test — the server itself stays up so
+// the next test reuses it without paying tmux's process spawn cost.
+func StartTmuxServer(t *testing.T) (string, func(), string) {
+	t.Helper()
+	RequireTmux(t)
+	sharedServerOnce.Do(startSharedServer)
+	if sharedServerErr != nil {
+		t.Skipf("shared tmux server unavailable: %v", sharedServerErr)
+	}
+
+	socket := sharedServerSocket
+	logDir := sharedServerLogDir
+
+	// Snapshot existing sessions so cleanup leaves them alone (specifically
+	// the keepalive plus anything earlier tests deliberately left behind).
+	preexisting := listSessionNames(socket)
+	t.Logf("started tmux test server (shared) socket=%s pre-existing=%v", socket, preexisting)
+
+	cleanup := func() {
+		now := listSessionNames(socket)
+		for _, name := range now {
+			if name == keepaliveSession || slices.Contains(preexisting, name) {
+				continue
+			}
+			_ = TmuxCommand(socket, "kill-session", "-t", name).Run()
+		}
+	}
+	return socket, cleanup, logDir
 }
 
 // AssertNoServerCrash scans tmux server logs under logDir to ensure the server
@@ -136,17 +241,6 @@ func TmuxCommand(socket string, extra ...string) *exec.Cmd {
 	return cmd
 }
 
-func killTmuxServerControl(ctx context.Context, socket string) error {
-	if strings.TrimSpace(socket) == "" {
-		return errors.New("empty tmux socket path")
-	}
-	client, err := gotmux.NewTmuxWithOptions(socket, gotmux.WithContext(ctx))
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	return client.KillServer()
-}
 
 // WaitForContent polls the given pane until its captured output contains
 // substr, returning the full output when found. The test fails if ctx expires.
