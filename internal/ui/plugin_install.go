@@ -525,15 +525,20 @@ func pluginUninstallPromptText(s *pluginInstallState) string {
 // text painted yellow, the "y" green, and the "n" red. Returns "" when
 // pluginUninstallPromptText would.
 func pluginUninstallPromptRendered(s *pluginInstallState) string {
-	text := pluginUninstallPromptText(s)
+	return renderYNPrompt(pluginUninstallPromptText(s))
+}
+
+// renderYNPrompt paints a prompt that ends in "[y/n]" — surrounding text
+// in yellow, the y in green, the n in red. Returns the input unchanged
+// (rendered yellow only) when the marker isn't found, or "" when input
+// is "".
+func renderYNPrompt(text string) string {
 	if text == "" {
 		return ""
 	}
 	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true)
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	// The prompt always ends with the literal "[y/n]"; if for any
-	// reason it doesn't, fall back to a single yellow-painted block.
 	const ynMarker = "[y/n]"
 	idx := strings.LastIndex(text, ynMarker)
 	if idx < 0 {
@@ -555,7 +560,7 @@ func pluginInstallCompletionLines(s *pluginInstallState) []styledLine {
 		return []styledLine{
 			{},
 			{text: s.summary, style: styles.Info},
-			{text: "Reload plugins? [y/n]", style: styles.Info},
+			{text: renderYNPrompt("Reload plugins? [y/n]"), raw: true},
 		}
 	}
 	return []styledLine{

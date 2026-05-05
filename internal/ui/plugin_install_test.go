@@ -58,10 +58,11 @@ func TestPluginInstallViewLeavesSummaryAboveBottomBar(t *testing.T) {
 	if !strings.Contains(last, "█") {
 		t.Fatalf("expected bottom row to remain the progress bar after completion, got last row %q in:\n%s", last, view)
 	}
-	if !strings.Contains(view, "Reload plugins? [y/n]") {
+	plain := stripANSI(view)
+	if !strings.Contains(plain, "Reload plugins? [y/n]") {
 		t.Fatalf("expected reload prompt in finished view, got:\n%s", view)
 	}
-	if idx := strings.LastIndex(view, "Reload plugins? [y/n]"); idx > strings.LastIndex(view, "█") {
+	if idx := strings.LastIndex(plain, "Reload plugins? [y/n]"); idx > strings.LastIndex(plain, "█") {
 		t.Fatalf("expected reload prompt to stay above the bar, got:\n%s", view)
 	}
 }
@@ -284,7 +285,7 @@ func TestPluginInstallViewUninstallDoneShowsReloadPrompt(t *testing.T) {
 	if !strings.Contains(view, "Uninstalled 1 plugin(s)") {
 		t.Fatalf("expected uninstall summary in view, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Reload plugins? [y/n]") {
+	if !strings.Contains(stripANSI(view), "Reload plugins? [y/n]") {
 		t.Fatalf("expected reload prompt after uninstall, got:\n%s", view)
 	}
 }
@@ -393,7 +394,7 @@ func TestPluginInstallFinishedViewKeepsSummaryVisibleWithLongList(t *testing.T) 
 	if !strings.Contains(view, "Installed 1 plugin(s)") {
 		t.Fatalf("expected finished summary to remain visible, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Reload plugins? [y/n]") {
+	if !strings.Contains(stripANSI(view), "Reload plugins? [y/n]") {
 		t.Fatalf("expected reload prompt to remain visible, got:\n%s", view)
 	}
 }
