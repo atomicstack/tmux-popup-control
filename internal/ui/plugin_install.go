@@ -20,10 +20,16 @@ type pluginInstallStatus int
 
 const (
 	pluginInstallQueued pluginInstallStatus = iota
+	// uninstall-only confirmation phase. asking → accepted (y) or
+	// skipped (n). accepted entries fall through to preparing/removing.
+	pluginInstallAsking
+	pluginInstallAccepted
+	pluginInstallSkipped
 	pluginInstallPreparing
 	pluginInstallCloning
 	pluginInstallPulling
 	pluginInstallSubmodules
+	pluginInstallRemoving
 	pluginInstallDone
 	pluginInstallFailed
 )
@@ -81,6 +87,12 @@ func (m *Model) startPluginProgress(plugins []plugin.Plugin, pluginDir, operatio
 	m.pluginInstallState = s
 	m.mode = ModePluginInstall
 	m.loading = false
+	if operation == "uninstall" {
+		// Open the asking phase rather than starting removal directly:
+		// each plugin needs an explicit y/n before its removal stage runs.
+		s.entries[0].status = pluginInstallAsking
+		return nil
+	}
 	return m.advancePluginInstall()
 }
 
@@ -94,6 +106,16 @@ func (m *Model) handlePluginUpdateStartMsg(msg tea.Msg) tea.Cmd {
 	return m.startPluginProgress(start.Plugins, start.PluginDir, "update")
 }
 
+func (m *Model) handlePluginConfirmPromptMsg(msg tea.Msg) tea.Cmd {
+	prompt := msg.(menu.PluginConfirmPrompt)
+	if len(prompt.Plugins) == 0 {
+		return func() tea.Msg {
+			return menu.ActionResult{Info: "Nothing to remove"}
+		}
+	}
+	return m.startPluginProgress(prompt.Plugins, prompt.PluginDir, prompt.Operation)
+}
+
 func (m *Model) handlePluginInstallKey(msg tea.Msg) (bool, tea.Cmd) {
 	s := m.pluginInstallState
 	if s == nil {
@@ -102,6 +124,14 @@ func (m *Model) handlePluginInstallKey(msg tea.Msg) (bool, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return false, nil
+	}
+
+	// uninstall confirmation phase: any entry currently in pluginInstallAsking
+	// owns the y/n prompt. esc bails out of the whole flow.
+	if s.operation == "uninstall" && !s.finished {
+		if cmd, handled := m.handlePluginUninstallAskingKey(s, keyMsg); handled {
+			return true, cmd
+		}
 	}
 
 	if s.finished {
@@ -150,6 +180,91 @@ func (m *Model) handlePluginInstallKey(msg tea.Msg) (bool, tea.Cmd) {
 	return true, nil
 }
 
+// handlePluginUninstallAskingKey processes y/n/esc while the uninstall
+// flow is in its per-plugin confirmation phase. Returns (cmd, true) when
+// the key was consumed, (nil, false) otherwise so the caller can fall
+// through to the rest of handlePluginInstallKey (e.g. finished-state
+// reload prompt or the generic esc handler).
+func (m *Model) handlePluginUninstallAskingKey(s *pluginInstallState, key tea.KeyPressMsg) (tea.Cmd, bool) {
+	askingIdx := -1
+	for i, e := range s.entries {
+		if e.status == pluginInstallAsking {
+			askingIdx = i
+			break
+		}
+	}
+	if askingIdx < 0 {
+		// no entry is asking — either confirmation is done or never
+		// started. let the caller's generic logic run.
+		return nil, false
+	}
+
+	switch key.String() {
+	case "y", "Y":
+		s.entries[askingIdx].status = pluginInstallAccepted
+		m.bumpPluginInstallProgress()
+		m.advancePluginUninstallAsking()
+		return m.maybeStartUninstallRemoval(), true
+	case "n", "N":
+		s.entries[askingIdx].status = pluginInstallSkipped
+		m.bumpPluginInstallProgress()
+		// Skipped entries won't go through the 3-step removal pipeline.
+		// Drop those steps from the total so the bar stays accurate.
+		if s.progressTotal > 3 {
+			s.progressTotal -= 3
+		}
+		m.advancePluginUninstallAsking()
+		return m.maybeStartUninstallRemoval(), true
+	case "esc":
+		m.pluginInstallState = nil
+		m.mode = ModeMenu
+		return nil, true
+	}
+	return nil, true
+}
+
+// advancePluginUninstallAsking moves the asking marker to the next
+// queued entry, if any. No-op when none remain.
+func (m *Model) advancePluginUninstallAsking() {
+	s := m.pluginInstallState
+	if s == nil {
+		return
+	}
+	for i, e := range s.entries {
+		if e.status == pluginInstallQueued {
+			s.entries[i].status = pluginInstallAsking
+			return
+		}
+	}
+}
+
+// maybeStartUninstallRemoval kicks off the removal pipeline once every
+// entry has been answered. Returns nil while the asking phase still has
+// pending entries.
+func (m *Model) maybeStartUninstallRemoval() tea.Cmd {
+	s := m.pluginInstallState
+	if s == nil {
+		return nil
+	}
+	for _, e := range s.entries {
+		if e.status == pluginInstallAsking || e.status == pluginInstallQueued {
+			return nil
+		}
+	}
+	// All answered. If nothing was accepted, finish immediately.
+	hasAccepted := false
+	for _, e := range s.entries {
+		if e.status == pluginInstallAccepted {
+			hasAccepted = true
+			break
+		}
+	}
+	if !hasAccepted {
+		return m.finishPluginInstall()
+	}
+	return m.advancePluginInstall()
+}
+
 func (m *Model) handlePluginInstallStageMsg(msg tea.Msg) tea.Cmd {
 	stage := msg.(pluginInstallStageMsg)
 	s := m.pluginInstallState
@@ -188,17 +303,28 @@ func (m *Model) advancePluginInstall() tea.Cmd {
 	if s == nil {
 		return nil
 	}
+	// uninstall pulls accepted entries (post-confirmation) into the
+	// removal pipeline; install/update use queued.
+	startStatus := pluginInstallQueued
+	if s.operation == "uninstall" {
+		startStatus = pluginInstallAccepted
+	}
 	for i := range s.entries {
-		if s.entries[i].status != pluginInstallQueued {
+		if s.entries[i].status != startStatus {
 			continue
 		}
 		s.entries[i].status = pluginInstallPreparing
 		s.entries[i].err = nil
 		m.bumpPluginInstallProgress()
 		idx := i
-		nextPhase := pluginInstallCloning
-		if s.operation == "update" {
+		var nextPhase pluginInstallStatus
+		switch s.operation {
+		case "update":
 			nextPhase = pluginInstallPulling
+		case "uninstall":
+			nextPhase = pluginInstallRemoving
+		default:
+			nextPhase = pluginInstallCloning
 		}
 		return func() tea.Msg {
 			return pluginInstallStageMsg{index: idx, phase: nextPhase}
@@ -216,29 +342,53 @@ func (m *Model) finishPluginInstall() tea.Cmd {
 	s.finished = true
 
 	var installed []plugin.Plugin
-	var errCount int
+	var errCount, skipCount int
 	for _, e := range s.entries {
 		switch e.status {
 		case pluginInstallDone:
 			installed = append(installed, e.plugin)
 		case pluginInstallFailed:
 			errCount++
+		case pluginInstallSkipped:
+			skipCount++
 		}
 	}
-	s.installed = sourceableInstalledPlugins(s.pluginDir, installed)
+	if s.operation == "uninstall" {
+		// `installed` here is the list of plugins that were just removed.
+		// The post-uninstall "Reload plugins?" prompt re-sources these
+		// directly (preserves prior behaviour) — don't run them through
+		// sourceableInstalledPlugins, which would mark them as installed.
+		s.installed = installed
+	} else {
+		s.installed = sourceableInstalledPlugins(s.pluginDir, installed)
+	}
 
 	verb := "Installed"
 	failVerb := "install"
-	if s.operation == "update" {
+	switch s.operation {
+	case "update":
 		verb = "Updated"
 		failVerb = "update"
+	case "uninstall":
+		verb = "Uninstalled"
+		failVerb = "uninstall"
 	}
-	if len(installed) == 0 {
+	switch {
+	case len(installed) == 0 && errCount == 0 && skipCount > 0:
+		s.summary = "No plugins removed"
+	case len(installed) == 0:
 		s.summary = fmt.Sprintf("All %d plugin(s) failed to %s", errCount, failVerb)
-	} else {
+	default:
 		s.summary = fmt.Sprintf("%s %d plugin(s)", verb, len(installed))
+		extras := make([]string, 0, 2)
 		if errCount > 0 {
-			s.summary += fmt.Sprintf(" (%d failed)", errCount)
+			extras = append(extras, fmt.Sprintf("%d failed", errCount))
+		}
+		if skipCount > 0 {
+			extras = append(extras, fmt.Sprintf("%d skipped", skipCount))
+		}
+		if len(extras) > 0 {
+			s.summary += " (" + strings.Join(extras, ", ") + ")"
 		}
 	}
 	return nil
@@ -285,6 +435,11 @@ func (m *Model) runPluginInstallStage(index int, phase pluginInstallStatus) tea.
 			}
 			return pluginInstallResultMsg{index: index, err: nil}
 		}
+	case pluginInstallRemoving:
+		return func() tea.Msg {
+			events.Plugins.Uninstall(p.Name)
+			return pluginInstallResultMsg{index: index, err: plugin.Uninstall(s.pluginDir, []plugin.Plugin{p})}
+		}
 	default:
 		return nil
 	}
@@ -300,9 +455,24 @@ func (m *Model) pluginInstallView() string {
 	if bodyRows < 0 {
 		bodyRows = 0
 	}
-	if bodyRows == 0 {
-		return m.buildPluginInstallProgressBar(s, m.width)
+
+	// Reserve a row immediately above the progress bar for the y/n
+	// confirmation prompt while the uninstall flow is still asking.
+	prompt := pluginUninstallPromptRendered(s)
+	if prompt != "" && bodyRows > 0 {
+		bodyRows--
 	}
+
+	if bodyRows == 0 {
+		var b strings.Builder
+		if prompt != "" {
+			b.WriteString(prompt)
+			b.WriteString("\n")
+		}
+		b.WriteString(m.buildPluginInstallProgressBar(s, m.width))
+		return b.String()
+	}
+
 	bodyLines := m.pluginInstallBodyLines(s, bodyRows)
 	bodyLines = applyWidth(bodyLines, m.width)
 	if len(bodyLines) > bodyRows {
@@ -317,15 +487,67 @@ func (m *Model) pluginInstallView() string {
 	if len(bodyLines) > 0 {
 		b.WriteString("\n")
 	}
+	if prompt != "" {
+		b.WriteString(prompt)
+		b.WriteString("\n")
+	}
 	b.WriteString(m.buildPluginInstallProgressBar(s, m.width))
 	return b.String()
+}
+
+// pluginUninstallPromptText returns the plain-text prompt for the entry
+// currently in pluginInstallAsking, or "" when no entry is asking
+// (install/update operations, or the asking phase has finished).
+func pluginUninstallPromptText(s *pluginInstallState) string {
+	if s == nil || s.operation != "uninstall" || s.finished {
+		return ""
+	}
+	for _, e := range s.entries {
+		if e.status != pluginInstallAsking {
+			continue
+		}
+		dir := strings.TrimSuffix(pluginInstallDisplayPath(e.plugin.Dir), "/")
+		switch {
+		case e.plugin.Name != "" && dir != "":
+			return fmt.Sprintf("remove %s (%s)? [y/n]", e.plugin.Name, dir)
+		case e.plugin.Name != "":
+			return fmt.Sprintf("remove %s? [y/n]", e.plugin.Name)
+		case dir != "":
+			return fmt.Sprintf("remove %s? [y/n]", dir)
+		default:
+			return "remove? [y/n]"
+		}
+	}
+	return ""
+}
+
+// pluginUninstallPromptRendered returns the prompt with the surrounding
+// text painted yellow, the "y" green, and the "n" red. Returns "" when
+// pluginUninstallPromptText would.
+func pluginUninstallPromptRendered(s *pluginInstallState) string {
+	text := pluginUninstallPromptText(s)
+	if text == "" {
+		return ""
+	}
+	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	green := lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true)
+	red := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	// The prompt always ends with the literal "[y/n]"; if for any
+	// reason it doesn't, fall back to a single yellow-painted block.
+	const ynMarker = "[y/n]"
+	idx := strings.LastIndex(text, ynMarker)
+	if idx < 0 {
+		return yellow.Render(text)
+	}
+	prefix := text[:idx]
+	return yellow.Render(prefix+"[") + green.Render("y") + yellow.Render("/") + red.Render("n") + yellow.Render("]")
 }
 
 func (m *Model) pluginInstallBodyLines(s *pluginInstallState, bodyRows int) []styledLine {
 	if s.finished {
 		return pluginInstallFinishedBodyLines(s, bodyRows, m.width)
 	}
-	return pluginInstallVisibleEntries(s.entries, bodyRows, m.width)
+	return pluginInstallVisibleEntries(s.entries, bodyRows, m.width, s.operation)
 }
 
 func pluginInstallCompletionLines(s *pluginInstallState) []styledLine {
@@ -351,12 +573,12 @@ func pluginInstallFinishedBodyLines(s *pluginInstallState, bodyRows, width int) 
 	}
 
 	pluginRows := bodyRows - completionRows
-	lines := pluginInstallVisibleEntries(s.entries, pluginRows, width)
+	lines := pluginInstallVisibleEntries(s.entries, pluginRows, width, s.operation)
 	lines = append(lines, completion...)
 	return lines
 }
 
-func pluginInstallVisibleEntries(entries []pluginInstallEntry, rows, width int) []styledLine {
+func pluginInstallVisibleEntries(entries []pluginInstallEntry, rows, width int, operation string) []styledLine {
 	if rows <= 0 || len(entries) == 0 {
 		return nil
 	}
@@ -371,7 +593,7 @@ func pluginInstallVisibleEntries(entries []pluginInstallEntry, rows, width int) 
 	start := len(entries) - visibleCount
 	lines := make([]styledLine, 0, visibleCount*blockRows)
 	for i := start; i < len(entries); i++ {
-		lines = append(lines, pluginInstallEntryCellLines(entries[i], width)...)
+		lines = append(lines, pluginInstallEntryCellLines(entries[i], width, operation)...)
 		if i < len(entries)-1 {
 			lines = append(lines, styledLine{})
 		}
@@ -399,7 +621,7 @@ func pluginInstallCellRows() int {
 	return 6
 }
 
-func pluginInstallEntryCellLines(e pluginInstallEntry, width int) []styledLine {
+func pluginInstallEntryCellLines(e pluginInstallEntry, width int, operation string) []styledLine {
 	if width <= 0 {
 		return nil
 	}
@@ -423,7 +645,7 @@ func pluginInstallEntryCellLines(e pluginInstallEntry, width int) []styledLine {
 	detailStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(detailColor))
 
 	statusLabel, statusStyle := pluginInstallStatusLabel(e)
-	detailText, detailStyleOverride := pluginInstallDetailText(e)
+	detailText, detailStyleOverride := pluginInstallDetailText(e, operation)
 	if detailStyleOverride != nil {
 		detailStyle = *detailStyleOverride
 	}
@@ -447,8 +669,16 @@ func pluginInstallStatusLabel(e pluginInstallEntry) (string, lipgloss.Style) {
 	switch e.status {
 	case pluginInstallQueued:
 		return "queued", statusLabelStyle("241")
+	case pluginInstallAsking:
+		return "asking", statusLabelStyle("220")
+	case pluginInstallAccepted:
+		return "pending removal", statusLabelStyle("34")
+	case pluginInstallSkipped:
+		return "skipped", statusLabelStyle("241")
 	case pluginInstallPreparing, pluginInstallCloning, pluginInstallPulling, pluginInstallSubmodules:
 		return pluginInstallPhaseLabel(e.status), statusLabelStyle("33")
+	case pluginInstallRemoving:
+		return pluginInstallPhaseLabel(e.status), statusLabelStyle("208")
 	case pluginInstallDone:
 		return "done", statusLabelStyle("34")
 	case pluginInstallFailed:
@@ -468,6 +698,8 @@ func pluginInstallPhaseLabel(status pluginInstallStatus) string {
 		return "pulling"
 	case pluginInstallSubmodules:
 		return "submodules"
+	case pluginInstallRemoving:
+		return "removing"
 	default:
 		return "queued"
 	}
@@ -479,29 +711,61 @@ func statusLabelStyle(color string) lipgloss.Style {
 		Bold(true)
 }
 
-func pluginInstallDetailText(e pluginInstallEntry) (string, *lipgloss.Style) {
+func pluginInstallDetailText(e pluginInstallEntry, operation string) (string, *lipgloss.Style) {
 	switch e.status {
 	case pluginInstallQueued:
-		return "waiting to start", nil
-	case pluginInstallPreparing:
-		if e.plugin.Installed {
-			return "preparing update", nil
+		if operation == "uninstall" {
+			return "waiting for confirmation", nil
 		}
-		return "creating plugin directory", nil
+		return "waiting to start", nil
+	case pluginInstallAsking:
+		return "awaiting confirmation", nil
+	case pluginInstallAccepted:
+		return "queued for removal", nil
+	case pluginInstallSkipped:
+		return "kept", nil
+	case pluginInstallPreparing:
+		switch operation {
+		case "uninstall":
+			return "preparing removal", nil
+		case "update":
+			return "preparing update", nil
+		default:
+			if e.plugin.Installed {
+				return "preparing update", nil
+			}
+			return "creating plugin directory", nil
+		}
 	case pluginInstallCloning:
 		return "cloning repository", nil
 	case pluginInstallPulling:
 		return "pulling latest changes", nil
 	case pluginInstallSubmodules:
 		return "updating submodules", nil
+	case pluginInstallRemoving:
+		return "removing plugin directory", nil
 	case pluginInstallDone:
-		return "install complete", nil
+		switch operation {
+		case "uninstall":
+			return "uninstall complete", nil
+		case "update":
+			return "update complete", nil
+		default:
+			return "install complete", nil
+		}
 	case pluginInstallFailed:
 		if e.err != nil {
 			style := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 			return shortPluginError(e.err), &style
 		}
-		return "install failed", nil
+		switch operation {
+		case "uninstall":
+			return "uninstall failed", nil
+		case "update":
+			return "update failed", nil
+		default:
+			return "install failed", nil
+		}
 	default:
 		return "waiting to start", nil
 	}
@@ -622,10 +886,14 @@ func (m *Model) buildPluginInstallProgressBar(s *pluginInstallState, width int) 
 
 	type rgb struct{ r, g, b uint8 }
 	var startColor, endColor rgb
-	if s.operation == "update" {
+	switch s.operation {
+	case "update":
 		startColor = rgb{0x00, 0x87, 0xff}
 		endColor = rgb{0xff, 0xff, 0xff}
-	} else {
+	case "uninstall":
+		startColor = rgb{0xff, 0x55, 0x55}
+		endColor = rgb{0xff, 0xff, 0xff}
+	default:
 		startColor = rgb{0xff, 0xff, 0xff}
 		endColor = rgb{0x00, 0x87, 0xff}
 	}
@@ -678,17 +946,28 @@ func pluginInstallTotalSteps(operation string, count int) int {
 	if count <= 0 {
 		return 1
 	}
-	if operation == "update" {
+	switch operation {
+	case "update":
 		return 2 + count*4
+	case "uninstall":
+		// 1 asking bump + 3 removal bumps (preparing → removing → result)
+		// per plugin, assuming all accepted. Each "n" answer trims 3 from
+		// this total at runtime so the bar reaches 100%.
+		return 2 + count*4
+	default:
+		return 2 + count*3
 	}
-	return 2 + count*3
 }
 
 func pluginInstallEmptySummary(operation string) string {
-	if operation == "update" {
+	switch operation {
+	case "update":
 		return "No plugins to update"
+	case "uninstall":
+		return "No plugins to uninstall"
+	default:
+		return "No plugins to install"
 	}
-	return "No plugins to install"
 }
 
 func sourceableInstalledPlugins(pluginDir string, plugins []plugin.Plugin) []plugin.Plugin {

@@ -152,6 +152,143 @@ func TestPluginInstallViewRendersMockupStyleCells(t *testing.T) {
 	}
 }
 
+// TestPluginInstallViewUninstallAskingPhaseRendersInline verifies the
+// per-plugin y/n prompt now renders inside the bordered cell layout —
+// the entry currently being asked shows "asking" with the prompt text
+// in the detail row, prior answers stay visible as accepted/skipped,
+// and unanswered entries show as queued for confirmation.
+func TestPluginInstallViewUninstallAskingPhaseRendersInline(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 88, Height: 28})
+	m.mode = ModePluginInstall
+	m.pluginInstallState = &pluginInstallState{
+		entries: []pluginInstallEntry{
+			{plugin: plugin.Plugin{Name: "alpha", Dir: "/tmp/plugins/alpha"}, status: pluginInstallAccepted},
+			{plugin: plugin.Plugin{Name: "beta", Dir: "/tmp/plugins/beta"}, status: pluginInstallSkipped},
+			{plugin: plugin.Plugin{Name: "gamma", Dir: "/tmp/plugins/gamma"}, status: pluginInstallAsking},
+			{plugin: plugin.Plugin{Name: "delta", Dir: "/tmp/plugins/delta"}, status: pluginInstallQueued},
+		},
+		operation:       "uninstall",
+		progressCurrent: 3,
+		progressTotal:   18,
+	}
+
+	view := m.pluginInstallView()
+	if !strings.Contains(view, "┌") || !strings.Contains(view, "│") {
+		t.Fatalf("expected bordered cells in asking phase, got:\n%s", view)
+	}
+	for _, want := range []string{"alpha", "beta", "gamma", "delta"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expected plugin %q to be visible during asking, got:\n%s", want, view)
+		}
+	}
+	if !strings.Contains(view, "pending removal") {
+		t.Fatalf("expected 'pending removal' status pill for alpha, got:\n%s", view)
+	}
+	if !strings.Contains(view, "skipped") {
+		t.Fatalf("expected 'skipped' status pill for beta, got:\n%s", view)
+	}
+	if !strings.Contains(view, "asking") {
+		t.Fatalf("expected 'asking' status pill for gamma, got:\n%s", view)
+	}
+	if !strings.Contains(view, "awaiting confirmation") {
+		t.Fatalf("expected asking cell detail row to read 'awaiting confirmation', got:\n%s", view)
+	}
+	if !strings.Contains(view, "waiting for confirmation") {
+		t.Fatalf("expected delta to show 'waiting for confirmation', got:\n%s", view)
+	}
+
+	// The y/n prompt for the asking entry must live on its own line
+	// directly above the bottom progress bar — not inside the cell.
+	lines := strings.Split(strings.TrimRight(view, "\n"), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 rendered rows, got:\n%s", view)
+	}
+	bottomRow := stripANSI(lines[len(lines)-1])
+	promptRow := stripANSI(lines[len(lines)-2])
+	if !strings.Contains(promptRow, "remove gamma (/tmp/plugins/gamma)? [y/n]") {
+		t.Fatalf("expected prompt above progress bar to ask about gamma, got %q in:\n%s", promptRow, view)
+	}
+	// Crude sanity check that the bottom row is the progress bar (it
+	// includes the "N/M" counter rendered by buildPluginInstallProgressBar).
+	if !strings.Contains(bottomRow, "/") {
+		t.Fatalf("expected bottom row to be the progress bar, got %q", bottomRow)
+	}
+}
+
+// TestPluginInstallViewUninstallRendersMatchingCells verifies the uninstall
+// progress display reuses the same bordered-cell layout as install/update,
+// with uninstall-flavored phase labels and detail text.
+func TestPluginInstallViewUninstallRendersMatchingCells(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 88, Height: 14})
+	m.mode = ModePluginInstall
+	m.pluginInstallState = &pluginInstallState{
+		entries: []pluginInstallEntry{
+			{
+				plugin: plugin.Plugin{
+					Name: "alpha",
+					Dir:  "/tmp/plugins/alpha",
+				},
+				status: pluginInstallRemoving,
+			},
+			{
+				plugin: plugin.Plugin{
+					Name: "beta",
+					Dir:  "/tmp/plugins/beta",
+				},
+				status: pluginInstallFailed,
+				err:    errors.New("permission denied"),
+			},
+		},
+		operation:       "uninstall",
+		progressCurrent: 3,
+		progressTotal:   8,
+	}
+
+	view := m.pluginInstallView()
+	if !strings.Contains(view, "┌") || !strings.Contains(view, "│") {
+		t.Fatalf("expected bordered cells for uninstall view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "removing") {
+		t.Fatalf("expected uninstall phase label 'removing' in view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "removing plugin directory") {
+		t.Fatalf("expected uninstall detail text in view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "permission denied") {
+		t.Fatalf("expected per-plugin failure text in view, got:\n%s", view)
+	}
+}
+
+// TestPluginInstallViewUninstallDoneShowsReloadPrompt verifies the
+// "Reload plugins?" prompt is presented after uninstall completes (the
+// prompt was previously emitted from pluginConfirmView).
+func TestPluginInstallViewUninstallDoneShowsReloadPrompt(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 88, Height: 14})
+	m.mode = ModePluginInstall
+	m.pluginInstallState = &pluginInstallState{
+		entries: []pluginInstallEntry{
+			{
+				plugin: plugin.Plugin{Name: "alpha", Dir: "/tmp/plugins/alpha"},
+				status: pluginInstallDone,
+			},
+		},
+		operation:       "uninstall",
+		finished:        true,
+		installed:       []plugin.Plugin{{Name: "alpha", Dir: "/tmp/plugins/alpha"}},
+		summary:         "Uninstalled 1 plugin(s)",
+		progressCurrent: 5,
+		progressTotal:   5,
+	}
+
+	view := m.pluginInstallView()
+	if !strings.Contains(view, "Uninstalled 1 plugin(s)") {
+		t.Fatalf("expected uninstall summary in view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Reload plugins? [y/n]") {
+		t.Fatalf("expected reload prompt after uninstall, got:\n%s", view)
+	}
+}
+
 func TestPluginInstallViewUsesDimSideBorders(t *testing.T) {
 	lines := pluginInstallEntryCellLines(pluginInstallEntry{
 		plugin: plugin.Plugin{
@@ -160,7 +297,7 @@ func TestPluginInstallViewUsesDimSideBorders(t *testing.T) {
 			Dir:    "/tmp/plugins/maccyakto",
 		},
 		status: pluginInstallCloning,
-	}, 72)
+	}, 72, "install")
 	if len(lines) < 4 {
 		t.Fatalf("expected cell lines, got %#v", lines)
 	}
@@ -182,7 +319,7 @@ func TestPluginInstallViewKeepsBackgroundAcrossPaddedInterior(t *testing.T) {
 			Dir:    "/tmp/plugins/maccyakto",
 		},
 		status: pluginInstallCloning,
-	}, 72)
+	}, 72, "install")
 	if len(lines) < 4 {
 		t.Fatalf("expected cell lines, got %#v", lines)
 	}

@@ -122,9 +122,6 @@ func (m *Model) View() (view tea.View) {
 			attachFormCursor(&v, m.sessionForm.Cursor(), inputRow)
 			return v
 		}
-	case ModePluginConfirm:
-		content = m.pluginConfirmView()
-		return m.wrapView(content)
 	case ModePluginInstall:
 		content = m.pluginInstallView()
 		return m.wrapView(content)

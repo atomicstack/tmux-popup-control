@@ -30,7 +30,6 @@ const (
 	ModePaneForm
 	ModeWindowForm
 	ModeSessionForm
-	ModePluginConfirm
 	ModePluginInstall
 	ModeResurrect
 	ModeSessionSaveForm
@@ -56,8 +55,6 @@ func (m Mode) String() string {
 		return "window_form"
 	case ModeSessionForm:
 		return "session_form"
-	case ModePluginConfirm:
-		return "plugin_confirm"
 	case ModePluginInstall:
 		return "plugin_install"
 	case ModeResurrect:
@@ -139,7 +136,6 @@ type Model struct {
 	treePanes          []menu.PaneEntry
 	pullTreeSessions   []menu.SessionEntry
 	pullTreeWindows    []menu.WindowEntry
-	pluginConfirmState *pluginConfirmState
 	pluginInstallState *pluginInstallState
 	resurrectState     *resurrectState
 	restoreRefresh     *restoreRefreshState
@@ -292,8 +288,6 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 		return m.handleWindowForm(msg)
 	case ModeSessionForm:
 		return m.handleSessionForm(msg)
-	case ModePluginConfirm:
-		return m.handlePluginConfirm(msg)
 	case ModePluginInstall:
 		return m.handlePluginInstallKey(msg)
 	case ModeResurrect:
@@ -327,7 +321,6 @@ func (m *Model) registerHandlers() {
 		reflect.TypeFor[layoutAppliedMsg]():           m.handleLayoutAppliedMsg,
 		reflect.TypeFor[tea.MouseWheelMsg]():          m.handleMouseMsg,
 		reflect.TypeFor[menu.PluginConfirmPrompt]():   m.handlePluginConfirmPromptMsg,
-		reflect.TypeFor[pluginRemovalDoneMsg]():       m.handlePluginRemovalDoneMsg,
 		reflect.TypeFor[menu.PluginInstallStart]():    m.handlePluginInstallStartMsg,
 		reflect.TypeFor[menu.PluginUpdateStart]():     m.handlePluginUpdateStartMsg,
 		reflect.TypeFor[pluginInstallStageMsg]():      m.handlePluginInstallStageMsg,
