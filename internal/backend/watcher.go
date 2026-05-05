@@ -128,10 +128,24 @@ func (w *Watcher) poll(kind Kind, fetch func(context.Context) (any, error)) {
 				"interval_ms": w.interval.Milliseconds(),
 			},
 		})
+		t0 := time.Now()
+		logging.Trace("backend.poll.start", map[string]any{"kind": kind.String()})
 		data, err := fetch(w.ctx)
-		if count := watcherItemCount(data); count >= 0 {
+		dur := time.Since(t0)
+		count := watcherItemCount(data)
+		if count >= 0 {
 			span.AddAttr("item_count", count)
 		}
+		errStr := ""
+		if err != nil {
+			errStr = err.Error()
+		}
+		logging.Trace("backend.poll.done", map[string]any{
+			"kind":     kind.String(),
+			"items":    count,
+			"err":      errStr,
+			"duration": dur.String(),
+		})
 		span.End(err)
 		evt := Event{Kind: kind, Data: data, Err: err}
 		select {
