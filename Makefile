@@ -4,11 +4,16 @@ GOCACHE := $(CURDIR)/.gocache
 GOMODCACHE := $(CURDIR)/.gomodcache
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
-GO_ENV := GOTMUXCC_TRACE=1 GOTMUXCC_TRACE_FILE=$(CURDIR)/gotmuxcc_trace.log GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=off
+# Base env for offline builds. GOTMUXCC_TRACE is intentionally NOT set here:
+# enabling it makes every gotmuxcc call write a trace line to disk and slows
+# integration tests by ~4x (6s → 24s for `make test`). Use `make test-trace`
+# (or set GOTMUXCC_TRACE=1 manually) when you actually want the trace log.
+GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=off
+GO_ENV_TRACED := GOTMUXCC_TRACE=1 GOTMUXCC_TRACE_FILE=$(CURDIR)/gotmuxcc_trace.log $(GO_ENV)
 
 .SILENT:
 
-.PHONY: build run tidy fmt test clean-cache ensure-dirs cover update-gotmuxcc release
+.PHONY: build run tidy fmt test test-trace clean-cache ensure-dirs cover update-gotmuxcc release
 
 ensure-dirs:
 	mkdir -p $(GOCACHE) $(GOMODCACHE)
@@ -26,7 +31,23 @@ tidy: ensure-dirs
 	$(GO_ENV) go mod tidy
 
 test: ensure-dirs
-	$(GO_ENV) go test ./...
+	# -p 4 caps concurrent package execution at 4. The default
+	# (GOMAXPROCS=16 on this machine) runs every package in parallel,
+	# which means the 4 integration test binaries (resurrect, testutil,
+	# tmux, ui) each fire their tests at full thread pressure
+	# simultaneously — every tmux operation then queues behind every
+	# other test's tmux operations and a clean run stretches from ~7s
+	# to ~24s. With -p 4 the integration packages still run
+	# concurrently with each other but the rest of the suite fills
+	# remaining slots one-at-a-time, keeping per-test contention low.
+	# Cold cache: ~7s. Warm cache (no source changes): <1s.
+	$(GO_ENV) go test -p 4 ./...
+
+test-trace: ensure-dirs
+	# Same as `make test` but with gotmuxcc command tracing enabled.
+	# Trace lines land in $(CURDIR)/gotmuxcc_trace.log. Roughly 4x
+	# slower than `make test`; use only when you need the trace.
+	$(GO_ENV_TRACED) go test -p 4 ./...
 
 GO_ENV_ONLINE := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=direct
 
