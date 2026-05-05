@@ -35,7 +35,15 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 			sessions = fallback
 		}
 	}
-	labelMap := fetchSessionLabels(client, envOrOption(socketPath, "TMUX_POPUP_CONTROL_SESSION_FORMAT", "@tmux-popup-control-session-format"))
+	// Only run the per-session label format command when the user has
+	// configured a custom format — otherwise defaultLabelForSession produces
+	// the same output as the built-in defaultSessionFormat without paying
+	// for an extra control-mode round-trip on every poll cycle.
+	customFormat := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SESSION_FORMAT", "@tmux-popup-control-session-format")
+	var labelMap map[string]string
+	if strings.TrimSpace(customFormat) != "" {
+		labelMap = fetchSessionLabels(client, customFormat)
+	}
 	currentName := currentSessionName(client)
 	realClients := realAttachedClients(client)
 	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""

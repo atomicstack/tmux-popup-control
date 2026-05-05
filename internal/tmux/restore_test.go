@@ -332,6 +332,43 @@ func TestShowOptionError(t *testing.T) {
 	}
 }
 
+// TestShowOptionCachesResult verifies repeated lookups for the same
+// (socket, option) pair only hit tmux once. Backend pollers query the
+// same options on every cycle; without this cache each cycle issues
+// redundant `show-options` commands that serialize through gotmuxcc and
+// dominate startup latency under load.
+func TestShowOptionCachesResult(t *testing.T) {
+	calls := 0
+	fake := &fakeClient{
+		globalOptionFn: func(key string) (string, error) {
+			calls++
+			return "value", nil
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	for i := range 5 {
+		if got := ShowOption("/tmp/socket", "@cached-option"); got != "value" {
+			t.Fatalf("call %d: got %q, want %q", i, got, "value")
+		}
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 tmux call, got %d", calls)
+	}
+
+	// Different option key → new tmux call.
+	_ = ShowOption("/tmp/socket", "@other-option")
+	if calls != 2 {
+		t.Errorf("expected 2 tmux calls after new key, got %d", calls)
+	}
+
+	// Different socket path → new tmux call.
+	_ = ShowOption("/tmp/different-socket", "@cached-option")
+	if calls != 3 {
+		t.Errorf("expected 3 tmux calls after new socket, got %d", calls)
+	}
+}
+
 // --- DefaultCommand ---
 
 func TestDefaultCommandFromTmux(t *testing.T) {

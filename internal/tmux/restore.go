@@ -199,8 +199,17 @@ func SetSessionOption(socketPath, session, option, value string) error {
 }
 
 // ShowOption queries a tmux server-level (global) option value. Returns an
-// empty string if the option is not set or an error occurs.
+// empty string if the option is not set or an error occurs. Results are
+// memoized per (socket, option) for the life of the process — see cache.go.
 func ShowOption(socketPath, option string) string {
+	key := optionCacheKey(socketPath, option)
+	optionCacheMu.RLock()
+	if v, ok := optionCache[key]; ok {
+		optionCacheMu.RUnlock()
+		return v
+	}
+	optionCacheMu.RUnlock()
+
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return ""
@@ -209,7 +218,11 @@ func ShowOption(socketPath, option string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(val)
+	trimmed := strings.TrimSpace(val)
+	optionCacheMu.Lock()
+	optionCache[key] = trimmed
+	optionCacheMu.Unlock()
+	return trimmed
 }
 
 // DefaultCommand returns the tmux default-command setting. If unset or empty

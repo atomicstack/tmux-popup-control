@@ -232,10 +232,14 @@ func (h *realSessionHandle) Kill() error {
 // Call this at application exit to avoid leaking tmux -C processes.
 func Shutdown() {
 	clientMu.Lock()
-	defer clientMu.Unlock()
 	if cachedClient != nil {
 		cachedClient.Close()
 		cachedClient = nil
 		cachedSocket = ""
 	}
+	clientMu.Unlock()
+	// Drop memoized lookups too — callers reaching for Shutdown expect a
+	// fully clean slate before reconnecting (tests, in particular, swap
+	// sockets/sessions and would otherwise read stale cache entries).
+	resetCaches()
 }

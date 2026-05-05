@@ -20,10 +20,12 @@ func withStubTmux(t *testing.T, fn func(string) (tmuxClient, error)) {
 	cachedClient = nil
 	cachedSocket = ""
 	newTmux = fn
+	resetCaches()
 	t.Cleanup(func() {
 		newTmux = prev
 		cachedClient = prevClient
 		cachedSocket = prevSocket
+		resetCaches()
 	})
 }
 
@@ -480,7 +482,11 @@ func TestFetchSessions(t *testing.T) {
 		listSessionsFormatLines: []string{"dev\tcustom label"},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
+	// Set a non-empty custom format so FetchSessions takes the
+	// ListSessionsFormat path and the fake's custom label is used.
+	// (When the format is empty, FetchSessions falls back to the
+	// computed defaultLabelForSession — see TestFetchSessionsDefaultLabel.)
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "#S: #{session_windows}w")
 	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
 	t.Setenv("TMUX_PANE", "")
 	snap, err := FetchSessions("sock")
@@ -498,6 +504,32 @@ func TestFetchSessions(t *testing.T) {
 	}
 	if !snap.Sessions[0].Attached {
 		t.Fatalf("expected attached session")
+	}
+}
+
+func TestFetchSessionsDefaultLabel(t *testing.T) {
+	// listSessionsFormatLines is set to a sentinel value the test would
+	// never accept — if FetchSessions picks it up the assertion below
+	// catches the bug. With no custom format configured, FetchSessions
+	// must skip the ListSessionsFormat round-trip and synthesize the
+	// label from data already returned by ListSessions.
+	fake := &fakeClient{
+		sessions: []*gotmux.Session{
+			{Name: "dev", Windows: 2, Attached: 1, AttachedList: []string{"tty1"}},
+		},
+		clients:                 []*gotmux.Client{{Session: "dev"}},
+		listSessionsFormatLines: []string{"dev\tSENTINEL-must-not-be-used"},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
+	t.Setenv("TMUX_PANE", "")
+	snap, err := FetchSessions("sock")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, want := snap.Sessions[0].Label, "dev: 2 windows (attached)"; got != want {
+		t.Errorf("default label = %q, want %q", got, want)
 	}
 }
 
