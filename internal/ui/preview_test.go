@@ -558,3 +558,35 @@ func TestMaxVisibleItemsAccountsForPreview(t *testing.T) {
 		t.Fatalf("expected item count to shrink when preview is loaded: without=%d with=%d", without, with)
 	}
 }
+
+// TestMaxVisibleItemsRespectsNoPreview verifies that with noPreview=true the
+// function does not reserve rows for a preview, since viewVertical will not
+// render one. Without this guarantee the tree level shrinks to a tiny
+// viewport and the cursor (auto-positioned at the active pane via the
+// session-tree initial-selection feature) drags the viewport off the top of
+// the tree, hiding earlier items from pane-capture-based assertions.
+func TestMaxVisibleItemsRespectsNoPreview(t *testing.T) {
+	m := NewModel(ModelConfig{Height: 24, NoPreview: true})
+	lvl := newLevel("session:tree", "Tree", []menu.Item{
+		{ID: "tree:s:a", Label: "a"},
+		{ID: "tree:s:b", Label: "b"},
+	}, nil)
+	m.stack = []*level{lvl}
+
+	// Inject a loaded preview to mimic the async preview-load racing the
+	// initial render. With noPreview=true the model must ignore it.
+	m.preview["session:tree"] = &previewData{
+		target: "tree:s:a",
+		lines:  []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"},
+		seq:    1,
+	}
+
+	got := m.maxVisibleItems()
+
+	// With Height=24, bottomBarRows=2, header=1, and no preview reserve, the
+	// budget should be at least 20 rows. If the bug is present the loaded
+	// preview shrinks the budget below 15.
+	if got < 15 {
+		t.Fatalf("expected maxVisibleItems >= 15 when noPreview=true, got %d", got)
+	}
+}

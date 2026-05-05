@@ -1024,8 +1024,9 @@ func (m *Model) maxVisibleItems() int {
 		used += 2
 	}
 	// In side-by-side mode the full height is available for the left column;
-	// no preview rows need to be reserved.
-	if !m.hasSidePreview() {
+	// no preview rows need to be reserved. Same when previews are disabled
+	// outright — viewVertical skips rendering them either way.
+	if !m.hasSidePreview() && !m.noPreview {
 		if preview := m.activePreview(); shouldRenderPreview(preview) {
 			used += 2 // blank separator + title line
 			if preview.err != "" {
