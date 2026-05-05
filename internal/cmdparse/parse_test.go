@@ -1,11 +1,7 @@
 package cmdparse
 
 import (
-	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -165,6 +161,17 @@ func TestParseBindKey(t *testing.T) {
 	}
 }
 
+// TestParseAllCommands feeds every synopsis line from `tmux list-commands`
+// through the parser and asserts:
+//   - no line errors out
+//   - BuildRegistry produces a registry with the commands the rest of the
+//     codebase relies on for completion, including alias resolution
+//   - those known commands have a sensible shape (correct alias, expected
+//     flag/positional presence)
+//
+// The test deliberately does not pin the full command catalogue to a golden
+// file: the catalogue grows with each tmux release and the codebase only
+// consumes a stable subset.
 func TestParseAllCommands(t *testing.T) {
 	tmuxPath, err := exec.LookPath("tmux")
 	if err != nil {
@@ -177,72 +184,83 @@ func TestParseAllCommands(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	var buf strings.Builder
+	if len(lines) == 0 {
+		t.Fatal("tmux list-commands produced no output")
+	}
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		s, parseErr := ParseSynopsis(line)
-		if parseErr != nil {
+		if _, parseErr := ParseSynopsis(line); parseErr != nil {
 			t.Errorf("failed to parse %q: %v", line, parseErr)
-			continue
 		}
-		fmt.Fprintf(&buf, "command: %s\n", s.Name)
-		if s.Alias != "" {
-			fmt.Fprintf(&buf, "  alias: %s\n", s.Alias)
-		}
-		if len(s.BoolFlags) > 0 {
-			fmt.Fprintf(&buf, "  bool-flags: %s\n", string(s.BoolFlags))
-		}
-		for _, af := range s.ArgFlags {
-			fmt.Fprintf(&buf, "  arg-flag: -%c %s\n", af.Short, af.ArgType)
-		}
-		for _, p := range s.Positionals {
-			marker := "required"
-			if !p.Required {
-				marker = "optional"
-			}
-			if p.Variadic {
-				marker += ",variadic"
-			}
-			fmt.Fprintf(&buf, "  positional: %s (%s)\n", p.Name, marker)
-		}
-		buf.WriteString("\n")
 	}
 
-	golden := filepath.Join("testdata", "golden_schemas.txt")
-	got := buf.String()
-
-	if os.Getenv("UPDATE_GOLDEN") != "" {
-		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
-			t.Fatalf("failed to write golden file: %v", err)
-		}
-		t.Logf("updated golden file %s", golden)
-	}
-
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		t.Fatalf("failed to read golden file (run with UPDATE_GOLDEN=1 to create): %v", err)
-	}
-	if got != string(want) {
-		t.Errorf("output differs from golden file %s\n\ngot:\n%s\nwant:\n%s", golden, got, string(want))
-	}
-
-	// also test BuildRegistry
 	reg := BuildRegistry(lines)
 	if len(reg) == 0 {
 		t.Fatal("BuildRegistry returned empty map")
 	}
-	// spot-check: attach-session should be reachable by both name and alias
-	if _, ok := reg["attach-session"]; !ok {
-		t.Error("registry missing attach-session")
+
+	// Spot-check commands the UI uses for completion. These have stable
+	// shapes across tmux releases — flag-letter additions are tolerated, but
+	// the named flag/positional must be present (and an alias when expected).
+	type expectation struct {
+		name        string
+		alias       string
+		argFlags    []rune
+		positionals []string
 	}
-	if _, ok := reg["attach"]; !ok {
-		t.Error("registry missing attach alias")
+	expectations := []expectation{
+		{name: "attach-session", alias: "attach", argFlags: []rune{'c', 'f', 't'}},
+		{name: "kill-session", argFlags: []rune{'t'}},
+		{name: "rename-session", alias: "rename", positionals: []string{"new-name"}},
+		{name: "new-window", alias: "neww"},
+		{name: "kill-window", alias: "killw", argFlags: []rune{'t'}},
+		{name: "send-keys", alias: "send", argFlags: []rune{'t'}, positionals: []string{"key"}},
+		{name: "find-window", alias: "findw", positionals: []string{"match-string"}},
+		{name: "split-window", alias: "splitw"},
+		{name: "select-pane", alias: "selectp"},
+		{name: "switch-client", alias: "switchc", argFlags: []rune{'t'}},
+		{name: "list-commands", alias: "lscm"},
 	}
-	if reg["attach-session"] != reg["attach"] {
-		t.Error("attach-session and attach should point to same schema")
+
+	for _, want := range expectations {
+		schema, ok := reg[want.name]
+		if !ok {
+			t.Errorf("registry missing %q", want.name)
+			continue
+		}
+		if want.alias != "" {
+			if schema.Alias != want.alias {
+				t.Errorf("%q: alias = %q, want %q", want.name, schema.Alias, want.alias)
+			}
+			if reg[want.alias] != schema {
+				t.Errorf("%q: alias %q does not resolve to same schema", want.name, want.alias)
+			}
+		}
+		for _, flag := range want.argFlags {
+			if !SchemaHasArgFlag(schema, flag) {
+				t.Errorf("%q: missing arg-flag -%c", want.name, flag)
+			}
+		}
+		for _, posName := range want.positionals {
+			found := false
+			for _, p := range schema.Positionals {
+				if p.Name == posName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				names := make([]string, 0, len(schema.Positionals))
+				for _, p := range schema.Positionals {
+					names = append(names, p.Name)
+				}
+				t.Errorf("%q: missing positional %q (have %v)", want.name, posName, names)
+			}
+		}
 	}
 }
 
@@ -272,5 +290,3 @@ func argFlagsEqual(a, b []ArgFlagDef) bool {
 	return true
 }
 
-// sortedKeys returns sorted keys from a map for deterministic comparison.
-var _ = sort.Strings
