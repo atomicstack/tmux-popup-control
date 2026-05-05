@@ -456,6 +456,17 @@ func TestRunAutoSaveCommandReturnsBlankWhenIconDisabled(t *testing.T) {
 		now = now.Add(d)
 	})
 	defer restoreSleep()
+	// IconSeconds=0 still triggers a save when the prior autosave is
+	// older than IntervalMinutes; without mocking the tmux fetch funcs
+	// the save would try to talk to whatever tmux server happens to be
+	// reachable from the test environment, hang on retries, and time
+	// out the package.
+	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
+	defer restoreFetchSessions()
+	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
+	defer restoreFetchWindows()
+	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return makePanes("main", 0), nil })
+	defer restoreFetchPanes()
 
 	var out bytes.Buffer
 	err := RunAutoSaveCommand(StatusConfig{
