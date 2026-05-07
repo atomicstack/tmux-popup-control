@@ -235,9 +235,9 @@ func TestLoadSessionRestoreFromMenuShowsNameBeforeTypeAndColoredRows(t *testing.
 	}
 	autoSize := humanizeSaveSize(autoInfo.Size())
 
-	items, err := loadSessionRestoreFromMenu(Context{})
+	items, err := loadResurrectRestoreFromMenu(Context{})
 	if err != nil {
-		t.Fatalf("loadSessionRestoreFromMenu: %v", err)
+		t.Fatalf("loadResurrectRestoreFromMenu: %v", err)
 	}
 	if len(items) != 3 {
 		t.Fatalf("expected header + 2 items, got %d", len(items))

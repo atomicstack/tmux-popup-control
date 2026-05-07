@@ -95,11 +95,11 @@ internal/testutil/        → integration test helpers (StartTmuxServer, Capture
 
 Menu items are identified by colon-separated IDs (e.g. `session:switch`, `pane:kill`). `internal/menu/registry.go` builds a `Registry` tree from three maps defined in `menu.go`:
 
-- `CategoryLoaders()` — top-level submenu loaders (session, window, pane, process, clipboard, keybinding, command, plugins)
+- `CategoryLoaders()` — top-level submenu loaders (session, window, pane, process, clipboard, keybinding, command, plugins, resurrect)
 - `ActionLoaders()` — loaders for nested items within actions
 - `ActionHandlers()` — leaf actions that execute tmux operations
 
-Root menu categories (in display order): process, clipboard, keybinding, command, pane, window, plugins, session.
+Root menu categories (in display order): process, clipboard, customize-mode, keybinding, command, pane, window, plugins, resurrect, session.
 
 The UI maintains a `stack []*level` where each level holds the current items, cursor, filter state, and viewport offset. Navigation pushes/pops levels. Multi-select (tab to mark) is enabled per node in the registry (`window:kill`, `pane:join`, `pane:kill`, `plugins:update`, `plugins:uninstall`).
 

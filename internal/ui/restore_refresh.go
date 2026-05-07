@@ -43,7 +43,7 @@ var restoreRefreshStatFn = func(path string) (time.Time, error) {
 
 func (m *Model) startRestoreRefreshIfNeeded() tea.Cmd {
 	current := m.currentLevel()
-	if current == nil || current.ID != "session:restore-from" {
+	if current == nil || current.ID != "resurrect:restore-from" {
 		return nil
 	}
 	dir := strings.TrimSpace(current.Subtitle)
@@ -68,7 +68,7 @@ func (m *Model) stopRestoreRefresh() {
 func (m *Model) shouldRefreshRestoreList() bool {
 	current := m.currentLevel()
 	return current != nil &&
-		current.ID == "session:restore-from" &&
+		current.ID == "resurrect:restore-from" &&
 		m.restoreRefresh != nil &&
 		strings.TrimSpace(m.restoreRefresh.dir) != ""
 }
@@ -96,7 +96,7 @@ func (m *Model) loadRestoreRefreshCmd(dir string, modTime time.Time) tea.Cmd {
 	}
 	loader := current.Node
 	if loader == nil || loader.Loader == nil {
-		if node, ok := m.registry.Find("session:restore-from"); ok {
+		if node, ok := m.registry.Find("resurrect:restore-from"); ok {
 			loader = node
 		}
 	}
@@ -131,7 +131,7 @@ func (m *Model) handleRestoreRefreshLoadedMsg(msg tea.Msg) tea.Cmd {
 	}
 
 	current := m.currentLevel()
-	if current == nil || current.ID != "session:restore-from" {
+	if current == nil || current.ID != "resurrect:restore-from" {
 		m.stopRestoreRefresh()
 		return nil
 	}

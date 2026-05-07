@@ -114,6 +114,7 @@ func RootItems() []Item {
 		{ID: "pane", Label: "pane"},
 		{ID: "window", Label: "window"},
 		{ID: "plugins", Label: "plugins"},
+		{ID: "resurrect", Label: "resurrect"},
 		{ID: "session", Label: "session"},
 	}
 }
@@ -129,6 +130,7 @@ func CategoryLoaders() map[string]Loader {
 		"window":     loadWindowMenu,
 		"session":    loadSessionMenu,
 		"plugins":    loadPluginsMenu,
+		"resurrect":  loadResurrectMenu,
 	}
 }
 
@@ -142,10 +144,11 @@ func ActionHandlers() map[string]Action {
 		"session:detach":           SessionDetachAction,
 		"session:kill":             SessionKillAction,
 		"session:tree":             SessionTreeAction,
-		"session:save":             SessionSaveAction,
-		"session:save-as":          SessionSaveAsAction,
-		"session:restore":          SessionRestoreAction,
-		"session:restore-from":     SessionRestoreFromAction,
+		"resurrect:save":           ResurrectSaveAction,
+		"resurrect:save-as":        ResurrectSaveAsAction,
+		"resurrect:restore":        ResurrectRestoreAction,
+		"resurrect:restore-from":   ResurrectRestoreFromAction,
+		"resurrect:delete-saved":   ResurrectDeleteSavedAction,
 		"window:switch":            WindowSwitchAction,
 		"window:link":              WindowLinkAction,
 		"window:pull-from-session": WindowPullFromSessionAction,
@@ -180,7 +183,8 @@ func ActionLoaders() map[string]Loader {
 		"session:detach":           loadSessionDetachMenu,
 		"session:kill":             loadSessionKillMenu,
 		"session:tree":             loadSessionTreeMenu,
-		"session:restore-from":     loadSessionRestoreFromMenu,
+		"resurrect:restore-from":   loadResurrectRestoreFromMenu,
+		"resurrect:delete-saved":   loadResurrectDeleteSavedMenu,
 		"window:switch":            loadWindowSwitchMenu,
 		"window:link":              loadWindowLinkMenu,
 		"window:pull-from-session": loadWindowPullFromSessionMenu,

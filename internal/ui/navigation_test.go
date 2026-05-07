@@ -198,11 +198,11 @@ func TestRootMenuLeafActionHeaderUsesParentSegment(t *testing.T) {
 	}
 }
 
-func TestRootMenuLeafActionHeaderSessionSave(t *testing.T) {
-	// session:save is also a leaf action — root title should be "session".
-	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "session:save"})
-	if m.rootTitle != "session" {
-		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "session")
+func TestRootMenuLeafActionHeaderResurrectSave(t *testing.T) {
+	// resurrect:save is a leaf action — root title should be "resurrect".
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "resurrect:save"})
+	if m.rootTitle != "resurrect" {
+		t.Fatalf("rootTitle = %q, want %q", m.rootTitle, "resurrect")
 	}
 }
 

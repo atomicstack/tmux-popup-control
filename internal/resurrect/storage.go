@@ -101,6 +101,44 @@ func paneArchivePath(jsonPath string) string {
 	return base + ".panes.tar.gz"
 }
 
+// DeleteSave removes the save file at path along with its companion
+// pane-contents archive (if any). When the deleted file is the current
+// "last" symlink target, the symlink is repointed at the newest
+// remaining save, or removed when none remain. dir may be empty to
+// skip the symlink fix-up (caller already knows there is none).
+func DeleteSave(dir, path string) error {
+	if path == "" {
+		return errors.New("empty save path")
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("removing save %q: %w", path, err)
+	}
+	archive := paneArchivePath(path)
+	if err := os.Remove(archive); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("removing pane archive %q: %w", archive, err)
+	}
+	if dir == "" {
+		return nil
+	}
+	// Detect a now-dangling "last" symlink and either repoint it at the
+	// newest remaining save or drop it entirely.
+	if _, err := LatestSave(dir); err == nil {
+		return nil
+	}
+	link := filepath.Join(dir, "last")
+	entries, lerr := ListSaves(dir)
+	if lerr == nil && len(entries) > 0 {
+		if err := updateLastSymlink(dir, filepath.Base(entries[0].Path)); err != nil {
+			return fmt.Errorf("updating last symlink: %w", err)
+		}
+		return nil
+	}
+	if err := os.Remove(link); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("removing dangling last symlink: %w", err)
+	}
+	return nil
+}
+
 // updateLastSymlink points the "last" symlink in dir at target. The symlink is
 // created atomically via a rename so readers never see a dangling link.
 func updateLastSymlink(dir, target string) error {

@@ -227,7 +227,7 @@ func TestViewHidesPreviewCursorBlockWhenBlinkPhaseIsOff(t *testing.T) {
 
 func TestViewUsesStyledLabelForNormalMenuItems(t *testing.T) {
 	m := NewModel(ModelConfig{})
-	lvl := newLevel("session:restore-from", "restore-from", []menu.Item{
+	lvl := newLevel("resurrect:restore-from", "restore-from", []menu.Item{
 		{ID: "plain", Label: "plain-label", StyledLabel: "\x1b[38;5;33mstyled-label\x1b[39m"},
 	}, nil)
 	m.stack = []*level{lvl}
@@ -290,7 +290,7 @@ func TestBuildMultiSelectLineUsesOptionsStruct(t *testing.T) {
 
 func TestViewDoesNotEllipsizeStyledLabelThatFitsVisibly(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 10, Height: 6})
-	lvl := newLevel("session:restore-from", "restore-from", []menu.Item{
+	lvl := newLevel("resurrect:restore-from", "restore-from", []menu.Item{
 		{ID: "short", Label: "short", StyledLabel: "\x1b[38;5;33mshort\x1b[39m"},
 	}, nil)
 	m.stack = []*level{lvl}

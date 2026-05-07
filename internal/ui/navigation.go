@@ -27,7 +27,7 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	if current.ID == "pane:swap-target" {
 		m.pendingPaneSwap = nil
 	}
-	if current.ID == "session:restore-from" {
+	if current.ID == "resurrect:restore-from" {
 		m.stopRestoreRefresh()
 	}
 
@@ -516,7 +516,7 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	m.errMsg = ""
 	node, _ := m.registry.Find(update.id)
 	level := newLevel(update.id, update.title, update.items, node)
-	if update.id == "session:restore-from" {
+	if update.id == "resurrect:restore-from" {
 		level.Subtitle = restoreRefreshDir(m.socketPath)
 	}
 	if update.id == "session:tree" {
@@ -536,7 +536,7 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	m.syncViewport(level)
 	m.stack = append(m.stack, level)
 	cmd := m.ensurePreviewForLevel(level)
-	if update.id == "session:restore-from" {
+	if update.id == "resurrect:restore-from" {
 		cmd = tea.Batch(cmd, m.startRestoreRefreshIfNeeded())
 	}
 	if len(level.Items) == 0 {
@@ -648,7 +648,7 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	title := headerSegmentCleaner.Replace(node.ID)
 	title = strings.TrimSpace(title)
 	root := newLevel(node.ID, title, items, node)
-	if node.ID == "session:restore-from" {
+	if node.ID == "resurrect:restore-from" {
 		root.Subtitle = restoreRefreshDir(m.socketPath)
 	}
 	if node.ID == "session:tree" {

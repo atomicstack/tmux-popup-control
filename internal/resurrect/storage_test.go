@@ -1,6 +1,7 @@
 package resurrect
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -171,6 +172,81 @@ func TestLatestSave(t *testing.T) {
 	}
 	if got != target {
 		t.Errorf("got %q, want %q", got, target)
+	}
+}
+
+// TestDeleteSaveRemovesFileAndArchive verifies DeleteSave removes both
+// the JSON save file and its companion pane-contents archive.
+func TestDeleteSaveRemovesFileAndArchive(t *testing.T) {
+	dir := t.TempDir()
+	sf := &SaveFile{Version: currentVersion, Timestamp: time.Now(), Name: "snap"}
+	path := filepath.Join(dir, "snap.json")
+	if err := WriteSaveFile(path, sf); err != nil {
+		t.Fatalf("WriteSaveFile: %v", err)
+	}
+	archive := paneArchivePath(path)
+	if err := os.WriteFile(archive, []byte("dummy"), 0o644); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+
+	if err := DeleteSave(dir, path); err != nil {
+		t.Fatalf("DeleteSave: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("expected save file removed, got err=%v", err)
+	}
+	if _, err := os.Stat(archive); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("expected archive removed, got err=%v", err)
+	}
+}
+
+// TestDeleteSaveRepointsLastSymlink verifies that deleting the save the
+// "last" symlink points at causes the symlink to be repointed at the
+// next-newest remaining save.
+func TestDeleteSaveRepointsLastSymlink(t *testing.T) {
+	dir := t.TempDir()
+
+	older := filepath.Join(dir, "older.json")
+	newer := filepath.Join(dir, "newer.json")
+	if err := WriteSaveFile(older, &SaveFile{Version: currentVersion, Timestamp: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), Name: "older"}); err != nil {
+		t.Fatalf("write older: %v", err)
+	}
+	if err := WriteSaveFile(newer, &SaveFile{Version: currentVersion, Timestamp: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC), Name: "newer"}); err != nil {
+		t.Fatalf("write newer: %v", err)
+	}
+	if err := updateLastSymlink(dir, "newer.json"); err != nil {
+		t.Fatalf("updateLastSymlink: %v", err)
+	}
+
+	if err := DeleteSave(dir, newer); err != nil {
+		t.Fatalf("DeleteSave: %v", err)
+	}
+	got, err := LatestSave(dir)
+	if err != nil {
+		t.Fatalf("LatestSave after delete: %v", err)
+	}
+	if got != older {
+		t.Errorf("expected last symlink to repoint at %q, got %q", older, got)
+	}
+}
+
+// TestDeleteSaveRemovesDanglingSymlink verifies the symlink is removed
+// (not left dangling) when deleting the only remaining save.
+func TestDeleteSaveRemovesDanglingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "only.json")
+	if err := WriteSaveFile(path, &SaveFile{Version: currentVersion, Timestamp: time.Now(), Name: "only"}); err != nil {
+		t.Fatalf("WriteSaveFile: %v", err)
+	}
+	if err := updateLastSymlink(dir, "only.json"); err != nil {
+		t.Fatalf("updateLastSymlink: %v", err)
+	}
+
+	if err := DeleteSave(dir, path); err != nil {
+		t.Fatalf("DeleteSave: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "last")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("expected last symlink removed, got err=%v", err)
 	}
 }
 

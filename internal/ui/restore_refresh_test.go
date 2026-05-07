@@ -25,10 +25,10 @@ func TestHandleCategoryLoadedMsgStartsRestoreRefresh(t *testing.T) {
 
 	m := NewModel(ModelConfig{Width: 80, Height: 24})
 	m.loading = true
-	m.pendingID = "session:restore-from"
+	m.pendingID = "resurrect:restore-from"
 
 	cmd := m.handleCategoryLoadedMsg(categoryLoadedMsg{
-		id:    "session:restore-from",
+		id:    "resurrect:restore-from",
 		title: "restore-from",
 		items: []menu.Item{
 			{Label: "name  type", Header: true},
@@ -69,7 +69,7 @@ func TestHandleRestoreRefreshTickMsgSkipsReloadWhenModTimeUnchanged(t *testing.T
 	defer func() { restoreRefreshScheduleFn = restoreSchedule }()
 
 	m := NewModel(ModelConfig{Width: 80, Height: 24})
-	lvl := newLevel("session:restore-from", "restore-from", []menu.Item{
+	lvl := newLevel("resurrect:restore-from", "restore-from", []menu.Item{
 		{Label: "name  type", Header: true},
 		{ID: "keep", Label: "keep"},
 	}, nil)
@@ -116,7 +116,7 @@ func TestHandleRestoreRefreshTickMsgLoadsWhenModTimeChanges(t *testing.T) {
 	defer func() { restoreRefreshScheduleFn = restoreSchedule }()
 
 	m := NewModel(ModelConfig{Width: 80, Height: 24})
-	lvl := newLevel("session:restore-from", "restore-from", nil, nil)
+	lvl := newLevel("resurrect:restore-from", "restore-from", nil, nil)
 	m.stack = []*level{lvl}
 	m.restoreRefresh = &restoreRefreshState{dir: dir, lastModTime: oldTime}
 
@@ -143,7 +143,7 @@ func TestHandleRestoreRefreshTickMsgLoadsWhenModTimeChanges(t *testing.T) {
 
 func TestHandleRestoreRefreshLoadedMsgPreservesFilterAndCursor(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 24})
-	lvl := newLevel("session:restore-from", "restore-from", []menu.Item{
+	lvl := newLevel("resurrect:restore-from", "restore-from", []menu.Item{
 		{Label: "name  type", Header: true},
 		{ID: "alpha", Label: "keep alpha"},
 		{ID: "beta", Label: "keep beta"},
