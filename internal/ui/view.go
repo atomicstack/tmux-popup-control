@@ -1014,6 +1014,9 @@ func (m *Model) maxVisibleItems() int {
 	if header := m.menuHeader(); header != "" {
 		used++
 	}
+	if current := m.currentLevel(); current != nil && current.Subtitle != "" {
+		used++
+	}
 	if info := m.currentInfo(); info != "" {
 		used += 2
 	}

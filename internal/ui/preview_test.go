@@ -559,6 +559,31 @@ func TestMaxVisibleItemsAccountsForPreview(t *testing.T) {
 	}
 }
 
+// TestMaxVisibleItemsAccountsForSubtitle verifies that a level's
+// Subtitle row (e.g. the save-dir path on resurrect:restore-from) is
+// subtracted from the visible-items budget. Without this the cursor
+// can move past the last visible row at small popup heights — the
+// renderer truncates the items list to maxVisibleItems but the chrome
+// (header + subtitle + bottom bar) consumes one more row than the
+// budget reserved.
+func TestMaxVisibleItemsAccountsForSubtitle(t *testing.T) {
+	m := NewModel(ModelConfig{Height: 14, NoPreview: true})
+	lvl := newLevel("resurrect:restore-from", "restore-from", []menu.Item{
+		{Label: "header", Header: true},
+		{ID: "a", Label: "a"},
+		{ID: "b", Label: "b"},
+	}, nil)
+	m.stack = []*level{lvl}
+
+	withoutSubtitle := m.maxVisibleItems()
+	lvl.Subtitle = "/tmp/saves"
+	withSubtitle := m.maxVisibleItems()
+
+	if withSubtitle != withoutSubtitle-1 {
+		t.Fatalf("expected subtitle to consume exactly one row of the visible-items budget; without=%d with=%d", withoutSubtitle, withSubtitle)
+	}
+}
+
 // TestMaxVisibleItemsRespectsNoPreview verifies that with noPreview=true the
 // function does not reserve rows for a preview, since viewVertical will not
 // render one. Without this guarantee the tree level shrinks to a tiny
