@@ -1,7 +1,7 @@
 # tmux-popup-control
 
-Current version: **v0.9.0** — see the [release
-notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.9.0)
+Current version: **v0.11.0** — see the [release
+notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.11.0)
 for the latest changes.
 
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
@@ -17,13 +17,8 @@ control-mode connection via
 ## Features
 
 ### Session management
-- **Save** sessions — auto-timestamped or named snapshots of all sessions,
-  windows, panes, layouts, and optionally pane contents; supports interval-based
-  autosaves with bounded retention
-- **Restore** sessions — from the most recent save or a picked snapshot,
-  with progress UI; merges windows into existing sessions idempotently, and
-  distinguishes manual vs autosaved snapshots in the picker
-- **Switch** between sessions with live pane-capture preview
+- **Switch** between sessions with live pane-capture preview, with the
+  session tree initially focused on the currently-attached entry
 - **New** session creation via inline form
 - **Rename** sessions via inline form
 - **Kill** sessions
@@ -32,6 +27,18 @@ control-mode connection via
   multi-word fuzzy filtering across the tree, and per-node live previews;
   marks the currently-attached window with a `(current)` suffix and
   singularises the pane count for single-pane windows
+
+### Resurrect (save / restore)
+- **Save** sessions — auto-timestamped or named snapshots of all sessions,
+  windows, panes, layouts, and optionally pane contents; supports
+  interval-based autosaves with bounded retention
+- **Save as…** — inline form to name a snapshot
+- **Restore** sessions — from the most recent save, with progress UI;
+  merges windows into existing sessions idempotently
+- **Restore from…** — pick any snapshot from the picker, with manual vs
+  autosaved snapshots colour-coded; restore timestamps include seconds
+- **Delete saved** snapshots — multi-select picker for pruning unwanted
+  snapshots
 
 ### Window management
 - **Switch** windows with live pane-capture preview
@@ -65,6 +72,7 @@ control-mode connection via
   startup and opens a deferred popup for any that need installing
 
 ### Other menus
+- **Customize-mode** — opens tmux's built-in `customize-mode` directly
 - **Keybinding** browser — lists all tmux key bindings, filterable
 - **Command** browser — lists all tmux commands, filterable, with contextual
   argument completion for flags, flag values, and positional parameters;
@@ -73,7 +81,10 @@ control-mode connection via
   option names, hook names, and enumerated option values via a built-in
   catalog covering every documented option, hook, and value with
   descriptions (`set-option`, `set-window-option`, `set-hook`,
-  `show-options`, etc.)
+  `show-options`, etc.); option and hook names, completion candidates,
+  and contextual help text are scope-coloured (server / session / window /
+  pane / user), colour values render inline rather than as swatch blocks,
+  and a live user-option loader exposes user-defined `@…` options
 
 ### UI
 - Fuzzy-search filtering on every menu level
@@ -137,6 +148,7 @@ make release VERSION=0.7.0 # release a specific version tag
 | `--height` | `TMUX_POPUP_CONTROL_HEIGHT` | | viewport height in rows (0 = terminal height) |
 | `--footer` | `TMUX_POPUP_CONTROL_FOOTER` | `@tmux-popup-control-footer` | show keybinding hint row |
 | `--verbose` | `TMUX_POPUP_CONTROL_VERBOSE` | | print success messages for actions |
+| `--no-preview` | `TMUX_POPUP_CONTROL_NO_PREVIEW` | | disable the side-by-side preview panel |
 | `--log-file` | `TMUX_POPUP_CONTROL_LOG_FILE` | | log file path |
 | `--trace` | `TMUX_POPUP_CONTROL_TRACE` | | enable verbose JSON trace logging |
 | `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |
@@ -173,6 +185,8 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 | `TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE` | `@tmux-popup-control-key-pane-capture` | `H` | capture pane to file |
 | `TMUX_POPUP_CONTROL_KEY_RESURRECT_SAVE` | `@tmux-popup-control-key-resurrect-save` | `C-s` | save sessions (legacy `key-session-save` honoured as fallback) |
 | `TMUX_POPUP_CONTROL_KEY_RESURRECT_RESTORE_FROM` | `@tmux-popup-control-key-resurrect-restore-from` | `C-r` | restore sessions from a snapshot (legacy `key-session-restore-from` honoured as fallback) |
+| `TMUX_POPUP_CONTROL_KEY_SESSION_RENAME` | `@tmux-popup-control-key-session-rename` | `$` | rename the current session via inline form |
+| `TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME` | `@tmux-popup-control-key-window-rename` | `,` | rename the current window via inline form |
 
 ### CLI subcommands
 
