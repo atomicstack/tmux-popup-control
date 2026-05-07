@@ -142,6 +142,10 @@ type Model struct {
 	initCmd            tea.Cmd
 	deferredAction     *menu.Node
 	deferredRename     *menu.Node
+
+	confirmState              *deleteConfirmState
+	pendingDeleteFilter       string
+	pendingDeleteFilterCursor int
 }
 
 // ModelConfig holds parameters for NewModel.
@@ -334,6 +338,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeFor[menu.SaveAsPrompt]():          m.handleSaveAsPromptMsg,
 		reflect.TypeFor[menu.PaneCapturePrompt]():     m.handlePaneCapturePromptMsg,
 		reflect.TypeFor[menu.PaneCapturePreviewMsg](): m.handlePaneCapturePreviewMsg,
+		reflect.TypeFor[deleteSavedReloadedMsg]():     m.handleDeleteSavedReloadedMsg,
 	}
 }
 

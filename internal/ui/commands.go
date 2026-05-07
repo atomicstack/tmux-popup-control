@@ -26,6 +26,9 @@ func (m *Model) handleActionResultMsg(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if m.pendingID == deleteSavedLevelID {
+		return m.handleDeleteSavedActionResult(result)
+	}
 	title := m.pendingLabel
 	m.loading = false
 	m.pendingID = ""

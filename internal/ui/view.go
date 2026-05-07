@@ -1190,6 +1190,9 @@ func attachFormCursor(v *tea.View, c *tea.Cursor, inputRow int) {
 // any non-nil current level — including empty-filter, since the user can
 // type). Cases with a nil level leave v.Cursor untouched.
 func (m *Model) attachFilterCursor(v *tea.View, promptRow int) {
+	if m.confirmState != nil {
+		return
+	}
 	current := m.currentLevel()
 	col, ok := promptCursorColumn(current)
 	if !ok {

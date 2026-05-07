@@ -107,6 +107,10 @@ func (m *Model) handleEnterKey() tea.Cmd {
 		}
 		return nil
 	}
+	if current.ID == deleteSavedLevelID {
+		m.startDeleteConfirm(item)
+		return nil
+	}
 	beforeCursor := current.FilterCursorPos()
 	current.SetFilter("", 0)
 	m.kickPreviewBlinkOnFilterChange(current, beforeCursor)
@@ -327,6 +331,9 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	}
 	if m.mode != ModeMenu {
 		return nil
+	}
+	if m.confirmState != nil {
+		return m.handleDeleteConfirmKey(keyMsg)
 	}
 	if m.completionVisible() {
 		switch keyMsg.String() {
