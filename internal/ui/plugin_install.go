@@ -528,26 +528,6 @@ func pluginUninstallPromptRendered(s *pluginInstallState) string {
 	return renderYNPrompt(pluginUninstallPromptText(s))
 }
 
-// renderYNPrompt paints a prompt that ends in "[y/n]" — surrounding text
-// in yellow, the y in green, the n in red. Returns the input unchanged
-// (rendered yellow only) when the marker isn't found, or "" when input
-// is "".
-func renderYNPrompt(text string) string {
-	if text == "" {
-		return ""
-	}
-	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	green := lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true)
-	red := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	const ynMarker = "[y/n]"
-	idx := strings.LastIndex(text, ynMarker)
-	if idx < 0 {
-		return yellow.Render(text)
-	}
-	prefix := text[:idx]
-	return yellow.Render(prefix+"[") + green.Render("y") + yellow.Render("/") + red.Render("n") + yellow.Render("]")
-}
-
 func (m *Model) pluginInstallBodyLines(s *pluginInstallState, bodyRows int) []styledLine {
 	if s.finished {
 		return pluginInstallFinishedBodyLines(s, bodyRows, m.width)

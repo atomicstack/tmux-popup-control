@@ -163,8 +163,15 @@ func TestConfirmPromptIncludesSaveName(t *testing.T) {
 	if !strings.Contains(prompt, "delete save") {
 		t.Fatalf("expected prompt to start with 'delete save', got %q", prompt)
 	}
-	if !strings.Contains(prompt, "(y/N)") {
-		t.Fatalf("expected prompt to include (y/N) hint, got %q", prompt)
+	// Routed through the shared renderYNPrompt — body text inside the
+	// "[y/n]" marker is split into separate ANSI runs (yellow [, green y,
+	// yellow /, red n, yellow ]). Assert on the rendered components rather
+	// than the literal marker.
+	if !strings.Contains(prompt, "y") || !strings.Contains(prompt, "n") {
+		t.Fatalf("expected prompt to contain y/n choice, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "\x1b[") {
+		t.Fatalf("expected prompt to contain ANSI styling, got %q", prompt)
 	}
 }
 

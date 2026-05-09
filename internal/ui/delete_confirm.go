@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/ui/command"
@@ -113,26 +112,15 @@ func (m *Model) handleDeleteConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 // renderDeleteConfirmPrompt builds the styled y/n prompt that replaces the
-// filter input while a delete confirmation is in flight.
+// filter input while a delete confirmation is in flight. Uses the shared
+// renderYNPrompt helper so the colour scheme matches every other y/n prompt
+// in the UI.
 func (m *Model) renderDeleteConfirmPrompt() string {
 	if m.confirmState == nil {
 		return ""
 	}
 	name := deleteSaveDisplayName(m.confirmState.item)
-	body := fmt.Sprintf("delete save '%s'?", name)
-	hint := " (y/N)"
-
-	bodyStyle := styles.Warning
-	if bodyStyle == nil {
-		fallback := lipgloss.NewStyle().Bold(true)
-		bodyStyle = &fallback
-	}
-	hintStyle := styles.FilterPlaceholder
-	if hintStyle == nil {
-		fallback := lipgloss.NewStyle().Faint(true)
-		hintStyle = &fallback
-	}
-	return bodyStyle.Render(body) + hintStyle.Render(hint)
+	return renderYNPrompt(fmt.Sprintf("delete save '%s'? %s", name, YNPromptMarker))
 }
 
 // handleDeleteSavedActionResult finishes the post-confirm flow: surface a
