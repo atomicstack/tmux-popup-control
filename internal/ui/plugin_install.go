@@ -509,13 +509,13 @@ func pluginUninstallPromptText(s *pluginInstallState) string {
 		dir := strings.TrimSuffix(pluginInstallDisplayPath(e.plugin.Dir), "/")
 		switch {
 		case e.plugin.Name != "" && dir != "":
-			return fmt.Sprintf("remove %s (%s)? [y/n]", e.plugin.Name, dir)
+			return fmt.Sprintf("remove %s (%s)? %s", e.plugin.Name, dir, YNPromptMarker)
 		case e.plugin.Name != "":
-			return fmt.Sprintf("remove %s? [y/n]", e.plugin.Name)
+			return fmt.Sprintf("remove %s? %s", e.plugin.Name, YNPromptMarker)
 		case dir != "":
-			return fmt.Sprintf("remove %s? [y/n]", dir)
+			return fmt.Sprintf("remove %s? %s", dir, YNPromptMarker)
 		default:
-			return "remove? [y/n]"
+			return "remove? " + YNPromptMarker
 		}
 	}
 	return ""
@@ -540,7 +540,7 @@ func pluginInstallCompletionLines(s *pluginInstallState) []styledLine {
 		return []styledLine{
 			{},
 			{text: s.summary, style: styles.Info},
-			{text: renderYNPrompt("Reload plugins? [y/n]"), raw: true},
+			{text: renderYNPrompt("Reload plugins? " + YNPromptMarker), raw: true},
 		}
 	}
 	return []styledLine{
