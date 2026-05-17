@@ -173,8 +173,11 @@ func PaneJoinAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(ctx.CurrentPaneID)
 	return func() tea.Msg {
 		events.Pane.Join(sorted, target)
+		if target == "" {
+			return ActionResult{Err: fmt.Errorf("no current pane to join into")}
+		}
 		for _, id := range sorted {
-			if err := movePaneFn(ctx.SocketPath, id, ""); err != nil {
+			if err := movePaneFn(ctx.SocketPath, id, target); err != nil {
 				return ActionResult{Err: err}
 			}
 		}

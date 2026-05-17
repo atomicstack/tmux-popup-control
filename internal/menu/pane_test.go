@@ -85,12 +85,10 @@ func TestPaneResizeLeftAction(t *testing.T) {
 }
 
 func TestPaneJoinActionUsesMovePane(t *testing.T) {
-	var calls []string
+	type call struct{ source, target string }
+	var calls []call
 	restore := withPaneStub(&movePaneFn, func(_ string, source, target string) error {
-		calls = append(calls, source)
-		if target != "" {
-			t.Fatalf("expected empty target, got %s", target)
-		}
+		calls = append(calls, call{source: source, target: target})
 		return nil
 	})
 	defer restore()
@@ -99,8 +97,31 @@ func TestPaneJoinActionUsesMovePane(t *testing.T) {
 	if res.(ActionResult).Err != nil {
 		t.Fatalf("unexpected error: %v", res.(ActionResult).Err)
 	}
-	if len(calls) != 2 || calls[0] != "s:1.2" || calls[1] != "s:1.1" {
-		t.Fatalf("unexpected move sequence %v", calls)
+	want := []call{{source: "s:1.2", target: "s:1.0"}, {source: "s:1.1", target: "s:1.0"}}
+	if len(calls) != len(want) {
+		t.Fatalf("unexpected move sequence %v, want %v", calls, want)
+	}
+	for i, c := range calls {
+		if c != want[i] {
+			t.Fatalf("call %d = %+v, want %+v", i, c, want[i])
+		}
+	}
+}
+
+func TestPaneJoinActionRefusesEmptyTarget(t *testing.T) {
+	var calls int
+	restore := withPaneStub(&movePaneFn, func(_, _, _ string) error {
+		calls++
+		return nil
+	})
+	defer restore()
+	ctx := Context{SocketPath: "sock", CurrentPaneID: ""}
+	res := PaneJoinAction(ctx, Item{ID: "s:1.2", Label: ""})()
+	if res.(ActionResult).Err == nil {
+		t.Fatal("expected error when CurrentPaneID is empty")
+	}
+	if calls != 0 {
+		t.Fatalf("expected MovePane to not be called when target unknown, got %d calls", calls)
 	}
 }
 
