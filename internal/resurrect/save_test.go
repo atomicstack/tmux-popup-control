@@ -241,6 +241,54 @@ func TestSaveNoSessions(t *testing.T) {
 	}
 }
 
+func TestSaveNormalizesWindowLayoutWithVisibleSuffix(t *testing.T) {
+	dir := t.TempDir()
+	rawLayout := "0ad5,179x58,0,0{89x58,0,0,37,89x58,90,0,39}<89x58,0,0,37,89x58,90,0,39>"
+
+	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) {
+		return makeSessions("pi"), nil
+	})
+	defer restoreFetchSessions()
+	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) {
+		windows := makeWindows("pi", 0)
+		windows.Windows[0].Layout = rawLayout
+		return windows, nil
+	})
+	defer restoreFetchWindows()
+	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) {
+		return makePanes("pi", 0), nil
+	})
+	defer restoreFetchPanes()
+	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) {
+		return map[string]bool{}, nil
+	})
+	defer restoreWindowOpts()
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
+		return "pi", ""
+	})
+	defer restoreClientInfo()
+
+	events := collectEvents(Save(Config{SaveDir: dir, Name: "layout"}))
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("save failed: done=%v err=%v", last.Done, last.Err)
+	}
+
+	entries, err := ListSaves(dir)
+	if err != nil {
+		t.Fatalf("ListSaves: %v", err)
+	}
+	sf, err := ReadSaveFile(entries[0].Path)
+	if err != nil {
+		t.Fatalf("ReadSaveFile: %v", err)
+	}
+	got := sf.Sessions[0].Windows[0].Layout
+	want := "5dcb,179x58,0,0{89x58,0,0,89x58,90,0}"
+	if got != want {
+		t.Fatalf("saved layout = %q, want %q", got, want)
+	}
+}
+
 // TestSaveNoPaneContents: pane contents disabled → no archive, fewer events.
 func TestSaveNoPaneContents(t *testing.T) {
 	dir := t.TempDir()

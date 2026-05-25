@@ -89,6 +89,16 @@ func FindTerminalClient(socketPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if preferred := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_CLIENT")); isValidClientName(preferred) {
+		for _, c := range clients {
+			if c == nil || c.ControlMode {
+				continue
+			}
+			if strings.TrimSpace(c.Name) == preferred {
+				return preferred, nil
+			}
+		}
+	}
 	for _, c := range clients {
 		if c == nil || c.ControlMode {
 			continue

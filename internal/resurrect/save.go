@@ -212,7 +212,7 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 				sess.Windows = append(sess.Windows, Window{
 					Index:           w.Index,
 					Name:            w.Name,
-					Layout:          w.Layout,
+					Layout:          selectableLayout(w.Layout),
 					Active:          w.Active,
 					AutomaticRename: autoRename,
 					Panes:           savedPanes,

@@ -648,6 +648,73 @@ func TestRestoreWaitsForPaneReplayBeforeSelectingAndSwitching(t *testing.T) {
 	}
 }
 
+func TestRestoreNormalizesSavedLayoutWithVisibleSuffix(t *testing.T) {
+	dir := t.TempDir()
+
+	var appliedLayout string
+
+	r1 := withCreateSessionFn(noopSession)
+	defer r1()
+	r2 := withCreateWindowFn(noopWindow)
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(func(_, _, layout string) error {
+		appliedLayout = layout
+		return nil
+	})
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(noopSwitch)
+	defer r8()
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{}, nil
+	})
+	defer r9()
+	r10 := withDefaultCommandFn(noopDefaultCommand)
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{}, nil
+	})
+	defer r11()
+	r12, r13 := withStatefulSessionOptionFns(nil)
+	defer r12()
+	defer r13()
+	r14 := withRespawnPaneFn(noopRespawn)
+	defer r14()
+	r15 := withWaitForFn(noopWait)
+	defer r15()
+
+	rawLayout := "0ad5,179x58,0,0{89x58,0,0,37,89x58,90,0,39}<89x58,0,0,37,89x58,90,0,39>"
+	sf := buildSaveFile(Session{
+		Name: "pi",
+		Windows: []Window{
+			{Index: 0, Name: "all", Layout: rawLayout, Active: true,
+				Panes: []Pane{
+					{Index: 0, WorkingDir: "/home", Active: true},
+					{Index: 1, WorkingDir: "/tmp"},
+				}},
+		},
+	})
+	path := writeSaveFile(t, dir, "layout-visible-suffix", sf)
+
+	events := collectRestoreEvents(Restore(Config{SaveDir: dir}, path))
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
+	}
+
+	want := "5dcb,179x58,0,0{89x58,0,0,89x58,90,0}"
+	if appliedLayout != want {
+		t.Fatalf("applied layout = %q, want %q", appliedLayout, want)
+	}
+}
+
 // ── TestRestoreStepCountMatchesTotal ─────────────────────────────────────────
 
 // TestRestoreStepCountMatchesTotal checks that the step counter exactly
@@ -1271,16 +1338,24 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 // ── TestPaneStartupCommand ───────────────────────────────────────────────────
 
 func TestPaneStartupCommand(t *testing.T) {
-	got := paneStartupCommand("/tmp/restore-123/dev:0.0", "ready:dev:0.0", "/bin/bash")
-	want := `cat '/tmp/restore-123/dev:0.0'; tmux wait-for -S 'ready:dev:0.0'; exec '/bin/bash'`
+	got := paneStartupCommand("/tmp/restore-123/dev:0.0", "ready:dev:0.0", "/bin/bash", "/opt/homebrew/bin/tmux", "/tmp/tmux.sock")
+	want := `'cat' '/tmp/restore-123/dev:0.0'; '/opt/homebrew/bin/tmux' '-S' '/tmp/tmux.sock' 'wait-for' '-S' 'ready:dev:0.0'; exec '/bin/bash'`
 	if got != want {
 		t.Errorf("expected %q, got %q", want, got)
 	}
 }
 
 func TestPaneStartupCommandEscapesSingleQuotes(t *testing.T) {
-	got := paneStartupCommand("/tmp/restore/it's:0.0", "ready:it's:0.0", "bash -c 'echo hi'")
-	want := `cat '/tmp/restore/it'\''s:0.0'; tmux wait-for -S 'ready:it'\''s:0.0'; exec 'bash -c '\''echo hi'\'''`
+	got := paneStartupCommand("/tmp/restore/it's:0.0", "ready:it's:0.0", "bash -c 'echo hi'", "/tmp/my tmux", "/tmp/tmux'sock")
+	want := `'cat' '/tmp/restore/it'\''s:0.0'; '/tmp/my tmux' '-S' '/tmp/tmux'\''sock' 'wait-for' '-S' 'ready:it'\''s:0.0'; exec 'bash -c '\''echo hi'\'''`
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestPaneStartupCommandOmitsSocketWhenUnknown(t *testing.T) {
+	got := paneStartupCommand("/tmp/restore/dev:0.0", "ready:dev:0.0", "/bin/bash", "tmux", "")
+	want := `'cat' '/tmp/restore/dev:0.0'; 'tmux' 'wait-for' '-S' 'ready:dev:0.0'; exec '/bin/bash'`
 	if got != want {
 		t.Errorf("expected %q, got %q", want, got)
 	}

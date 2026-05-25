@@ -131,6 +131,9 @@ func ResolveSocketPath(flagValue string) (string, error) {
 	if flagValue != "" {
 		return flagValue, nil
 	}
+	if envSocket := os.Getenv("TMUX_POPUP_CONTROL_SOCKET"); envSocket != "" {
+		return envSocket, nil
+	}
 	if envSocket := os.Getenv("TMUX_POPUP_SOCKET"); envSocket != "" {
 		return envSocket, nil
 	}

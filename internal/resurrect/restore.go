@@ -3,6 +3,7 @@ package resurrect
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -165,12 +166,25 @@ var greenCheck = lipgloss.NewStyle().Foreground(lipgloss.Color("#00c853")).Rende
 // content. The command prints the saved scrollback then execs into the shell.
 // Both contentPath and defaultCmd are shell-quoted to prevent injection when
 // tmux passes the string to /bin/sh -c.
-func paneStartupCommand(contentPath, readyChannel, defaultCmd string) string {
-	cmd := fmt.Sprintf("cat %s", shquote.Quote(contentPath))
+func paneStartupCommand(contentPath, readyChannel, defaultCmd, tmuxCommand, socketPath string) string {
+	cmd := shquote.JoinCommand("cat", contentPath)
 	if strings.TrimSpace(readyChannel) != "" {
-		cmd += fmt.Sprintf("; tmux wait-for -S %s", shquote.Quote(readyChannel))
+		args := []string{tmuxCommand}
+		if strings.TrimSpace(socketPath) != "" {
+			args = append(args, "-S", socketPath)
+		}
+		args = append(args, "wait-for", "-S", readyChannel)
+		cmd += "; " + shquote.JoinCommand(args...)
 	}
 	return cmd + fmt.Sprintf("; exec %s", shquote.Quote(defaultCmd))
+}
+
+func tmuxCommandPath() string {
+	path, err := exec.LookPath("tmux")
+	if err != nil {
+		return "tmux"
+	}
+	return path
 }
 
 func paneReplayWaitChannel(sessName string, winIdx, paneIdx int) string {
@@ -220,6 +234,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 	if hasPaneArchive {
 		defaultCmd = restoreDeps.DefaultCommand(cfg.SocketPath)
 	}
+	tmuxCmd := tmuxCommandPath()
 
 	// lookupPaneCmd returns the startup command for a pane if it has saved
 	// content, or empty string otherwise.
@@ -230,7 +245,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		paneKey := fmt.Sprintf("%s:%d.%d", sessName, winIdx, paneIdx)
 		path := filepath.Join(contentDir, paneKey)
 		if _, statErr := os.Stat(path); statErr == nil {
-			return paneStartupCommand(path, paneReplayWaitChannel(sessName, winIdx, paneIdx), defaultCmd)
+			return paneStartupCommand(path, paneReplayWaitChannel(sessName, winIdx, paneIdx), defaultCmd, tmuxCmd, cfg.SocketPath)
 		}
 		return ""
 	}
@@ -443,7 +458,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 			targetIdx := indexMap[win.Index]
 			winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
 			step++
-			if err := restoreDeps.SelectLayoutTarget(cfg.SocketPath, winTarget, win.Layout); err != nil {
+			if err := restoreDeps.SelectLayoutTarget(cfg.SocketPath, winTarget, selectableLayout(win.Layout)); err != nil {
 				return sendError(ch, "applying layout for %s: %w", winTarget, err)
 			}
 		}

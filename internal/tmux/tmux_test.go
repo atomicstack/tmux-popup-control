@@ -444,7 +444,19 @@ func TestResolveSocketPath(t *testing.T) {
 			t.Fatalf("expected /tmp/env, got %q", got)
 		}
 	})
+	t.Run("control env overrides legacy env", func(t *testing.T) {
+		t.Setenv("TMUX_POPUP_CONTROL_SOCKET", "/tmp/control-env")
+		t.Setenv("TMUX_POPUP_SOCKET", "/tmp/legacy-env")
+		got, err := ResolveSocketPath("")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "/tmp/control-env" {
+			t.Fatalf("expected /tmp/control-env, got %q", got)
+		}
+	})
 	t.Run("tmux env fallback", func(t *testing.T) {
+		t.Setenv("TMUX_POPUP_CONTROL_SOCKET", "")
 		t.Setenv("TMUX_POPUP_SOCKET", "")
 		t.Setenv("TMUX", "/tmp/socket,123,0")
 		got, err := ResolveSocketPath("")
@@ -1278,6 +1290,25 @@ func TestCurrentClientIDMatchesSessionOnly(t *testing.T) {
 	got := CurrentClientID("/tmp/test.sock")
 	if got != "/dev/ttys002" {
 		t.Fatalf("expected /dev/ttys002 (matching session), got %q", got)
+	}
+}
+
+func TestFindTerminalClientPrefersPopupControlClientEnv(t *testing.T) {
+	fake := &fakeClient{
+		clients: []*gotmux.Client{
+			{Name: "/dev/ttys001", ControlMode: false, Session: "other"},
+			{Name: "/dev/ttys002", ControlMode: false, Session: "target"},
+		},
+	}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_POPUP_CONTROL_CLIENT", "/dev/ttys002")
+
+	got, err := FindTerminalClient("/tmp/test.sock")
+	if err != nil {
+		t.Fatalf("FindTerminalClient: %v", err)
+	}
+	if got != "/dev/ttys002" {
+		t.Fatalf("expected /dev/ttys002 from env, got %q", got)
 	}
 }
 
