@@ -1,7 +1,7 @@
 # tmux-popup-control
 
-Current version: **v0.11.0** — see the [release
-notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.11.0)
+Current version: **v0.12.0** — see the [release
+notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.12.0)
 for the latest changes.
 
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
@@ -38,7 +38,7 @@ control-mode connection via
 - **Restore from…** — pick any snapshot from the picker, with manual vs
   autosaved snapshots colour-coded; restore timestamps include seconds
 - **Delete saved** snapshots — multi-select picker for pruning unwanted
-  snapshots
+  snapshots, gated behind a y/n confirmation before anything is removed
 
 ### Window management
 - **Switch** windows with live pane-capture preview
