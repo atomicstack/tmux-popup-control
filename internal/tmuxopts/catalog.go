@@ -85,8 +85,8 @@ const (
 
 // ScopeInfo carries scope details for an option.
 type ScopeInfo struct {
-	Scopes         []Scope `json:"scopes"`
-	DefaultInferred Scope  `json:"default_inferred_scope"`
+	Scopes          []Scope `json:"scopes"`
+	DefaultInferred Scope   `json:"default_inferred_scope"`
 }
 
 // ValueMenu describes how a UI should complete a value for this option.
@@ -163,10 +163,37 @@ type SharedDomains struct {
 	Flag                         *FlagDomain             `json:"flag,omitempty"`
 	Key                          *KeyDomain              `json:"key,omitempty"`
 	Style                        *StyleDomain            `json:"style,omitempty"`
-	TmuxCommand                  map[string]any          `json:"tmux_command,omitempty"`
-	FormatString                 map[string]any          `json:"format_string,omitempty"`
+	TmuxCommand                  *TmuxCommandDomain      `json:"tmux_command,omitempty"`
+	FormatString                 *FormatStringDomain     `json:"format_string,omitempty"`
 	TerminalFeatures             []string                `json:"terminal_features,omitempty"`
 	TerminalOverrideCapabilities []TerminalOverrideEntry `json:"terminal_override_capabilities,omitempty"`
+}
+
+// TmuxCommandDomain describes the space of tmux commands that can appear
+// where an option's value_type is "tmux_command".
+type TmuxCommandDomain struct {
+	Description string             `json:"description"`
+	Commands    []TmuxCommandEntry `json:"commands,omitempty"`
+}
+
+// TmuxCommandEntry is one tmux command and its short alias (if any).
+type TmuxCommandEntry struct {
+	Name  string `json:"name"`
+	Alias string `json:"alias,omitempty"`
+}
+
+// FormatStringDomain describes the tmux format-string space, including the
+// default variables exposed by the format callback table.
+type FormatStringDomain struct {
+	Description      string           `json:"description"`
+	DefaultVariables []FormatVariable `json:"default_variables,omitempty"`
+	VariableNotes    []string         `json:"variable_notes,omitempty"`
+}
+
+// FormatVariable is one default-table format variable.
+type FormatVariable struct {
+	Name      string `json:"name"`
+	ValueType string `json:"value_type"`
 }
 
 // TerminalOverrideEntry describes one entry in terminal_override_capabilities.
@@ -177,9 +204,9 @@ type TerminalOverrideEntry struct {
 
 // ColourDomain enumerates tmux colour literals.
 type ColourDomain struct {
-	BasicNames            []string `json:"basic_names"`
-	ExtendedNamedColours  []string `json:"extended_named_colours"`
-	OtherAcceptedForms    []string `json:"other_accepted_forms,omitempty"`
+	BasicNames           []string `json:"basic_names"`
+	ExtendedNamedColours []string `json:"extended_named_colours"`
+	OtherAcceptedForms   []string `json:"other_accepted_forms,omitempty"`
 }
 
 // FlagDomain enumerates on/off literals.
@@ -195,11 +222,11 @@ type KeyDomain struct {
 
 // StyleDomain enumerates style keywords.
 type StyleDomain struct {
-	Attributes            []string       `json:"attributes"`
-	AttributeNegationForm string         `json:"attribute_negation_form"`
-	OtherKeywords         []string       `json:"other_keywords"`
-	ParameterizedTokens   map[string]any `json:"parameterized_tokens"`
-	ContainsRuntimeFormats bool          `json:"contains_runtime_formats"`
+	Attributes             []string       `json:"attributes"`
+	AttributeNegationForm  string         `json:"attribute_negation_form"`
+	OtherKeywords          []string       `json:"other_keywords"`
+	ParameterizedTokens    map[string]any `json:"parameterized_tokens"`
+	ContainsRuntimeFormats bool           `json:"contains_runtime_formats"`
 }
 
 // rawCatalog is the on-disk JSON shape.
@@ -327,6 +354,32 @@ func (c *Catalog) SharedDomains() SharedDomains {
 		return SharedDomains{}
 	}
 	return c.domains
+}
+
+// TmuxCommands returns the catalog's list of tmux commands and their
+// aliases. The returned slice is sorted by canonical command name.
+func (c *Catalog) TmuxCommands() []TmuxCommandEntry {
+	if c == nil || c.domains.TmuxCommand == nil {
+		return nil
+	}
+	out := slices.Clone(c.domains.TmuxCommand.Commands)
+	slices.SortFunc(out, func(a, b TmuxCommandEntry) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return out
+}
+
+// FormatVariables returns the default tmux format-string variables. The
+// returned slice is sorted by variable name.
+func (c *Catalog) FormatVariables() []FormatVariable {
+	if c == nil || c.domains.FormatString == nil {
+		return nil
+	}
+	out := slices.Clone(c.domains.FormatString.DefaultVariables)
+	slices.SortFunc(out, func(a, b FormatVariable) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return out
 }
 
 // Lookup resolves name to an Option entry, normalizing aliases and ignoring

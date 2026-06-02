@@ -223,3 +223,99 @@ func TestIsKnown(t *testing.T) {
 		t.Error("expected nonsense-xyz to be unknown")
 	}
 }
+
+func TestTmuxCommands(t *testing.T) {
+	c := MustDefault()
+	cmds := c.TmuxCommands()
+	if len(cmds) == 0 {
+		t.Fatal("expected non-empty tmux command list")
+	}
+	names := make([]string, len(cmds))
+	var hasNewSession, hasAlias bool
+	for i, cmd := range cmds {
+		if cmd.Name == "" {
+			t.Errorf("found tmux command with empty name: %+v", cmd)
+		}
+		names[i] = cmd.Name
+		if cmd.Name == "new-session" {
+			hasNewSession = true
+		}
+		if cmd.Alias != "" {
+			hasAlias = true
+		}
+	}
+	if !slices.IsSorted(names) {
+		t.Error("expected TmuxCommands to be sorted by name")
+	}
+	if !hasNewSession {
+		t.Error("expected new-session in tmux command list")
+	}
+	if !hasAlias {
+		t.Error("expected at least one tmux command to have an alias")
+	}
+}
+
+func TestFormatVariables(t *testing.T) {
+	c := MustDefault()
+	vars := c.FormatVariables()
+	if len(vars) == 0 {
+		t.Fatal("expected non-empty format variable list")
+	}
+	names := make([]string, len(vars))
+	want := map[string]bool{"pane_id": false, "session_name": false, "window_index": false}
+	for i, v := range vars {
+		if v.Name == "" {
+			t.Errorf("found format variable with empty name: %+v", v)
+		}
+		if v.ValueType == "" {
+			t.Errorf("format variable %q has empty value_type", v.Name)
+		}
+		names[i] = v.Name
+		if _, ok := want[v.Name]; ok {
+			want[v.Name] = true
+		}
+	}
+	if !slices.IsSorted(names) {
+		t.Error("expected FormatVariables to be sorted by name")
+	}
+	for name, found := range want {
+		if !found {
+			t.Errorf("expected format variable %q to be present", name)
+		}
+	}
+}
+
+func TestSharedDomainsTypedFields(t *testing.T) {
+	c := MustDefault()
+	d := c.SharedDomains()
+	if d.TmuxCommand == nil {
+		t.Fatal("expected typed TmuxCommand domain")
+	}
+	if d.TmuxCommand.Description == "" {
+		t.Error("expected TmuxCommand description")
+	}
+	if d.FormatString == nil {
+		t.Fatal("expected typed FormatString domain")
+	}
+	if d.FormatString.Description == "" {
+		t.Error("expected FormatString description")
+	}
+	if len(d.FormatString.VariableNotes) == 0 {
+		t.Error("expected FormatString.VariableNotes to be populated")
+	}
+}
+
+func TestLookupNewOptions(t *testing.T) {
+	c := MustDefault()
+	// copy-mode-line-numbers is a new choice option in the updated catalog.
+	opt, _ := c.Lookup("copy-mode-line-numbers")
+	if opt == nil {
+		t.Fatal("expected copy-mode-line-numbers to be present")
+	}
+	if opt.Type != TypeChoice {
+		t.Errorf("expected copy-mode-line-numbers to be a choice, got %q", opt.Type)
+	}
+	if !slices.Contains(opt.Choices, "hybrid") {
+		t.Errorf("expected 'hybrid' in copy-mode-line-numbers choices, got %v", opt.Choices)
+	}
+}
