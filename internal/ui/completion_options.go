@@ -14,9 +14,9 @@ import (
 // commandsCompletingOptions lists commands whose "option" positional should
 // be completed from the tmuxopts catalog.
 var commandsCompletingOptions = map[string]bool{
-	"set-option":        true,
-	"set-window-option": true,
-	"show-options":      true,
+	"set-option":          true,
+	"set-window-option":   true,
+	"show-options":        true,
 	"show-window-options": true,
 }
 

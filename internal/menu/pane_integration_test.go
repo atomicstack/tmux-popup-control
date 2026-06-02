@@ -99,4 +99,3 @@ func paneIDsIn(t *testing.T, socket, window string) []string {
 	}
 	return strings.Fields(strings.TrimSpace(string(out)))
 }
-

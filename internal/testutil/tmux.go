@@ -241,7 +241,6 @@ func TmuxCommand(socket string, extra ...string) *exec.Cmd {
 	return cmd
 }
 
-
 // WaitForContent polls the given pane until its captured output contains
 // substr, returning the full output when found. The test fails if ctx expires.
 func WaitForContent(t *testing.T, ctx context.Context, socketPath, pane, substr string) string {

@@ -87,10 +87,10 @@ func TestSessionTreeStartsOnCurrentWindowWhenVisibleViaLoadedMsg(t *testing.T) {
 	m.pendingID = "session:tree"
 
 	m.handleCategoryLoadedMsg(categoryLoadedMsg{
-		id:     "session:tree",
-		title:  "tree",
-		items:  buildSessionTreeItems(true, sessions, windows, nil),
-		err:    nil,
+		id:    "session:tree",
+		title: "tree",
+		items: buildSessionTreeItems(true, sessions, windows, nil),
+		err:   nil,
 	})
 
 	current := m.currentLevel()
@@ -116,10 +116,10 @@ func TestSessionTreeStartsOnCurrentPaneWhenVisibleViaLoadedMsg(t *testing.T) {
 	m.pendingID = "session:tree"
 
 	m.handleCategoryLoadedMsg(categoryLoadedMsg{
-		id:     "session:tree",
-		title:  "tree",
-		items:  buildSessionTreeItems(true, sessions, windows, panes),
-		err:    nil,
+		id:    "session:tree",
+		title: "tree",
+		items: buildSessionTreeItems(true, sessions, windows, panes),
+		err:   nil,
 	})
 
 	current := m.currentLevel()
@@ -145,10 +145,10 @@ func TestSessionTreeStartsAtFirstItemWhenCurrentPathNotVisibleViaLoadedMsg(t *te
 	m.pendingID = "session:tree"
 
 	m.handleCategoryLoadedMsg(categoryLoadedMsg{
-		id:     "session:tree",
-		title:  "tree",
-		items:  buildSessionTreeItems(true, sessions, windows, nil),
-		err:    nil,
+		id:    "session:tree",
+		title: "tree",
+		items: buildSessionTreeItems(true, sessions, windows, nil),
+		err:   nil,
 	})
 
 	current := m.currentLevel()

@@ -289,4 +289,3 @@ func argFlagsEqual(a, b []ArgFlagDef) bool {
 	}
 	return true
 }
-

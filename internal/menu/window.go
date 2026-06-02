@@ -554,11 +554,11 @@ func NewWindowRenameForm(prompt WindowPrompt) *WindowRenameForm {
 	return form
 }
 
-func (f *WindowRenameForm) Context() Context  { return f.ctx }
-func (f *WindowRenameForm) Target() string    { return f.target }
-func (f *WindowRenameForm) Title() string     { return f.title }
-func (f *WindowRenameForm) Help() string      { return f.help }
-func (f *WindowRenameForm) Value() string     { return strings.TrimSpace(f.input.Value()) }
+func (f *WindowRenameForm) Context() Context    { return f.ctx }
+func (f *WindowRenameForm) Target() string      { return f.target }
+func (f *WindowRenameForm) Title() string       { return f.title }
+func (f *WindowRenameForm) Help() string        { return f.help }
+func (f *WindowRenameForm) Value() string       { return strings.TrimSpace(f.input.Value()) }
 func (f *WindowRenameForm) InputView() string   { return f.input.View() }
 func (f *WindowRenameForm) Cursor() *tea.Cursor { return f.input.Cursor() }
 func (f *WindowRenameForm) FocusCmd() tea.Cmd   { return f.input.Focus() }

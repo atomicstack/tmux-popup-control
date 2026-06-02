@@ -60,7 +60,7 @@ func TestFilterPromptColoursOptionNameBeingTyped(t *testing.T) {
 		t.Fatal("expected completion visible for 'mou' prefix")
 	}
 	prompt, _ := h.model.filterPrompt()
-	if !strings.Contains(prompt,"\x1b[38;5;39m") && !strings.Contains(prompt,"\x1b[38;5;170m") && !strings.Contains(prompt,"\x1b[38;5;84m") {
+	if !strings.Contains(prompt, "\x1b[38;5;39m") && !strings.Contains(prompt, "\x1b[38;5;170m") && !strings.Contains(prompt, "\x1b[38;5;84m") {
 		t.Fatalf("expected a scope colour in filter prompt while typing option, got:\n%q", prompt)
 	}
 
@@ -72,7 +72,7 @@ func TestFilterPromptColoursOptionNameBeingTyped(t *testing.T) {
 		t.Fatalf("expected completion dismissed after exact match, still visible: %v", completionValues(h))
 	}
 	prompt, _ = h.model.filterPrompt()
-	if !strings.Contains(prompt,"\x1b[38;5;39m") {
+	if !strings.Contains(prompt, "\x1b[38;5;39m") {
 		t.Fatalf("expected session scope colour on exact-match option token, got:\n%q", prompt)
 	}
 }
@@ -89,7 +89,7 @@ func TestFilterPromptColoursUserOption(t *testing.T) {
 
 	prompt, _ := h.model.filterPrompt()
 	// User scope is colour 220.
-	if !strings.Contains(prompt,"\x1b[38;5;220m") {
+	if !strings.Contains(prompt, "\x1b[38;5;220m") {
 		t.Fatalf("expected user scope colour (220) in filter prompt, got:\n%q", prompt)
 	}
 }
@@ -105,7 +105,7 @@ func TestFilterPromptDoesNotColourNonOptionCommand(t *testing.T) {
 
 	prompt, _ := h.model.filterPrompt()
 	for _, seq := range []string{"\x1b[38;5;203m", "\x1b[38;5;39m", "\x1b[38;5;170m", "\x1b[38;5;84m", "\x1b[38;5;220m"} {
-		if strings.Contains(prompt,seq) {
+		if strings.Contains(prompt, seq) {
 			t.Fatalf("did not expect scope colour %q in kill-session filter prompt, got:\n%q", seq, prompt)
 		}
 	}
@@ -157,9 +157,9 @@ func TestCompletionColourLabelForBasicNames(t *testing.T) {
 // accepted forms and a few non-resolvable cases.
 func TestColourSpecForName(t *testing.T) {
 	cases := []struct {
-		name    string
-		want    string
-		wantOk  bool
+		name   string
+		want   string
+		wantOk bool
 	}{
 		{"red", "1", true},
 		{"BrightCyan", "14", true},

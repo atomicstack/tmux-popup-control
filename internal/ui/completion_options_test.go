@@ -335,4 +335,3 @@ func TestDecorateShowOptionsLineSkipsMalformedLine(t *testing.T) {
 		t.Fatal("expected no decoration for a line with no value")
 	}
 }
-

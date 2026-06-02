@@ -12,7 +12,6 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-
 func loadSessionMenu(Context) ([]Item, error) {
 	return menuItemsFromIDs([]string{
 		"kill",
