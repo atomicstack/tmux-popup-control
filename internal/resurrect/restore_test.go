@@ -50,6 +50,42 @@ func noopWait(_, _ string) error         { return nil }
 func noopRespawn(tmux.PaneSpec) error    { return nil }
 func noopDefaultCommand(_ string) string { return "/bin/bash" }
 
+// TestSessionStepCountMatchesComputeRestoreTotal guards against drift between
+// the per-session step count used by the skip-already-merged branch
+// (sessionStepCount) and the per-session contribution made by
+// computeRestoreTotal. The two must always agree so that a skipped session
+// advances the progress bar by exactly the amount a restored session would.
+func TestSessionStepCountMatchesComputeRestoreTotal(t *testing.T) {
+	sessions := []Session{
+		{Name: "empty"},
+		{
+			Name: "one-window-one-pane",
+			Windows: []Window{
+				{Index: 0, Panes: []Pane{{Index: 0}}},
+			},
+		},
+		{
+			Name: "multi",
+			Windows: []Window{
+				{Index: 0, Panes: []Pane{{Index: 0}, {Index: 1}, {Index: 2}}},
+				{Index: 1, Panes: []Pane{{Index: 0}}},
+				{Index: 2, Panes: []Pane{{Index: 0}, {Index: 1}}},
+			},
+		},
+	}
+
+	for _, sess := range sessions {
+		// computeRestoreTotal for a single-session save file adds exactly one
+		// extra step for the client switch; subtract it to isolate the
+		// per-session contribution.
+		sf := &SaveFile{Sessions: []Session{sess}}
+		perSession := computeRestoreTotal(sf) - 1
+		if got := sessionStepCount(sess); got != perSession {
+			t.Fatalf("session %q: sessionStepCount=%d, computeRestoreTotal contribution=%d (must match)", sess.Name, got, perSession)
+		}
+	}
+}
+
 // collectRestoreEvents drains the channel returned by Restore.
 func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
 	var events []ProgressEvent
@@ -149,7 +185,7 @@ func TestRestoreHappyPath(t *testing.T) {
 	path := writeSaveFile(t, dir, "test", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	if len(events) == 0 {
@@ -210,7 +246,7 @@ func TestRestoreNoPaneArchive(t *testing.T) {
 	// deliberately do not create the .panes.tar.gz
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -288,7 +324,7 @@ func TestRestoreSessionMerge(t *testing.T) {
 	path := writeSaveFile(t, dir, "merge", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	// session must NOT be created (it already exists)
@@ -340,7 +376,7 @@ func TestRestoreNamedSnapshot(t *testing.T) {
 	path := writeSaveFile(t, dir, "mysnap", sf)
 
 	cfg := Config{SaveDir: dir, Name: "mysnap"}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -393,7 +429,7 @@ func TestRestoreSessionCreationError(t *testing.T) {
 	path := writeSaveFile(t, dir, "err", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -491,7 +527,7 @@ func TestRestoreWithPaneArchive(t *testing.T) {
 	}
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -608,7 +644,7 @@ func TestRestoreWaitsForPaneReplayBeforeSelectingAndSwitching(t *testing.T) {
 		t.Fatalf("WritePaneArchive: %v", err)
 	}
 
-	ch := Restore(Config{SaveDir: dir}, path)
+	ch := Restore(t.Context(), Config{SaveDir: dir}, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -703,7 +739,7 @@ func TestRestoreNormalizesSavedLayoutWithVisibleSuffix(t *testing.T) {
 	})
 	path := writeSaveFile(t, dir, "layout-visible-suffix", sf)
 
-	events := collectRestoreEvents(Restore(Config{SaveDir: dir}, path))
+	events := collectRestoreEvents(Restore(t.Context(), Config{SaveDir: dir}, path))
 	last := events[len(events)-1]
 	if !last.Done || last.Err != nil {
 		t.Fatalf("restore failed: done=%v err=%v", last.Done, last.Err)
@@ -748,7 +784,7 @@ func TestRestoreStepCountMatchesTotal(t *testing.T) {
 	path := writeSaveFile(t, dir, "multi", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -773,7 +809,7 @@ func TestRestoreReadFileError(t *testing.T) {
 	defer installNoopRestoreFns(t)()
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, filepath.Join(dir, "nonexistent.json"))
+	ch := Restore(t.Context(), cfg, filepath.Join(dir, "nonexistent.json"))
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -846,7 +882,7 @@ func TestRestoreSwitchesClientWithID(t *testing.T) {
 		SaveDir:    dir,
 		ClientID:   "/dev/ttys004",
 	}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -937,7 +973,7 @@ func TestRestoreMergeIndexRemapping(t *testing.T) {
 	path := writeSaveFile(t, dir, "remap", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	if createSessionCalled {
@@ -1057,7 +1093,7 @@ func TestRestoreMergeWithPaneArchive(t *testing.T) {
 	}
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -1147,7 +1183,7 @@ func TestRestoreMergeIdempotent(t *testing.T) {
 	path := writeSaveFile(t, dir, "repeat", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	// no windows should have been created
@@ -1237,7 +1273,7 @@ func TestRestoreMergeSetsMarker(t *testing.T) {
 	path := writeSaveFile(t, dir, "marker", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]
@@ -1318,7 +1354,7 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 	path := writeSaveFile(t, dir, "fresh", sf)
 
 	cfg := Config{SaveDir: dir}
-	ch := Restore(cfg, path)
+	ch := Restore(t.Context(), cfg, path)
 	events := collectRestoreEvents(ch)
 
 	last := events[len(events)-1]

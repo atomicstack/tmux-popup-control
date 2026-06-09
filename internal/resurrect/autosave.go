@@ -1,6 +1,7 @@
 package resurrect
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -90,7 +91,7 @@ func RunAutoSave(cfg Config, maxSaves int) error {
 	}
 
 	var saveErr error
-	for event := range Save(cfg) {
+	for event := range Save(context.Background(), cfg) {
 		if event.Done {
 			saveErr = event.Err
 			break

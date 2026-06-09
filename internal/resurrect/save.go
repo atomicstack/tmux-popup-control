@@ -1,6 +1,7 @@
 package resurrect
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -69,39 +70,55 @@ func withClientInfoFn(fn func(string, string) (string, string)) func() {
 
 // Save orchestrates a full session save and emits ProgressEvents on the
 // returned channel. The channel is closed after a Done event is sent.
-func Save(cfg Config) <-chan ProgressEvent {
+// The provided context cancels the background goroutine if the consumer stops
+// draining the channel, preventing a goroutine leak on a buffered-channel
+// blocking send.
+func Save(ctx context.Context, cfg Config) <-chan ProgressEvent {
 	ch := make(chan ProgressEvent, 32)
 	go func() {
 		defer close(ch)
-		runSave(cfg, ch)
+		runSave(ctx, cfg, ch)
 	}()
 	return ch
 }
 
-// errorf sends an error done event and returns the error so the caller can
-// return it to trigger the deferred close.
-func sendError(ch chan<- ProgressEvent, format string, args ...any) error {
+// sendProgress sends ev on ch unless ctx is cancelled first. It returns false
+// when the send was abandoned because the context was done, allowing callers
+// to stop work instead of blocking forever on an undrained channel.
+func sendProgress(ctx context.Context, ch chan<- ProgressEvent, ev ProgressEvent) bool {
+	select {
+	case ch <- ev:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// sendError sends an error done event and returns the error so the caller can
+// return it to trigger the deferred close. The send respects ctx so it cannot
+// block forever on an undrained channel.
+func sendError(ctx context.Context, ch chan<- ProgressEvent, format string, args ...any) error {
 	err := fmt.Errorf(format, args...)
-	ch <- ProgressEvent{Kind: "error", Done: true, Err: err}
+	sendProgress(ctx, ch, ProgressEvent{Kind: "error", Done: true, Err: err})
 	return err
 }
 
-func runSave(cfg Config, ch chan<- ProgressEvent) error {
+func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 	// ── Phase 1: discovery ───────────────────────────────────────────────────
 
 	sessionSnap, err := saveDeps.FetchSessions(cfg.SocketPath)
 	if err != nil {
-		return sendError(ch, "fetching sessions: %w", err)
+		return sendError(ctx, ch, "fetching sessions: %w", err)
 	}
 
 	windowSnap, err := saveDeps.FetchWindows(cfg.SocketPath)
 	if err != nil {
-		return sendError(ch, "fetching windows: %w", err)
+		return sendError(ctx, ch, "fetching windows: %w", err)
 	}
 
 	paneSnap, err := saveDeps.FetchPanes(cfg.SocketPath)
 	if err != nil {
-		return sendError(ch, "fetching panes: %w", err)
+		return sendError(ctx, ch, "fetching panes: %w", err)
 	}
 
 	nSessions := len(sessionSnap.Sessions)
@@ -140,11 +157,13 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 		total++ // update last symlink
 	}
 
-	ch <- ProgressEvent{
+	if !sendProgress(ctx, ch, ProgressEvent{
 		Step:    0,
 		Total:   total,
 		Message: "discovering sessions...",
 		Kind:    "info",
+	}) {
+		return ctx.Err()
 	}
 
 	// ── Phase 2: build session tree (depth-first) ───────────────────────────
@@ -173,12 +192,14 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 
 	for _, s := range sessionSnap.Sessions {
 		step++
-		ch <- ProgressEvent{
+		if !sendProgress(ctx, ch, ProgressEvent{
 			Step:    step,
 			Total:   total,
 			Message: fmt.Sprintf("saving session %s...", s.Name),
 			Kind:    "session",
 			ID:      s.Name,
+		}) {
+			return ctx.Err()
 		}
 
 		sess := Session{
@@ -220,12 +241,14 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 			}
 
 			step += len(wins)
-			ch <- ProgressEvent{
+			if !sendProgress(ctx, ch, ProgressEvent{
 				Step:    step,
 				Total:   total,
 				Message: fmt.Sprintf("saving windows for session %s: %s", s.Name, strings.Join(winIDs, " ")),
 				Kind:    "window",
 				ID:      s.Name,
+			}) {
+				return ctx.Err()
 			}
 		}
 
@@ -238,18 +261,20 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 					paneIDs = append(paneIDs, p.ID)
 					content, err := saveDeps.CapturePaneContents(cfg.SocketPath, p.ID)
 					if err != nil {
-						return sendError(ch, "capturing pane %s: %w", p.ID, err)
+						return sendError(ctx, ch, "capturing pane %s: %w", p.ID, err)
 					}
 					paneContents[p.ID] = strings.TrimRight(content, "\n") + "\n"
 				}
 
 				step += len(panes)
-				ch <- ProgressEvent{
+				if !sendProgress(ctx, ch, ProgressEvent{
 					Step:    step,
 					Total:   total,
 					Message: fmt.Sprintf("capturing panes for session %s: %s", s.Name, strings.Join(paneIDs, " ")),
 					Kind:    "pane",
 					ID:      s.Name,
+				}) {
+					return ctx.Err()
 				}
 			}
 		}
@@ -261,14 +286,16 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 
 	jsonPath := savePath(cfg.SaveDir, cfg.Name)
 	step++
-	ch <- ProgressEvent{
+	if !sendProgress(ctx, ch, ProgressEvent{
 		Step:    step,
 		Total:   total,
 		Message: fmt.Sprintf("writing %s", jsonPath),
 		Kind:    "info",
+	}) {
+		return ctx.Err()
 	}
 	if err := WriteSaveFile(jsonPath, &saveFile); err != nil {
-		return sendError(ch, "writing save file: %w", err)
+		return sendError(ctx, ch, "writing save file: %w", err)
 	}
 
 	// ── Phase 4: write pane archive ─────────────────────────────────────────
@@ -276,14 +303,16 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 	if cfg.CapturePaneContents {
 		archivePath := paneArchivePath(jsonPath)
 		step++
-		ch <- ProgressEvent{
+		if !sendProgress(ctx, ch, ProgressEvent{
 			Step:    step,
 			Total:   total,
 			Message: fmt.Sprintf("writing pane archive %s", archivePath),
 			Kind:    "info",
+		}) {
+			return ctx.Err()
 		}
 		if err := WritePaneArchive(archivePath, paneContents); err != nil {
-			return sendError(ch, "writing pane archive: %w", err)
+			return sendError(ctx, ch, "writing pane archive: %w", err)
 		}
 	}
 
@@ -291,26 +320,28 @@ func runSave(cfg Config, ch chan<- ProgressEvent) error {
 
 	if shouldUpdateLast(cfg) {
 		step++
-		ch <- ProgressEvent{
+		if !sendProgress(ctx, ch, ProgressEvent{
 			Step:    step,
 			Total:   total,
 			Message: "updating last symlink",
 			Kind:    "info",
+		}) {
+			return ctx.Err()
 		}
 		if err := updateLastSymlink(cfg.SaveDir, jsonPath); err != nil {
-			return sendError(ch, "updating last symlink: %w", err)
+			return sendError(ctx, ch, "updating last symlink: %w", err)
 		}
 	}
 
 	// ── Done ────────────────────────────────────────────────────────────────
 
-	ch <- ProgressEvent{
+	sendProgress(ctx, ch, ProgressEvent{
 		Step:    total,
 		Total:   total,
 		Message: fmt.Sprintf("saved %d session(s) to %s", nSessions, jsonPath),
 		Kind:    "info",
 		Done:    true,
-	}
+	})
 	return nil
 }
 

@@ -170,7 +170,7 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 		CapturePaneContents: false,
 		Name:                "roundtrip",
 	}
-	ch := Save(saveCfg)
+	ch := Save(t.Context(), saveCfg)
 	for ev := range ch {
 		t.Logf("save: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
 		if ev.Err != nil {
@@ -212,7 +212,7 @@ func TestSaveRestoreRoundTripIntegration(t *testing.T) {
 		SocketPath: socket2,
 		SaveDir:    saveDir,
 	}
-	ch2 := Restore(restoreCfg, savedPath)
+	ch2 := Restore(t.Context(), restoreCfg, savedPath)
 	for ev := range ch2 {
 		t.Logf("restore: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
 		if ev.Err != nil {
@@ -373,7 +373,7 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 	}
 
 	saveDir := t.TempDir()
-	ch := Save(Config{
+	ch := Save(t.Context(), Config{
 		SocketPath: socket1,
 		SaveDir:    saveDir,
 		Name:       "idempotent",
@@ -405,7 +405,7 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 
 	// first restore — should merge (append windows)
 	restoreCfg := Config{SocketPath: socket2, SaveDir: saveDir}
-	ch1 := Restore(restoreCfg, savedPath)
+	ch1 := Restore(t.Context(), restoreCfg, savedPath)
 	for ev := range ch1 {
 		t.Logf("restore 1: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
 		if ev.Err != nil {
@@ -424,7 +424,7 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 	}
 
 	// second restore (new connection) — should be idempotent
-	ch2 := Restore(restoreCfg, savedPath)
+	ch2 := Restore(t.Context(), restoreCfg, savedPath)
 	for ev := range ch2 {
 		t.Logf("restore 2: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
 		if ev.Err != nil {
@@ -443,7 +443,7 @@ func TestRestoreMergeIdempotentIntegration(t *testing.T) {
 	}
 
 	// third restore (same connection, no Shutdown) — tests same-connection idempotency
-	ch3 := Restore(restoreCfg, savedPath)
+	ch3 := Restore(t.Context(), restoreCfg, savedPath)
 	for ev := range ch3 {
 		t.Logf("restore 3 (same conn): [%d/%d] %s", ev.Step, ev.Total, ev.Message)
 		if ev.Err != nil {
@@ -556,7 +556,7 @@ func TestRestoreSessionPathIntegration(t *testing.T) {
 	// ── save ─────────────────────────────────────────────────────────────
 
 	saveDir := t.TempDir()
-	ch := Save(Config{
+	ch := Save(t.Context(), Config{
 		SocketPath: socket1,
 		SaveDir:    saveDir,
 		Name:       "session-path-test",
@@ -581,7 +581,7 @@ func TestRestoreSessionPathIntegration(t *testing.T) {
 	defer cleanup2()
 	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
 
-	ch2 := Restore(Config{SocketPath: socket2, SaveDir: saveDir}, savedPath)
+	ch2 := Restore(t.Context(), Config{SocketPath: socket2, SaveDir: saveDir}, savedPath)
 	for ev := range ch2 {
 		t.Logf("restore: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
 		if ev.Err != nil {
@@ -643,7 +643,7 @@ func TestRestoreWithUserConfigIntegration(t *testing.T) {
 	}
 
 	saveDir := t.TempDir()
-	ch := Save(Config{
+	ch := Save(t.Context(), Config{
 		SocketPath: socket1,
 		SaveDir:    saveDir,
 		Name:       "userconf",
@@ -672,7 +672,7 @@ func TestRestoreWithUserConfigIntegration(t *testing.T) {
 	beforeSessions := listSessionNames(t, socket2)
 	t.Logf("sessions before restore (user config): %v", beforeSessions)
 
-	ch2 := Restore(Config{SocketPath: socket2, SaveDir: saveDir}, savedPath)
+	ch2 := Restore(t.Context(), Config{SocketPath: socket2, SaveDir: saveDir}, savedPath)
 	for ev := range ch2 {
 		t.Logf("restore: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
 		if ev.Err != nil {

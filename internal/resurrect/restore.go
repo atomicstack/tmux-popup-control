@@ -1,6 +1,7 @@
 package resurrect
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -151,11 +152,14 @@ func withSetSessionOptionFn(fn func(string, string, string, string) error) func(
 
 // Restore orchestrates a full session restore and emits ProgressEvents on the
 // returned channel. The channel is closed after a Done event is sent.
-func Restore(cfg Config, file string) <-chan ProgressEvent {
+// The provided context cancels the background goroutine if the consumer stops
+// draining the channel, preventing a goroutine leak on a buffered-channel
+// blocking send.
+func Restore(ctx context.Context, cfg Config, file string) <-chan ProgressEvent {
 	ch := make(chan ProgressEvent, 32)
 	go func() {
 		defer close(ch)
-		runRestore(cfg, file, ch)
+		runRestore(ctx, cfg, file, ch)
 	}()
 	return ch
 }
@@ -191,57 +195,112 @@ func paneReplayWaitChannel(sessName string, winIdx, paneIdx int) string {
 	return fmt.Sprintf("tmux-popup-control-pane-restored-%s:%d.%d", sessName, winIdx, paneIdx)
 }
 
-func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
+// restoreRun carries the cross-cutting state shared by the per-session restore
+// helpers: the cancellation context, configuration, the progress channel, the
+// precomputed total, the pane-content lookup, and a running step counter.
+type restoreRun struct {
+	ctx           context.Context
+	cfg           Config
+	ch            chan<- ProgressEvent
+	total         int
+	step          int
+	lookupPaneCmd func(sessName string, winIdx, paneIdx int) string
+}
+
+// emit sends a progress event, advancing through the run. It returns false when
+// the context was cancelled before the send completed so callers can abort.
+func (r *restoreRun) emit(ev ProgressEvent) bool {
+	ev.Total = r.total
+	return sendProgress(r.ctx, r.ch, ev)
+}
+
+func runRestore(ctx context.Context, cfg Config, file string, ch chan<- ProgressEvent) error {
 	// ── Phase 1: discovery ───────────────────────────────────────────────────
 
 	sf, err := ReadSaveFile(file)
 	if err != nil {
-		return sendError(ch, "reading save file: %w", err)
+		return sendError(ctx, ch, "reading save file: %w", err)
 	}
 
-	// check for companion pane archive
-	archivePath := paneArchivePath(file)
-	hasPaneArchive := false
-	if _, err := os.Stat(archivePath); err == nil {
-		hasPaneArchive = true
-	}
-
-	// extract pane archive to a temp dir if present
-	var contentDir string
-	if hasPaneArchive {
-		contentDir, err = os.MkdirTemp("", "tmux-restore-*")
-		if err != nil {
-			return sendError(ch, "creating temp dir: %w", err)
-		}
-		if err := ExtractPaneArchive(archivePath, contentDir); err != nil {
-			_ = os.RemoveAll(contentDir)
-			return sendError(ch, "extracting pane archive: %w", err)
-		}
+	contentDir, lookupPaneCmd, err := preparePaneContent(ctx, cfg, file, ch)
+	if err != nil {
+		return err
 	}
 
 	// fetch existing sessions to detect conflicts
 	existingSnap, err := restoreDeps.ExistingSessions(cfg.SocketPath)
 	if err != nil {
-		return sendError(ch, "fetching existing sessions: %w", err)
+		return sendError(ctx, ch, "fetching existing sessions: %w", err)
 	}
 	existingNames := make(map[string]bool, len(existingSnap.Sessions))
 	for _, s := range existingSnap.Sessions {
 		existingNames[s.Name] = true
 	}
 
-	// resolve default command for startup command chains
-	defaultCmd := ""
-	if hasPaneArchive {
-		defaultCmd = restoreDeps.DefaultCommand(cfg.SocketPath)
+	run := &restoreRun{
+		ctx:           ctx,
+		cfg:           cfg,
+		ch:            ch,
+		total:         computeRestoreTotal(sf),
+		lookupPaneCmd: lookupPaneCmd,
 	}
+
+	if !run.emit(ProgressEvent{
+		Step:    0,
+		Message: fmt.Sprintf("restoring %d session(s) from %s", len(sf.Sessions), file),
+		Kind:    "info",
+	}) {
+		return ctx.Err()
+	}
+
+	// ── Phase 2: restore (depth-first, grouped messages) ────────────────────
+
+	for _, sess := range sf.Sessions {
+		if err := run.restoreSession(sess, existingNames[sess.Name]); err != nil {
+			return err
+		}
+	}
+
+	if err := run.switchClient(sf); err != nil {
+		return err
+	}
+
+	scheduleContentCleanup(contentDir)
+
+	// done
+	run.emit(ProgressEvent{
+		Step:    run.total,
+		Message: fmt.Sprintf("restored %d session(s) %s", len(sf.Sessions), greenCheck),
+		Kind:    "info",
+		Done:    true,
+	})
+	return nil
+}
+
+// preparePaneContent extracts the companion pane archive (if present) into a
+// temp dir and returns that dir plus a lookup closure that yields the startup
+// command for a pane with saved content (empty string when there is none).
+// The returned contentDir is "" when no archive exists.
+func preparePaneContent(ctx context.Context, cfg Config, file string, ch chan<- ProgressEvent) (string, func(string, int, int) string, error) {
+	archivePath := paneArchivePath(file)
+	if _, err := os.Stat(archivePath); err != nil {
+		// no archive: lookup always returns empty.
+		return "", func(string, int, int) string { return "" }, nil
+	}
+
+	contentDir, err := os.MkdirTemp("", "tmux-restore-*")
+	if err != nil {
+		return "", nil, sendError(ctx, ch, "creating temp dir: %w", err)
+	}
+	if err := ExtractPaneArchive(archivePath, contentDir); err != nil {
+		_ = os.RemoveAll(contentDir)
+		return "", nil, sendError(ctx, ch, "extracting pane archive: %w", err)
+	}
+
+	defaultCmd := restoreDeps.DefaultCommand(cfg.SocketPath)
 	tmuxCmd := tmuxCommandPath()
 
-	// lookupPaneCmd returns the startup command for a pane if it has saved
-	// content, or empty string otherwise.
-	lookupPaneCmd := func(sessName string, winIdx, paneIdx int) string {
-		if !hasPaneArchive {
-			return ""
-		}
+	lookup := func(sessName string, winIdx, paneIdx int) string {
 		paneKey := fmt.Sprintf("%s:%d.%d", sessName, winIdx, paneIdx)
 		path := filepath.Join(contentDir, paneKey)
 		if _, statErr := os.Stat(path); statErr == nil {
@@ -249,304 +308,341 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 		}
 		return ""
 	}
+	return contentDir, lookup, nil
+}
 
-	// compute total work units
-	total := computeRestoreTotal(sf)
+// scheduleContentCleanup removes the extracted pane-content temp dir after a
+// short delay so the asynchronous pane startup commands have time to read the
+// files. A "" dir is a no-op.
+func scheduleContentCleanup(contentDir string) {
+	if contentDir == "" {
+		return
+	}
+	go func() {
+		time.Sleep(5 * time.Second)
+		_ = os.RemoveAll(contentDir)
+	}()
+}
 
-	ch <- ProgressEvent{
-		Step:    0,
-		Total:   total,
-		Message: fmt.Sprintf("restoring %d session(s) from %s", len(sf.Sessions), file),
-		Kind:    "info",
+// restoreSession restores (or merges, or skips) a single saved session,
+// emitting the same progress-event sequence as the original monolithic loop.
+func (r *restoreRun) restoreSession(sess Session, merge bool) error {
+	// indexMap translates saved window indices to actual target indices. For
+	// new sessions, indices are used as-is. For merges, saved windows are
+	// appended after the highest existing index.
+	indexMap, skipped, err := r.createOrMergeSession(sess, merge)
+	if err != nil || skipped {
+		return err
 	}
 
-	// ── Phase 2: restore (depth-first, grouped messages) ────────────────────
+	replayWaitChannels, err := r.restoreWindows(sess, indexMap, merge)
+	if err != nil {
+		return err
+	}
 
-	step := 0
+	paneChannels, err := r.splitPanes(sess, indexMap)
+	if err != nil {
+		return err
+	}
+	replayWaitChannels = append(replayWaitChannels, paneChannels...)
 
-	for _, sess := range sf.Sessions {
-		merge := existingNames[sess.Name]
-		var replayWaitChannels []string
+	return r.finalizeSession(sess, indexMap, replayWaitChannels)
+}
 
-		// ── session creation or merge header ────────────────────────
+// createOrMergeSession handles the session-creation / merge / skip header. It
+// returns the window index map, whether the session was skipped (already
+// restored), and any error.
+func (r *restoreRun) createOrMergeSession(sess Session, merge bool) (map[int]int, bool, error) {
+	indexMap := make(map[int]int, len(sess.Windows))
 
-		// indexMap translates saved window indices to actual target indices.
-		// For new sessions, indices are used as-is. For merges, saved
-		// windows are appended after the highest existing index.
-		indexMap := make(map[int]int, len(sess.Windows))
-
-		if merge {
-			// idempotency: skip if this slot was already merged
-			markerKey := restoreMarkerKey(sess.Name)
-			if restoreDeps.SessionOption(cfg.SocketPath, sess.Name, markerKey) != "" {
-				sessSteps := 2 + 3*len(sess.Windows)
-				for _, win := range sess.Windows {
-					for _, pane := range win.Panes {
-						if pane.Index != 0 {
-							sessSteps++
-						}
-					}
-				}
-				step += sessSteps
-				ch <- ProgressEvent{
-					Step:    step,
-					Total:   total,
-					Message: fmt.Sprintf("skipping session %s (already restored)", sess.Name),
-					Kind:    "info",
-					ID:      sess.Name,
-				}
-				continue
-			}
-
-			existingIndices, err := restoreDeps.ExistingWindowIndices(cfg.SocketPath, sess.Name)
-			if err != nil {
-				return sendError(ch, "listing windows for session %s: %w", sess.Name, err)
-			}
-			maxIdx := -1
-			for idx := range existingIndices {
-				if idx > maxIdx {
-					maxIdx = idx
-				}
-			}
-			nextIdx := maxIdx + 1
-			for _, win := range sess.Windows {
-				indexMap[win.Index] = nextIdx
-				nextIdx++
-			}
-
-			step++
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("merging into session %s...", sess.Name),
-				Kind:    "session",
-				ID:      sess.Name,
-			}
-		} else {
-			for _, win := range sess.Windows {
-				indexMap[win.Index] = win.Index
-			}
-
-			step++
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("restoring session %s...", sess.Name),
-				Kind:    "session",
-				ID:      sess.Name,
-			}
-			// create the session with $HOME as the working directory so
-			// that new windows inherit the correct default. we must pass
-			// -c explicitly because tmux otherwise inherits the cwd of
-			// whatever process (control-mode client, popup, etc.) sends
-			// the new-session command.
-			sessionDir := os.Getenv("HOME")
-			if err := restoreDeps.CreateSession(tmux.SessionSpec{
-				SocketPath: cfg.SocketPath,
-				Name:       sess.Name,
-				Dir:        sessionDir,
-			}); err != nil {
-				return sendError(ch, "creating session %s: %w", sess.Name, err)
-			}
-
-			// the first pane is auto-created with the session; respawn it
-			// in the correct working directory with any startup command.
-			// this avoids polluting session_path with a pane-specific dir.
-			if len(sess.Windows) > 0 && len(sess.Windows[0].Panes) > 0 {
-				p0 := sess.Windows[0].Panes[0]
-				paneCmd := lookupPaneCmd(sess.Name, sess.Windows[0].Index, p0.Index)
-				if p0.WorkingDir != "" || paneCmd != "" {
-					paneTarget := fmt.Sprintf("%s:0.0", sess.Name)
-					if paneCmd != "" {
-						replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, sess.Windows[0].Index, p0.Index))
-					}
-					if err := restoreDeps.RespawnPane(tmux.PaneSpec{
-						SocketPath: cfg.SocketPath,
-						Target:     paneTarget,
-						Dir:        p0.WorkingDir,
-						Command:    paneCmd,
-					}); err != nil {
-						return sendError(ch, "respawning pane %s: %w", paneTarget, err)
-					}
-				}
-			}
-		}
-
-		// ── windows (grouped) ───────────────────────────────────────
-
-		var winIDs []string
+	if !merge {
 		for _, win := range sess.Windows {
-			targetIdx := indexMap[win.Index]
-			winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
-			winIDs = append(winIDs, winTarget)
-
-			if !merge && win.Index == 0 {
-				// first window of a new session is auto-created; rename it
-				if err := restoreDeps.RenameWindow(cfg.SocketPath, winTarget, win.Name); err != nil {
-					return sendError(ch, "renaming window %s: %w", winTarget, err)
-				}
-			} else {
-				winDir := ""
-				winCmd := ""
-				if len(win.Panes) > 0 {
-					winDir = win.Panes[0].WorkingDir
-					winCmd = lookupPaneCmd(sess.Name, win.Index, win.Panes[0].Index)
-					if winCmd != "" {
-						replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, win.Index, win.Panes[0].Index))
-					}
-				}
-				if err := restoreDeps.CreateWindow(tmux.WindowSpec{
-					SocketPath: cfg.SocketPath,
-					Session:    sess.Name,
-					Index:      targetIdx,
-					Name:       win.Name,
-					Dir:        winDir,
-					Command:    winCmd,
-				}); err != nil {
-					return sendError(ch, "creating window %s: %w", winTarget, err)
-				}
-			}
-		}
-		if len(winIDs) > 0 {
-			step += len(winIDs)
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("restoring windows for session %s: %s", sess.Name, strings.Join(winIDs, " ")),
-				Kind:    "window",
-			}
+			indexMap[win.Index] = win.Index
 		}
 
-		// ── pane splits (grouped) ───────────────────────────────────
+		r.step++
+		if !r.emit(ProgressEvent{
+			Step:    r.step,
+			Message: fmt.Sprintf("restoring session %s...", sess.Name),
+			Kind:    "session",
+			ID:      sess.Name,
+		}) {
+			return nil, false, r.ctx.Err()
+		}
+		// create the session with $HOME as the working directory so that new
+		// windows inherit the correct default. we must pass -c explicitly
+		// because tmux otherwise inherits the cwd of whatever process
+		// (control-mode client, popup, etc.) sends the new-session command.
+		sessionDir := os.Getenv("HOME")
+		if err := restoreDeps.CreateSession(tmux.SessionSpec{
+			SocketPath: r.cfg.SocketPath,
+			Name:       sess.Name,
+			Dir:        sessionDir,
+		}); err != nil {
+			return nil, false, sendError(r.ctx, r.ch, "creating session %s: %w", sess.Name, err)
+		}
 
-		var paneIDs []string
-		for _, win := range sess.Windows {
-			targetIdx := indexMap[win.Index]
-			for _, pane := range win.Panes {
-				if pane.Index == 0 {
-					continue
-				}
-				paneTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
-				paneCmd := lookupPaneCmd(sess.Name, win.Index, pane.Index)
-				if paneCmd != "" {
-					replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, win.Index, pane.Index))
-				}
-				if err := restoreDeps.SplitPane(tmux.PaneSpec{
-					SocketPath: cfg.SocketPath,
+		// the first pane is auto-created with the session; respawn it in the
+		// correct working directory with any startup command. this avoids
+		// polluting session_path with a pane-specific dir.
+		if len(sess.Windows) > 0 && len(sess.Windows[0].Panes) > 0 {
+			p0 := sess.Windows[0].Panes[0]
+			paneCmd := r.lookupPaneCmd(sess.Name, sess.Windows[0].Index, p0.Index)
+			if p0.WorkingDir != "" || paneCmd != "" {
+				paneTarget := fmt.Sprintf("%s:0.0", sess.Name)
+				if err := restoreDeps.RespawnPane(tmux.PaneSpec{
+					SocketPath: r.cfg.SocketPath,
 					Target:     paneTarget,
-					Dir:        pane.WorkingDir,
+					Dir:        p0.WorkingDir,
 					Command:    paneCmd,
 				}); err != nil {
-					return sendError(ch, "splitting pane %s.%d: %w", paneTarget, pane.Index, err)
-				}
-				paneIDs = append(paneIDs, fmt.Sprintf("%s.%d", paneTarget, pane.Index))
-			}
-		}
-		if len(paneIDs) > 0 {
-			step += len(paneIDs)
-			ch <- ProgressEvent{
-				Step:    step,
-				Total:   total,
-				Message: fmt.Sprintf("splitting panes for session %s: %s", sess.Name, strings.Join(paneIDs, " ")),
-				Kind:    "pane",
-			}
-		}
-
-		// ── finalize: layouts, active panes, active window ──────────
-
-		for _, win := range sess.Windows {
-			targetIdx := indexMap[win.Index]
-			winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
-			step++
-			if err := restoreDeps.SelectLayoutTarget(cfg.SocketPath, winTarget, selectableLayout(win.Layout)); err != nil {
-				return sendError(ch, "applying layout for %s: %w", winTarget, err)
-			}
-		}
-
-		for _, channel := range replayWaitChannels {
-			if err := restoreDeps.WaitFor(cfg.SocketPath, channel); err != nil {
-				return sendError(ch, "waiting for pane replay %s: %w", channel, err)
-			}
-		}
-
-		for _, win := range sess.Windows {
-			targetIdx := indexMap[win.Index]
-			activePaneIdx := 0
-			for _, pane := range win.Panes {
-				if pane.Active {
-					activePaneIdx = pane.Index
-					break
+					return nil, false, sendError(r.ctx, r.ch, "respawning pane %s: %w", paneTarget, err)
 				}
 			}
-			paneTarget := fmt.Sprintf("%s:%d.%d", sess.Name, targetIdx, activePaneIdx)
-			step++
-			if err := restoreDeps.SelectPane(cfg.SocketPath, paneTarget); err != nil {
-				return sendError(ch, "selecting active pane %s: %w", paneTarget, err)
+		}
+		return indexMap, false, nil
+	}
+
+	// merge path: idempotency — skip if this slot was already merged.
+	markerKey := restoreMarkerKey(sess.Name)
+	if restoreDeps.SessionOption(r.cfg.SocketPath, sess.Name, markerKey) != "" {
+		r.step += sessionStepCount(sess)
+		if !r.emit(ProgressEvent{
+			Step:    r.step,
+			Message: fmt.Sprintf("skipping session %s (already restored)", sess.Name),
+			Kind:    "info",
+			ID:      sess.Name,
+		}) {
+			return nil, true, r.ctx.Err()
+		}
+		return nil, true, nil
+	}
+
+	existingIndices, err := restoreDeps.ExistingWindowIndices(r.cfg.SocketPath, sess.Name)
+	if err != nil {
+		return nil, false, sendError(r.ctx, r.ch, "listing windows for session %s: %w", sess.Name, err)
+	}
+	maxIdx := -1
+	for idx := range existingIndices {
+		if idx > maxIdx {
+			maxIdx = idx
+		}
+	}
+	nextIdx := maxIdx + 1
+	for _, win := range sess.Windows {
+		indexMap[win.Index] = nextIdx
+		nextIdx++
+	}
+
+	r.step++
+	if !r.emit(ProgressEvent{
+		Step:    r.step,
+		Message: fmt.Sprintf("merging into session %s...", sess.Name),
+		Kind:    "session",
+		ID:      sess.Name,
+	}) {
+		return nil, false, r.ctx.Err()
+	}
+	return indexMap, false, nil
+}
+
+// restoreWindows creates (or renames) the windows for a session and returns the
+// pane-replay wait channels accumulated from the first pane of each window.
+func (r *restoreRun) restoreWindows(sess Session, indexMap map[int]int, merge bool) ([]string, error) {
+	var replayWaitChannels []string
+	var winIDs []string
+	for _, win := range sess.Windows {
+		targetIdx := indexMap[win.Index]
+		winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
+		winIDs = append(winIDs, winTarget)
+
+		if !merge && win.Index == 0 {
+			// first window of a new session is auto-created; rename it
+			if err := restoreDeps.RenameWindow(r.cfg.SocketPath, winTarget, win.Name); err != nil {
+				return nil, sendError(r.ctx, r.ch, "renaming window %s: %w", winTarget, err)
+			}
+		} else {
+			winDir := ""
+			winCmd := ""
+			if len(win.Panes) > 0 {
+				winDir = win.Panes[0].WorkingDir
+				winCmd = r.lookupPaneCmd(sess.Name, win.Index, win.Panes[0].Index)
+				if winCmd != "" {
+					replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, win.Index, win.Panes[0].Index))
+				}
+			}
+			if err := restoreDeps.CreateWindow(tmux.WindowSpec{
+				SocketPath: r.cfg.SocketPath,
+				Session:    sess.Name,
+				Index:      targetIdx,
+				Name:       win.Name,
+				Dir:        winDir,
+				Command:    winCmd,
+			}); err != nil {
+				return nil, sendError(r.ctx, r.ch, "creating window %s: %w", winTarget, err)
 			}
 		}
+	}
+	if len(winIDs) > 0 {
+		r.step += len(winIDs)
+		if !r.emit(ProgressEvent{
+			Step:    r.step,
+			Message: fmt.Sprintf("restoring windows for session %s: %s", sess.Name, strings.Join(winIDs, " ")),
+			Kind:    "window",
+		}) {
+			return nil, r.ctx.Err()
+		}
+	}
+	return replayWaitChannels, nil
+}
 
-		activeWindowIdx := 0
-		for _, win := range sess.Windows {
-			if win.Active {
-				activeWindowIdx = win.Index
+// splitPanes creates the non-first panes for each window via split-window and
+// returns the pane-replay wait channels for panes with saved content.
+func (r *restoreRun) splitPanes(sess Session, indexMap map[int]int) ([]string, error) {
+	var replayWaitChannels []string
+	var paneIDs []string
+	for _, win := range sess.Windows {
+		targetIdx := indexMap[win.Index]
+		for _, pane := range win.Panes {
+			if pane.Index == 0 {
+				continue
+			}
+			paneTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
+			paneCmd := r.lookupPaneCmd(sess.Name, win.Index, pane.Index)
+			if paneCmd != "" {
+				replayWaitChannels = append(replayWaitChannels, paneReplayWaitChannel(sess.Name, win.Index, pane.Index))
+			}
+			if err := restoreDeps.SplitPane(tmux.PaneSpec{
+				SocketPath: r.cfg.SocketPath,
+				Target:     paneTarget,
+				Dir:        pane.WorkingDir,
+				Command:    paneCmd,
+			}); err != nil {
+				return nil, sendError(r.ctx, r.ch, "splitting pane %s.%d: %w", paneTarget, pane.Index, err)
+			}
+			paneIDs = append(paneIDs, fmt.Sprintf("%s.%d", paneTarget, pane.Index))
+		}
+	}
+	if len(paneIDs) > 0 {
+		r.step += len(paneIDs)
+		if !r.emit(ProgressEvent{
+			Step:    r.step,
+			Message: fmt.Sprintf("splitting panes for session %s: %s", sess.Name, strings.Join(paneIDs, " ")),
+			Kind:    "pane",
+		}) {
+			return nil, r.ctx.Err()
+		}
+	}
+	return replayWaitChannels, nil
+}
+
+// finalizeSession applies layouts, waits for pane replays, selects active panes
+// and the active window, emits the finalize event, and records the idempotency
+// marker.
+func (r *restoreRun) finalizeSession(sess Session, indexMap map[int]int, replayWaitChannels []string) error {
+	for _, win := range sess.Windows {
+		targetIdx := indexMap[win.Index]
+		winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
+		r.step++
+		if err := restoreDeps.SelectLayoutTarget(r.cfg.SocketPath, winTarget, selectableLayout(win.Layout)); err != nil {
+			return sendError(r.ctx, r.ch, "applying layout for %s: %w", winTarget, err)
+		}
+	}
+
+	for _, channel := range replayWaitChannels {
+		if err := restoreDeps.WaitFor(r.cfg.SocketPath, channel); err != nil {
+			return sendError(r.ctx, r.ch, "waiting for pane replay %s: %w", channel, err)
+		}
+	}
+
+	for _, win := range sess.Windows {
+		targetIdx := indexMap[win.Index]
+		activePaneIdx := 0
+		for _, pane := range win.Panes {
+			if pane.Active {
+				activePaneIdx = pane.Index
 				break
 			}
 		}
-		activeWindowTarget := fmt.Sprintf("%s:%d", sess.Name, indexMap[activeWindowIdx])
-		step++
-		if err := restoreDeps.SelectWindow(cfg.SocketPath, activeWindowTarget); err != nil {
-			return sendError(ch, "selecting active window %s: %w", activeWindowTarget, err)
-		}
-
-		ch <- ProgressEvent{
-			Step:    step,
-			Total:   total,
-			Message: fmt.Sprintf("finalizing session %s...", sess.Name),
-			Kind:    "info",
-		}
-
-		// mark restored sessions so re-running the same restore is idempotent
-		markerKey := restoreMarkerKey(sess.Name)
-		if err := restoreDeps.SetSessionOption(cfg.SocketPath, sess.Name, markerKey, "1"); err != nil {
-			return sendError(ch, "setting restore marker for session %s: %w", sess.Name, err)
+		paneTarget := fmt.Sprintf("%s:%d.%d", sess.Name, targetIdx, activePaneIdx)
+		r.step++
+		if err := restoreDeps.SelectPane(r.cfg.SocketPath, paneTarget); err != nil {
+			return sendError(r.ctx, r.ch, "selecting active pane %s: %w", paneTarget, err)
 		}
 	}
 
-	// restore client session
-	step++
-	if sf.ClientSession != "" {
-		if err := restoreDeps.SwitchClient(cfg.SocketPath, cfg.ClientID, sf.ClientSession); err != nil {
-			return sendError(ch, "switching client to session %s: %w", sf.ClientSession, err)
+	activeWindowIdx := 0
+	for _, win := range sess.Windows {
+		if win.Active {
+			activeWindowIdx = win.Index
+			break
 		}
 	}
-	ch <- ProgressEvent{
-		Step:    step,
-		Total:   total,
-		Message: fmt.Sprintf("switched client to session %s %s", sf.ClientSession, greenCheck),
+	activeWindowTarget := fmt.Sprintf("%s:%d", sess.Name, indexMap[activeWindowIdx])
+	r.step++
+	if err := restoreDeps.SelectWindow(r.cfg.SocketPath, activeWindowTarget); err != nil {
+		return sendError(r.ctx, r.ch, "selecting active window %s: %w", activeWindowTarget, err)
+	}
+
+	if !r.emit(ProgressEvent{
+		Step:    r.step,
+		Message: fmt.Sprintf("finalizing session %s...", sess.Name),
 		Kind:    "info",
+	}) {
+		return r.ctx.Err()
 	}
 
-	// schedule background cleanup of extracted pane content files. the
-	// startup commands (cat "<file>"; exec <shell>) run asynchronously inside
-	// the new panes; we wait 5 seconds to give them time to read the files.
-	// if the process exits before the timer fires the temp dir persists
-	// harmlessly — the OS cleans it up eventually.
-	if contentDir != "" {
-		go func() {
-			time.Sleep(5 * time.Second)
-			_ = os.RemoveAll(contentDir)
-		}()
-	}
-
-	// done
-	ch <- ProgressEvent{
-		Step:    total,
-		Total:   total,
-		Message: fmt.Sprintf("restored %d session(s) %s", len(sf.Sessions), greenCheck),
-		Kind:    "info",
-		Done:    true,
+	// mark restored sessions so re-running the same restore is idempotent
+	markerKey := restoreMarkerKey(sess.Name)
+	if err := restoreDeps.SetSessionOption(r.cfg.SocketPath, sess.Name, markerKey, "1"); err != nil {
+		return sendError(r.ctx, r.ch, "setting restore marker for session %s: %w", sess.Name, err)
 	}
 	return nil
+}
+
+// switchClient restores the saved client session and emits the final
+// pre-done progress event.
+func (r *restoreRun) switchClient(sf *SaveFile) error {
+	r.step++
+	if sf.ClientSession != "" {
+		if err := restoreDeps.SwitchClient(r.cfg.SocketPath, r.cfg.ClientID, sf.ClientSession); err != nil {
+			return sendError(r.ctx, r.ch, "switching client to session %s: %w", sf.ClientSession, err)
+		}
+	}
+	if !r.emit(ProgressEvent{
+		Step:    r.step,
+		Message: fmt.Sprintf("switched client to session %s %s", sf.ClientSession, greenCheck),
+		Kind:    "info",
+	}) {
+		return r.ctx.Err()
+	}
+	return nil
+}
+
+// sessionStepCount returns the number of progress steps a single session
+// contributes to a restore. It is the single source of truth shared by
+// computeRestoreTotal and the skip-already-merged branch so the two can never
+// drift out of lockstep.
+//
+// Per session the steps are:
+//   - 1   create or skip the session
+//   - per window: 1 create/rename window + 1 select-layout + one per non-first pane (split-window)
+//   - per window: 1 select active pane
+//   - 1   select active window
+func sessionStepCount(sess Session) int {
+	steps := 1 // create or skip session
+	for _, win := range sess.Windows {
+		steps++ // create or rename window
+		for _, pane := range win.Panes {
+			if pane.Index != 0 {
+				steps++ // split-window
+			}
+		}
+		steps++ // select-layout
+	}
+	steps += len(sess.Windows) // select active pane per window
+	steps++                    // select active window
+	return steps
 }
 
 // computeRestoreTotal computes the total number of work units for a restore.
@@ -555,26 +651,7 @@ func runRestore(cfg Config, file string, ch chan<- ProgressEvent) error {
 func computeRestoreTotal(sf *SaveFile) int {
 	total := 0
 	for _, sess := range sf.Sessions {
-		total++ // create or skip session
-
-		for _, win := range sess.Windows {
-			total++ // create or rename window
-
-			// non-first panes (split-window)
-			for _, pane := range win.Panes {
-				if pane.Index != 0 {
-					total++
-				}
-			}
-
-			total++ // select-layout
-		}
-
-		for range sess.Windows {
-			total++ // select active pane
-		}
-
-		total++ // select active window
+		total += sessionStepCount(sess)
 	}
 
 	total++ // switch client

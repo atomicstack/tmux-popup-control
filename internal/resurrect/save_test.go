@@ -106,7 +106,7 @@ func TestSave(t *testing.T) {
 		CapturePaneContents: true,
 	}
 
-	ch := Save(cfg)
+	ch := Save(t.Context(), cfg)
 	events := collectEvents(ch)
 
 	if len(events) == 0 {
@@ -213,7 +213,7 @@ func TestSaveNoSessions(t *testing.T) {
 	defer restoreClientInfo()
 
 	cfg := Config{SaveDir: dir, CapturePaneContents: false}
-	ch := Save(cfg)
+	ch := Save(t.Context(), cfg)
 	events := collectEvents(ch)
 
 	if len(events) == 0 {
@@ -268,7 +268,7 @@ func TestSaveNormalizesWindowLayoutWithVisibleSuffix(t *testing.T) {
 	})
 	defer restoreClientInfo()
 
-	events := collectEvents(Save(Config{SaveDir: dir, Name: "layout"}))
+	events := collectEvents(Save(t.Context(), Config{SaveDir: dir, Name: "layout"}))
 	last := events[len(events)-1]
 	if !last.Done || last.Err != nil {
 		t.Fatalf("save failed: done=%v err=%v", last.Done, last.Err)
@@ -313,7 +313,7 @@ func TestSaveNoPaneContents(t *testing.T) {
 	defer restoreClientInfo()
 
 	cfg := Config{SaveDir: dir, CapturePaneContents: false}
-	ch := Save(cfg)
+	ch := Save(t.Context(), cfg)
 	events := collectEvents(ch)
 
 	last := events[len(events)-1]
@@ -382,7 +382,7 @@ func TestSaveNamedSnapshot(t *testing.T) {
 	defer restoreClientInfo()
 
 	cfg := Config{SaveDir: dir, CapturePaneContents: false, Name: "mysnap"}
-	ch := Save(cfg)
+	ch := Save(t.Context(), cfg)
 	events := collectEvents(ch)
 
 	last := events[len(events)-1]
@@ -439,7 +439,7 @@ func TestSaveCaptureError(t *testing.T) {
 	defer restoreClientInfo()
 
 	cfg := Config{SaveDir: dir, CapturePaneContents: true}
-	ch := Save(cfg)
+	ch := Save(t.Context(), cfg)
 	events := collectEvents(ch)
 
 	last := events[len(events)-1]
@@ -465,7 +465,7 @@ func TestSaveFetchSessionsError(t *testing.T) {
 	defer restoreFetchSessions()
 
 	cfg := Config{SaveDir: dir}
-	ch := Save(cfg)
+	ch := Save(t.Context(), cfg)
 	events := collectEvents(ch)
 
 	last := events[len(events)-1]
@@ -502,7 +502,7 @@ func TestSaveTimestamp(t *testing.T) {
 	defer restoreClientInfo()
 
 	cfg := Config{SaveDir: dir, CapturePaneContents: false}
-	ch := Save(cfg)
+	ch := Save(t.Context(), cfg)
 	events := collectEvents(ch)
 
 	last := events[len(events)-1]

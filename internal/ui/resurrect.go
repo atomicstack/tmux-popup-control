@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -53,9 +54,9 @@ func (m *Model) handleResurrectStartMsg(msg tea.Msg) tea.Cmd {
 	start := msg.(menu.ResurrectStart)
 	var ch <-chan resurrect.ProgressEvent
 	if start.Operation == "restore" {
-		ch = resurrect.Restore(start.Config, start.SaveFile)
+		ch = resurrect.Restore(context.Background(), start.Config, start.SaveFile)
 	} else {
-		ch = resurrect.Save(start.Config)
+		ch = resurrect.Save(context.Background(), start.Config)
 	}
 	m.resurrectState = &resurrectState{
 		operation: start.Operation,
