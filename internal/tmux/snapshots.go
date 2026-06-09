@@ -3,7 +3,6 @@ package tmux
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -99,9 +98,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 			if parts := strings.SplitN(line.displayID, ":", 2); len(parts) > 0 {
 				session = strings.TrimSpace(parts[0])
 				if len(parts) > 1 {
-					if parsed, err := strconv.Atoi(parts[1]); err == nil {
-						idx = parsed
-					}
+					idx = atoiOr0(parts[1])
 				}
 			}
 			entry := Window{
@@ -259,66 +256,17 @@ func fetchSessionsFallback(socketPath string) ([]*gotmux.Session, error) {
 	lines := strings.Split(text, "\n")
 	sessions := make([]*gotmux.Session, 0, len(lines))
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 3)
+		parts := splitTabLine(line, 3)
 		if len(parts) < 3 {
 			continue
 		}
-		windows, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
-		attached, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
 		sessions = append(sessions, &gotmux.Session{
-			Name:     strings.TrimSpace(parts[0]),
-			Windows:  windows,
-			Attached: attached,
+			Name:     parts[0],
+			Windows:  atoiOr0(parts[1]),
+			Attached: atoiOr0(parts[2]),
 		})
 	}
 	return sessions, nil
-}
-
-func fetchSessionLabels(client tmuxClient, envFormat string) map[string]string {
-	labelExpr := strings.TrimSpace(envFormat)
-	if labelExpr != "" {
-		labelExpr = fmt.Sprintf("#S: %s", labelExpr)
-	} else {
-		labelExpr = defaultSessionFormat
-	}
-	format := fmt.Sprintf("#{session_name}\t%s", labelExpr)
-	lines, err := client.ListSessionsFormat(format)
-	if err != nil {
-		return map[string]string{}
-	}
-	labels := make(map[string]string, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		namePart, labelPart, _ := strings.Cut(line, "\t")
-		name := strings.TrimSpace(namePart)
-		if name == "" {
-			continue
-		}
-		label := name
-		if trimmed := strings.TrimSpace(labelPart); trimmed != "" {
-			label = trimmed
-		}
-		labels[name] = label
-	}
-	return labels
-}
-
-func defaultLabelForSession(s *gotmux.Session) string {
-	label := fmt.Sprintf("%s: %d window", s.Name, s.Windows)
-	if s.Windows != 1 {
-		label += "s"
-	}
-	if s.Attached > 0 {
-		label += " (attached)"
-	}
-	return label
 }
 
 // realAttachedClients returns a map from session name to the names of
@@ -337,56 +285,6 @@ func realAttachedClients(client tmuxClient) map[string][]string {
 		result[c.Session] = append(result[c.Session], c.Name)
 	}
 	return result
-}
-
-// hostPaneID returns the pane ID (e.g. "%4") of the pane that was active
-// when the popup was opened. main.sh captures #{pane_id} before opening
-// display-popup and passes it as TMUX_POPUP_CONTROL_PANE_ID.
-func hostPaneID() string {
-	return strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_ID"))
-}
-
-// hostSessionID returns the session ID of the popup's host session in
-// tmux's "$N" format (e.g. "$1"). It checks TMUX_POPUP_CONTROL_SESSION_ID
-// (set by main.sh) first, then falls back to parsing the TMUX env var.
-func hostSessionID() string {
-	if id := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_SESSION_ID")); id != "" {
-		if !strings.HasPrefix(id, "$") {
-			id = "$" + id
-		}
-		return id
-	}
-	parts := strings.Split(os.Getenv("TMUX"), ",")
-	if len(parts) >= 3 {
-		if id := strings.TrimSpace(parts[2]); id != "" {
-			return "$" + id
-		}
-	}
-	return ""
-}
-
-func currentSessionName(client tmuxClient) string {
-	// Prefer the session ID — stable across renames.
-	if id := hostSessionID(); id != "" {
-		if sessions, err := client.ListSessions(); err == nil {
-			for _, s := range sessions {
-				if s.Id == id {
-					return s.Name
-				}
-			}
-		}
-	}
-	if name := popupSessionName(client); name != "" {
-		return name
-	}
-	if clients, err := client.ListClients(); err == nil {
-		for _, c := range clients {
-			if c != nil && c.Session != "" {
-				return c.Session
-			}
-		}
-	}
-	return ""
 }
 
 type windowLine struct {
@@ -414,30 +312,21 @@ func fetchWindowLines(socketPath string, client tmuxClient) ([]windowLine, error
 	}
 	labelFormat := fmt.Sprintf("#S:#{window_index}: %s", formatExpr)
 	format := fmt.Sprintf("#{window_id}\t#{session_name}:#{window_index}\t%s", labelFormat)
-	rawLines, err := client.ListWindowsFormat("", filter, format)
+	listFn := func(filter, format string) ([]string, error) {
+		return client.ListWindowsFormat("", filter, format)
+	}
+	rows, err := fetchFormattedLines(listFn, filter, format, 3, 2)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]windowLine, 0, len(rawLines))
-	for _, line := range rawLines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) < 2 {
-			continue
-		}
-		wid := strings.TrimSpace(parts[0])
-		display := strings.TrimSpace(parts[1])
+	result := make([]windowLine, 0, len(rows))
+	for _, parts := range rows {
+		display := parts[1]
 		label := display
-		if len(parts) > 2 {
-			trimmed := strings.TrimSpace(parts[2])
-			if trimmed != "" {
-				label = trimmed
-			}
+		if len(parts) > 2 && parts[2] != "" {
+			label = parts[2]
 		}
-		result = append(result, windowLine{windowID: wid, displayID: display, label: label})
+		result = append(result, windowLine{windowID: parts[0], displayID: display, label: label})
 	}
 	return result, nil
 }
@@ -461,40 +350,29 @@ func fetchPaneLines(socketPath string, client tmuxClient) ([]paneLine, error) {
 	}
 	labelFormat := fmt.Sprintf("#S:#{window_index}.#{pane_index}: %s", formatExpr)
 	format := fmt.Sprintf("#{pane_id}\t#S:#{window_index}.#{pane_index}\t%s\t#{session_name}\t#{window_name}\t#{window_index}\t#{pane_index}\t#{?pane_active&&window_active&&session_attached,1,0}", labelFormat)
-	rawLines, err := client.ListPanesFormat("", filter, format)
+	listFn := func(filter, format string) ([]string, error) {
+		return client.ListPanesFormat("", filter, format)
+	}
+	rows, err := fetchFormattedLines(listFn, filter, format, 8, 8)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]paneLine, 0, len(rawLines))
-	for _, line := range rawLines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 8)
-		if len(parts) < 8 {
-			continue
-		}
-		paneID := strings.TrimSpace(parts[0])
-		displayID := strings.TrimSpace(parts[1])
-		label := strings.TrimSpace(parts[2])
-		session := strings.TrimSpace(parts[3])
-		windowName := strings.TrimSpace(parts[4])
-		windowIndex, _ := strconv.Atoi(strings.TrimSpace(parts[5]))
-		paneIndex, _ := strconv.Atoi(strings.TrimSpace(parts[6]))
-		current := strings.TrimSpace(parts[7]) == "1"
+	result := make([]paneLine, 0, len(rows))
+	for _, parts := range rows {
+		displayID := parts[1]
+		label := parts[2]
 		if label == "" {
 			label = displayID
 		}
 		result = append(result, paneLine{
-			paneID:      paneID,
+			paneID:      parts[0],
 			displayID:   displayID,
 			label:       label,
-			session:     session,
-			windowName:  windowName,
-			windowIndex: windowIndex,
-			paneIndex:   paneIndex,
-			current:     current,
+			session:     parts[3],
+			windowName:  parts[4],
+			windowIndex: atoiOr0(parts[5]),
+			paneIndex:   atoiOr0(parts[6]),
+			current:     parts[7] == "1",
 		})
 	}
 	return result, nil

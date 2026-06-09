@@ -9,9 +9,9 @@ import (
 
 // modelDataSource adapts Model state stores to cmdparse.DataSource.
 type modelDataSource struct {
-	sessions state.SessionStore
-	windows  state.WindowStore
-	panes    state.PaneStore
+	sessions *state.SessionStore
+	windows  *state.WindowStore
+	panes    *state.PaneStore
 	schemas  map[string]*cmdparse.CommandSchema
 }
 

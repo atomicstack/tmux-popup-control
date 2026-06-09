@@ -106,15 +106,15 @@ func parsePreviewTopology(lines []string) PreviewTopology {
 }
 
 func parsePreviewTopologyLine(line string) (paneID, session string, windowIndex int, paneActive, windowActive, ok bool) {
-	parts := strings.Split(line, "\t")
+	parts := splitTabLine(line, 5)
 	if len(parts) != 5 {
 		return "", "", 0, false, false, false
 	}
-	paneID = strings.TrimSpace(parts[0])
-	session = strings.TrimSpace(parts[1])
-	windowIndex, _ = strconv.Atoi(strings.TrimSpace(parts[2]))
-	paneActive = strings.TrimSpace(parts[3]) == "1"
-	windowActive = strings.TrimSpace(parts[4]) == "1"
+	paneID = parts[0]
+	session = parts[1]
+	windowIndex = atoiOr0(parts[2])
+	paneActive = parts[3] == "1"
+	windowActive = parts[4] == "1"
 	return paneID, session, windowIndex, paneActive, windowActive, paneID != "" && session != ""
 }
 

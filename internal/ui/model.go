@@ -125,9 +125,9 @@ type Model struct {
 	socketPath         string
 	clientID           string
 	sessionName        string
-	sessions           state.SessionStore
-	windows            state.WindowStore
-	panes              state.PaneStore
+	sessions           *state.SessionStore
+	windows            *state.WindowStore
+	panes              *state.PaneStore
 	dispatcher         *dispatcher.Dispatcher
 	preview            map[string]*previewData
 	previewSeq         int

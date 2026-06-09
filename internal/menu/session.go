@@ -413,6 +413,16 @@ func SessionTreeAction(ctx Context, item Item) tea.Cmd {
 	}
 }
 
+// TODO(chunk-D3): menu.SessionEntry/WindowEntry/PaneEntry partly mirror
+// tmux.Session/Window/Pane and are converted here and in window.go/pane.go.
+// They are NOT pure 1:1 copies — each is a narrowed projection plus
+// label-synthesis (see WindowEntriesFromTmux) and slice cloning — and
+// internal/state imports internal/menu for them, so collapsing them into one
+// shared model package would invert the state->menu dependency and relocate
+// the label logic. That is a cross-cutting change deemed too risky for this
+// stabilising final chunk and is deferred by design. A safe future change:
+// introduce an internal/model package holding the entry types, move the
+// FromTmux/label-synthesis there, and have both menu and state depend on it.
 func SessionEntriesFromTmux(sessions []tmux.Session) []SessionEntry {
 	entries := make([]SessionEntry, 0, len(sessions))
 	for _, sess := range sessions {

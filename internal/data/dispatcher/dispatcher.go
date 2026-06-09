@@ -14,12 +14,12 @@ type Result struct {
 }
 
 type Dispatcher struct {
-	sessions state.SessionStore
-	windows  state.WindowStore
-	panes    state.PaneStore
+	sessions *state.SessionStore
+	windows  *state.WindowStore
+	panes    *state.PaneStore
 }
 
-func New(s state.SessionStore, w state.WindowStore, p state.PaneStore) *Dispatcher {
+func New(s *state.SessionStore, w *state.WindowStore, p *state.PaneStore) *Dispatcher {
 	return &Dispatcher{sessions: s, windows: w, panes: p}
 }
 

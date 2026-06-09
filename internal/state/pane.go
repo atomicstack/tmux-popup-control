@@ -1,71 +1,51 @@
 package state
 
 import (
-	"sync"
+	"slices"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 )
 
-type PaneStore interface {
-	Entries() []menu.PaneEntry
-	SetEntries([]menu.PaneEntry)
-	CurrentID() string
-	CurrentLabel() string
-	IncludeCurrent() bool
-	SetCurrent(id, label string)
-	SetIncludeCurrent(bool)
-}
-
-type paneStore struct {
-	mu             sync.RWMutex
-	entries        []menu.PaneEntry
+type PaneStore struct {
+	entryStore[menu.PaneEntry]
 	currentID      string
 	currentLabel   string
 	includeCurrent bool
 }
 
-func NewPaneStore() PaneStore {
-	return &paneStore{includeCurrent: true}
+func NewPaneStore() *PaneStore {
+	return &PaneStore{
+		entryStore:     entryStore[menu.PaneEntry]{clone: clonePaneEntries},
+		includeCurrent: true,
+	}
 }
 
-func (p *paneStore) Entries() []menu.PaneEntry {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return clonePaneEntries(p.entries)
-}
-
-func (p *paneStore) SetEntries(entries []menu.PaneEntry) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.entries = clonePaneEntries(entries)
-}
-
-func (p *paneStore) CurrentID() string {
+func (p *PaneStore) CurrentID() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.currentID
 }
 
-func (p *paneStore) CurrentLabel() string {
+func (p *PaneStore) CurrentLabel() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.currentLabel
 }
 
-func (p *paneStore) IncludeCurrent() bool {
+func (p *PaneStore) IncludeCurrent() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.includeCurrent
 }
 
-func (p *paneStore) SetCurrent(id, label string) {
+func (p *PaneStore) SetCurrent(id, label string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.currentID = id
 	p.currentLabel = label
 }
 
-func (p *paneStore) SetIncludeCurrent(include bool) {
+func (p *PaneStore) SetIncludeCurrent(include bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.includeCurrent = include
@@ -75,7 +55,5 @@ func clonePaneEntries(entries []menu.PaneEntry) []menu.PaneEntry {
 	if len(entries) == 0 {
 		return nil
 	}
-	dup := make([]menu.PaneEntry, len(entries))
-	copy(dup, entries)
-	return dup
+	return slices.Clone(entries)
 }

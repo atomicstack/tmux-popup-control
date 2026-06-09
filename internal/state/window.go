@@ -1,66 +1,45 @@
 package state
 
 import (
-	"sync"
+	"slices"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 )
 
-type WindowStore interface {
-	Entries() []menu.WindowEntry
-	SetEntries([]menu.WindowEntry)
-	CurrentID() string
-	CurrentLabel() string
-	CurrentSession() string
-	SetCurrent(id, label, session string)
-	IncludeCurrent() bool
-	SetIncludeCurrent(bool)
-}
-
-type windowStore struct {
-	mu             sync.RWMutex
-	entries        []menu.WindowEntry
+type WindowStore struct {
+	entryStore[menu.WindowEntry]
 	currentID      string
 	currentLabel   string
 	currentSession string
 	includeCurrent bool
 }
 
-func NewWindowStore() WindowStore {
-	return &windowStore{includeCurrent: true}
+func NewWindowStore() *WindowStore {
+	return &WindowStore{
+		entryStore:     entryStore[menu.WindowEntry]{clone: cloneWindowEntries},
+		includeCurrent: true,
+	}
 }
 
-func (w *windowStore) Entries() []menu.WindowEntry {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return cloneWindowEntries(w.entries)
-}
-
-func (w *windowStore) SetEntries(entries []menu.WindowEntry) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.entries = cloneWindowEntries(entries)
-}
-
-func (w *windowStore) CurrentID() string {
+func (w *WindowStore) CurrentID() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.currentID
 }
 
-func (w *windowStore) CurrentLabel() string {
+func (w *WindowStore) CurrentLabel() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.currentLabel
 }
 
-func (w *windowStore) CurrentSession() string {
+func (w *WindowStore) CurrentSession() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.currentSession
 }
 
-func (w *windowStore) SetCurrent(id, label, session string) {
+func (w *WindowStore) SetCurrent(id, label, session string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.currentID = id
@@ -68,13 +47,13 @@ func (w *windowStore) SetCurrent(id, label, session string) {
 	w.currentSession = session
 }
 
-func (w *windowStore) IncludeCurrent() bool {
+func (w *WindowStore) IncludeCurrent() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return w.includeCurrent
 }
 
-func (w *windowStore) SetIncludeCurrent(include bool) {
+func (w *WindowStore) SetIncludeCurrent(include bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.includeCurrent = include
@@ -84,7 +63,5 @@ func cloneWindowEntries(entries []menu.WindowEntry) []menu.WindowEntry {
 	if len(entries) == 0 {
 		return nil
 	}
-	dup := make([]menu.WindowEntry, len(entries))
-	copy(dup, entries)
-	return dup
+	return slices.Clone(entries)
 }
