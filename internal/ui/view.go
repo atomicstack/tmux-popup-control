@@ -150,6 +150,62 @@ func (m *Model) View() (view tea.View) {
 	return v
 }
 
+// renderMenuLines renders the menu item region for a level into styledLines,
+// targeting the given column width. It clamps and slices the viewport (mutating
+// current.ViewportOffset to match, exactly as the inline View() code did), emits
+// the empty/"no matches" message, the tree-level view, or the scrollbar +
+// buildItemLine loop. width is used both for the tree view and item lines and to
+// reserve a column for the scrollbar when present.
+func (m *Model) renderMenuLines(current *level, width int) []styledLine {
+	m.syncViewport(current)
+	lines := make([]styledLine, 0, 16)
+	start := 0
+	displayItems := current.Items
+	if maxItems := m.maxVisibleItems(); maxItems > 0 && len(displayItems) > maxItems {
+		start = current.ViewportOffset
+		start = max(start, 0)
+		if start+maxItems > len(displayItems) {
+			start = len(displayItems) - maxItems
+			start = max(start, 0)
+			current.ViewportOffset = start
+		}
+		displayItems = displayItems[start : start+maxItems]
+	}
+	if len(current.Items) == 0 {
+		msg := "(no entries)"
+		if current.Filter != "" {
+			msg = fmt.Sprintf("No matches for %q", current.Filter)
+		}
+		lines = append(lines, styledLine{text: msg, style: styles.Info})
+	} else if isTreeLevel(current.ID) {
+		ts, _ := current.Data.(*menu.TreeState)
+		lines = append(lines, m.renderTreeView(treeRenderOptions{
+			LevelID:        current.ID,
+			Items:          current.Items,
+			State:          ts,
+			CursorIdx:      current.Cursor,
+			Width:          width,
+			ViewportOffset: current.ViewportOffset,
+			MaxVisible:     m.maxVisibleItems(),
+		})...)
+	} else {
+		scrollCells := renderScrollbar(len(current.Items), len(displayItems), start)
+		itemWidth := width
+		if scrollCells != nil && itemWidth > 0 {
+			itemWidth = width - 1
+		}
+		for i, item := range displayItems {
+			idx := start + i
+			line := m.buildItemLine(item, idx, current, itemWidth)
+			if scrollCells != nil {
+				line.suffix = scrollbarStyle.Render(string(scrollCells[i]))
+			}
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
 // viewVertical is the standard single-column layout with an optional inline
 // preview block below the menu items (used when the terminal is too narrow for
 // side-by-side, or on non-preview menu levels). It returns the rendered
@@ -165,51 +221,7 @@ func (m *Model) viewVertical(header string) (string, int) {
 		lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
 	}
 	if current := m.currentLevel(); current != nil {
-		m.syncViewport(current)
-		start := 0
-		displayItems := current.Items
-		if maxItems := m.maxVisibleItems(); maxItems > 0 && len(displayItems) > maxItems {
-			start = current.ViewportOffset
-			start = max(start, 0)
-			if start+maxItems > len(displayItems) {
-				start = len(displayItems) - maxItems
-				start = max(start, 0)
-				current.ViewportOffset = start
-			}
-			displayItems = displayItems[start : start+maxItems]
-		}
-		if len(current.Items) == 0 {
-			msg := "(no entries)"
-			if current.Filter != "" {
-				msg = fmt.Sprintf("No matches for %q", current.Filter)
-			}
-			lines = append(lines, styledLine{text: msg, style: styles.Info})
-		} else if isTreeLevel(current.ID) {
-			ts, _ := current.Data.(*menu.TreeState)
-			lines = append(lines, m.renderTreeView(treeRenderOptions{
-				LevelID:        current.ID,
-				Items:          current.Items,
-				State:          ts,
-				CursorIdx:      current.Cursor,
-				Width:          m.width,
-				ViewportOffset: current.ViewportOffset,
-				MaxVisible:     m.maxVisibleItems(),
-			})...)
-		} else {
-			scrollCells := renderScrollbar(len(current.Items), len(displayItems), start)
-			itemWidth := m.width
-			if scrollCells != nil && itemWidth > 0 {
-				itemWidth = m.width - 1
-			}
-			for i, item := range displayItems {
-				idx := start + i
-				line := m.buildItemLine(item, idx, current, itemWidth)
-				if scrollCells != nil {
-					line.suffix = scrollbarStyle.Render(string(scrollCells[i]))
-				}
-				lines = append(lines, line)
-			}
-		}
+		lines = append(lines, m.renderMenuLines(current, m.width)...)
 	}
 	if preview := m.activePreview(); !m.noPreview && shouldRenderPreview(preview) {
 		lines = append(lines, styledLine{})
@@ -277,51 +289,7 @@ func (m *Model) viewSideBySide(header string) (string, int) {
 		contentLines = append(contentLines, styledLine{text: header, style: styles.Header})
 	}
 	if current := m.currentLevel(); current != nil {
-		m.syncViewport(current)
-		start := 0
-		displayItems := current.Items
-		if maxItems := m.maxVisibleItems(); maxItems > 0 && len(displayItems) > maxItems {
-			start = current.ViewportOffset
-			start = max(start, 0)
-			if start+maxItems > len(displayItems) {
-				start = len(displayItems) - maxItems
-				start = max(start, 0)
-				current.ViewportOffset = start
-			}
-			displayItems = displayItems[start : start+maxItems]
-		}
-		if len(current.Items) == 0 {
-			msg := "(no entries)"
-			if current.Filter != "" {
-				msg = fmt.Sprintf("No matches for %q", current.Filter)
-			}
-			contentLines = append(contentLines, styledLine{text: msg, style: styles.Info})
-		} else if isTreeLevel(current.ID) {
-			ts, _ := current.Data.(*menu.TreeState)
-			contentLines = append(contentLines, m.renderTreeView(treeRenderOptions{
-				LevelID:        current.ID,
-				Items:          current.Items,
-				State:          ts,
-				CursorIdx:      current.Cursor,
-				Width:          menuW,
-				ViewportOffset: current.ViewportOffset,
-				MaxVisible:     m.maxVisibleItems(),
-			})...)
-		} else {
-			scrollCells := renderScrollbar(len(current.Items), len(displayItems), start)
-			itemWidth := menuW
-			if scrollCells != nil && itemWidth > 0 {
-				itemWidth = menuW - 1
-			}
-			for i, item := range displayItems {
-				idx := start + i
-				line := m.buildItemLine(item, idx, current, itemWidth)
-				if scrollCells != nil {
-					line.suffix = scrollbarStyle.Render(string(scrollCells[i]))
-				}
-				contentLines = append(contentLines, line)
-			}
-		}
+		contentLines = append(contentLines, m.renderMenuLines(current, menuW)...)
 	}
 	if info := m.currentInfo(); info != "" {
 		contentLines = append(contentLines, styledLine{})

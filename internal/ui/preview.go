@@ -77,6 +77,35 @@ type layoutAppliedMsg struct {
 	err     error
 }
 
+// capturePaneCmd returns a tea.Cmd that captures paneID via panePreviewFn and
+// emits a previewLoadedMsg tagged with levelID/kind/target/seq. panePreviewFn is
+// an injectable package var, so tests still intercept the capture here.
+func capturePaneCmd(levelID string, kind previewKind, target, paneID string, seq int, socket string) tea.Cmd {
+	return func() tea.Msg {
+		preview, err := panePreviewFn(socket, paneID)
+		return previewLoadedMsg{
+			levelID:       levelID,
+			kind:          kind,
+			target:        target,
+			seq:           seq,
+			lines:         preview.Lines,
+			err:           err,
+			rawANSI:       preview.RawANSI,
+			cursorVisible: preview.CursorVisible,
+			cursorX:       preview.CursorX,
+			cursorY:       preview.CursorY,
+		}
+	}
+}
+
+// staticLinesCmd returns a tea.Cmd that emits a previewLoadedMsg carrying
+// pre-computed static lines (the fallback when no live pane is available).
+func staticLinesCmd(levelID string, kind previewKind, target string, seq int, lines []string) tea.Cmd {
+	return func() tea.Msg {
+		return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines}
+	}
+}
+
 func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	if level == nil {
 		return nil
@@ -153,67 +182,19 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	case previewKindTree:
 		return m.treePreviewCmd(levelID, target, seq, socket)
 	case previewKindPane:
-		return func() tea.Msg {
-			preview, err := panePreviewFn(socket, target)
-			return previewLoadedMsg{
-				levelID:       levelID,
-				kind:          kind,
-				target:        target,
-				seq:           seq,
-				lines:         preview.Lines,
-				err:           err,
-				rawANSI:       preview.RawANSI,
-				cursorVisible: preview.CursorVisible,
-				cursorX:       preview.CursorX,
-				cursorY:       preview.CursorY,
-			}
-		}
+		return capturePaneCmd(levelID, kind, target, target, seq, socket)
 	case previewKindSession:
 		paneID := m.previewPaneIDForSession(level, target)
 		if paneID == "" {
-			lines := m.sessionPreviewLines(target)
-			return func() tea.Msg {
-				return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines}
-			}
+			return staticLinesCmd(levelID, kind, target, seq, m.sessionPreviewLines(target))
 		}
-		return func() tea.Msg {
-			preview, err := panePreviewFn(socket, paneID)
-			return previewLoadedMsg{
-				levelID:       levelID,
-				kind:          kind,
-				target:        target,
-				seq:           seq,
-				lines:         preview.Lines,
-				err:           err,
-				rawANSI:       preview.RawANSI,
-				cursorVisible: preview.CursorVisible,
-				cursorX:       preview.CursorX,
-				cursorY:       preview.CursorY,
-			}
-		}
+		return capturePaneCmd(levelID, kind, target, paneID, seq, socket)
 	case previewKindWindow:
 		paneID := m.previewPaneIDForWindow(level, target)
 		if paneID == "" {
-			lines := m.windowPreviewLines(target)
-			return func() tea.Msg {
-				return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: lines}
-			}
+			return staticLinesCmd(levelID, kind, target, seq, m.windowPreviewLines(target))
 		}
-		return func() tea.Msg {
-			preview, err := panePreviewFn(socket, paneID)
-			return previewLoadedMsg{
-				levelID:       levelID,
-				kind:          kind,
-				target:        target,
-				seq:           seq,
-				lines:         preview.Lines,
-				err:           err,
-				rawANSI:       preview.RawANSI,
-				cursorVisible: preview.CursorVisible,
-				cursorX:       preview.CursorX,
-				cursorY:       preview.CursorY,
-			}
-		}
+		return capturePaneCmd(levelID, kind, target, paneID, seq, socket)
 	case previewKindLayout:
 		// Save original layout on first visit.
 		if level.Data == nil {
@@ -360,21 +341,7 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 			return nil
 		}
 		paneTarget := parts[2] // display ID like "test00:0.0"
-		return func() tea.Msg {
-			preview, err := panePreviewFn(socket, paneTarget)
-			return previewLoadedMsg{
-				levelID:       levelID,
-				kind:          previewKindPane,
-				target:        target,
-				seq:           seq,
-				lines:         preview.Lines,
-				err:           err,
-				rawANSI:       preview.RawANSI,
-				cursorVisible: preview.CursorVisible,
-				cursorX:       preview.CursorX,
-				cursorY:       preview.CursorY,
-			}
-		}
+		return capturePaneCmd(levelID, previewKindPane, target, paneTarget, seq, socket)
 	case "window":
 		// tree:w:session:windowIndex
 		session, windowIdx, ok := strings.Cut(strings.TrimPrefix(target, menu.TreePrefixWindow), ":")
@@ -384,50 +351,16 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 		windowTarget := session + ":" + windowIdx
 		paneID := m.previewPaneIDForWindow(level, windowTarget)
 		if paneID == "" {
-			lines := m.windowPreviewLines(windowTarget)
-			return func() tea.Msg {
-				return previewLoadedMsg{levelID: levelID, kind: previewKindWindow, target: target, seq: seq, lines: lines}
-			}
+			return staticLinesCmd(levelID, previewKindWindow, target, seq, m.windowPreviewLines(windowTarget))
 		}
-		return func() tea.Msg {
-			preview, err := panePreviewFn(socket, paneID)
-			return previewLoadedMsg{
-				levelID:       levelID,
-				kind:          previewKindWindow,
-				target:        target,
-				seq:           seq,
-				lines:         preview.Lines,
-				err:           err,
-				rawANSI:       preview.RawANSI,
-				cursorVisible: preview.CursorVisible,
-				cursorX:       preview.CursorX,
-				cursorY:       preview.CursorY,
-			}
-		}
+		return capturePaneCmd(levelID, previewKindWindow, target, paneID, seq, socket)
 	case "session":
 		session := strings.TrimPrefix(target, menu.TreePrefixSession)
 		paneID := m.previewPaneIDForSession(level, session)
 		if paneID == "" {
-			lines := m.sessionPreviewLines(session)
-			return func() tea.Msg {
-				return previewLoadedMsg{levelID: levelID, kind: previewKindSession, target: target, seq: seq, lines: lines}
-			}
+			return staticLinesCmd(levelID, previewKindSession, target, seq, m.sessionPreviewLines(session))
 		}
-		return func() tea.Msg {
-			preview, err := panePreviewFn(socket, paneID)
-			return previewLoadedMsg{
-				levelID:       levelID,
-				kind:          previewKindSession,
-				target:        target,
-				seq:           seq,
-				lines:         preview.Lines,
-				err:           err,
-				rawANSI:       preview.RawANSI,
-				cursorVisible: preview.CursorVisible,
-				cursorX:       preview.CursorX,
-				cursorY:       preview.CursorY,
-			}
-		}
+		return capturePaneCmd(levelID, previewKindSession, target, paneID, seq, socket)
 	default:
 		return nil
 	}

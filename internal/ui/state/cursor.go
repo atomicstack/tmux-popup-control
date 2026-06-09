@@ -1,5 +1,45 @@
 package state
 
+// MoveCursorUp moves the cursor to the previous selectable item, wrapping to
+// the end and skipping headers. Returns whether the cursor moved.
+func (l *Level) MoveCursorUp() bool {
+	n := len(l.Items)
+	if n == 0 {
+		return false
+	}
+	old := l.Cursor
+	if l.Cursor > 0 {
+		l.Cursor--
+		l.SkipHeaders(-1)
+		if l.Cursor == old {
+			// couldn't move up (hit headers); wrap to end
+			l.Cursor = n - 1
+			l.SkipHeaders(-1)
+		}
+	} else {
+		l.Cursor = n - 1
+		l.SkipHeaders(-1)
+	}
+	return old != l.Cursor
+}
+
+// MoveCursorDown moves the cursor to the next selectable item, wrapping to the
+// start and skipping headers. Returns whether the cursor moved.
+func (l *Level) MoveCursorDown() bool {
+	n := len(l.Items)
+	if n == 0 {
+		return false
+	}
+	old := l.Cursor
+	if l.Cursor < n-1 {
+		l.Cursor++
+	} else {
+		l.Cursor = 0
+	}
+	l.SkipHeaders(1)
+	return old != l.Cursor
+}
+
 // MoveCursorHome moves the cursor to the first selectable item.
 func (l *Level) MoveCursorHome() bool {
 	if len(l.Items) == 0 {

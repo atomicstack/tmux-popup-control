@@ -47,6 +47,22 @@ func (l *Level) ToggleCurrentSelection() {
 	l.ToggleSelection(l.Items[l.Cursor].ID)
 }
 
+// SelectAll marks every current item as selected.
+func (l *Level) SelectAll() {
+	if l.Selected == nil {
+		l.Selected = make(map[string]struct{})
+	}
+	for _, item := range l.Items {
+		l.Selected[item.ID] = struct{}{}
+	}
+}
+
+// ClearAll clears all selected items. Alias of ClearSelection for symmetry with
+// SelectAll.
+func (l *Level) ClearAll() {
+	l.ClearSelection()
+}
+
 // ClearSelection clears all selected items.
 func (l *Level) ClearSelection() {
 	if len(l.Selected) == 0 {

@@ -196,110 +196,51 @@ func (m *Model) handleEnterKey() tea.Cmd {
 	return nil
 }
 
-func (m *Model) moveCursorUp() bool {
+// moveCursor runs the supplied Level cursor-movement function against the
+// current level, emitting the cursor event and syncing the viewport when the
+// cursor moves. When the cursor does not move, the viewport is re-synced only if
+// syncOnNoMove is set (the Home/End/Page handlers do; Up/Down do not). Returns
+// whether the cursor moved.
+func (m *Model) moveCursor(move func(*level) bool, syncOnNoMove bool) bool {
 	current := m.currentLevel()
 	if current == nil {
 		return false
 	}
-	if n := len(current.Items); n > 0 {
-		old := current.Cursor
-		if current.Cursor > 0 {
-			current.Cursor--
-			current.SkipHeaders(-1)
-			if current.Cursor == old {
-				// couldn't move up (hit headers); wrap to end
-				current.Cursor = n - 1
-				current.SkipHeaders(-1)
-			}
-		} else {
-			current.Cursor = n - 1
-			current.SkipHeaders(-1)
-		}
-		if old != current.Cursor {
-			events.UI.MenuCursor(current.ID, current.Cursor)
-			m.syncViewport(current)
-			return true
-		}
+	if move(current) {
+		events.UI.MenuCursor(current.ID, current.Cursor)
+		m.syncViewport(current)
+		return true
+	}
+	if syncOnNoMove {
+		m.syncViewport(current)
 	}
 	return false
+}
+
+func (m *Model) moveCursorUp() bool {
+	return m.moveCursor(func(l *level) bool { return l.MoveCursorUp() }, false)
 }
 
 func (m *Model) moveCursorDown() bool {
-	current := m.currentLevel()
-	if current == nil {
-		return false
-	}
-	if n := len(current.Items); n > 0 {
-		old := current.Cursor
-		if current.Cursor < n-1 {
-			current.Cursor++
-		} else {
-			current.Cursor = 0
-		}
-		current.SkipHeaders(1)
-		if old != current.Cursor {
-			events.UI.MenuCursor(current.ID, current.Cursor)
-			m.syncViewport(current)
-			return true
-		}
-	}
-	return false
+	return m.moveCursor(func(l *level) bool { return l.MoveCursorDown() }, false)
 }
 
 func (m *Model) moveCursorPageUp() bool {
-	current := m.currentLevel()
-	if current == nil {
-		return false
-	}
-	if moved := current.MoveCursorPageUp(m.maxVisibleItems()); moved {
-		events.UI.MenuCursor(current.ID, current.Cursor)
-		m.syncViewport(current)
-		return true
-	}
-	m.syncViewport(current)
-	return false
+	maxVisible := m.maxVisibleItems()
+	return m.moveCursor(func(l *level) bool { return l.MoveCursorPageUp(maxVisible) }, true)
 }
 
 func (m *Model) moveCursorPageDown() bool {
-	current := m.currentLevel()
-	if current == nil {
-		return false
-	}
-	if moved := current.MoveCursorPageDown(m.maxVisibleItems()); moved {
-		events.UI.MenuCursor(current.ID, current.Cursor)
-		m.syncViewport(current)
-		return true
-	}
-	m.syncViewport(current)
-	return false
+	maxVisible := m.maxVisibleItems()
+	return m.moveCursor(func(l *level) bool { return l.MoveCursorPageDown(maxVisible) }, true)
 }
 
 func (m *Model) moveCursorHome() bool {
-	current := m.currentLevel()
-	if current == nil {
-		return false
-	}
-	if moved := current.MoveCursorHome(); moved {
-		events.UI.MenuCursor(current.ID, current.Cursor)
-		m.syncViewport(current)
-		return true
-	}
-	m.syncViewport(current)
-	return false
+	return m.moveCursor(func(l *level) bool { return l.MoveCursorHome() }, true)
 }
 
 func (m *Model) moveCursorEnd() bool {
-	current := m.currentLevel()
-	if current == nil {
-		return false
-	}
-	if moved := current.MoveCursorEnd(); moved {
-		events.UI.MenuCursor(current.ID, current.Cursor)
-		m.syncViewport(current)
-		return true
-	}
-	m.syncViewport(current)
-	return false
+	return m.moveCursor(func(l *level) bool { return l.MoveCursorEnd() }, true)
 }
 
 func (m *Model) syncViewport(l *level) {
@@ -368,13 +309,9 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 					item := current.Items[current.Cursor]
 					if item.ID == menu.AllPluginsSentinel {
 						if current.IsSelected(item.ID) {
-							for _, it := range current.Items {
-								if !current.IsSelected(it.ID) {
-									current.ToggleSelection(it.ID)
-								}
-							}
+							current.SelectAll()
 						} else {
-							current.ClearSelection()
+							current.ClearAll()
 						}
 					} else if !current.IsSelected(item.ID) && current.IsSelected(menu.AllPluginsSentinel) {
 						current.ToggleSelection(menu.AllPluginsSentinel)

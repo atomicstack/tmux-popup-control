@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -106,30 +105,14 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 		exactFilled = float64(barWidth) * s.displayStep / float64(s.total)
 		exactFilled = min(exactFilled, float64(barWidth))
 	}
-	wholeFilled := int(exactFilled)
-	frac := exactFilled - float64(wholeFilled)
 
 	// gradient colours (colour 33 = #0087ff)
 	// save:    white #ffffff → blue #0087ff
 	// restore: blue #0087ff → white #ffffff
-	type rgb struct{ r, g, b uint8 }
-	var startColor, endColor rgb
+	startColor := lipgloss.Color("#ffffff")
+	endColor := lipgloss.Color("#0087ff")
 	if s.operation == "restore" {
-		startColor = rgb{0x00, 0x87, 0xff}
-		endColor = rgb{0xff, 0xff, 0xff}
-	} else {
-		startColor = rgb{0xff, 0xff, 0xff}
-		endColor = rgb{0x00, 0x87, 0xff}
-	}
-	colorAt := func(i int) string {
-		if barWidth <= 1 {
-			return fmt.Sprintf("#%02x%02x%02x", startColor.r, startColor.g, startColor.b)
-		}
-		t := float64(i) / float64(barWidth-1)
-		r := uint8(float64(startColor.r) + t*float64(int(endColor.r)-int(startColor.r)))
-		g := uint8(float64(startColor.g) + t*float64(int(endColor.g)-int(startColor.g)))
-		bv := uint8(float64(startColor.b) + t*float64(int(endColor.b)-int(startColor.b)))
-		return fmt.Sprintf("#%02x%02x%02x", r, g, bv)
+		startColor, endColor = endColor, startColor
 	}
 
 	// background style for unfilled cells
@@ -138,24 +121,7 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 		bgStyle = *styles.ProgressEmptyBg
 	}
 
-	// 1/8th block characters for sub-cell edge
-	eighths := []string{" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
-
-	var bar strings.Builder
-	for i := range wholeFilled {
-		bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(i))).Render("█"))
-	}
-	if wholeFilled < barWidth {
-		idx := min(int(math.Round(frac*8)), 7)
-		if idx > 0 {
-			bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(wholeFilled))).Inherit(bgStyle).Render(eighths[idx]))
-		} else {
-			bar.WriteString(bgStyle.Render(" "))
-		}
-		if barWidth-wholeFilled-1 > 0 {
-			bar.WriteString(bgStyle.Render(strings.Repeat(" ", barWidth-wholeFilled-1)))
-		}
-	}
+	bar := renderGradientBar(barWidth, exactFilled, startColor, endColor, bgStyle)
 
 	// counter: step in #0087ff, "/" dim, total in #777777
 	stepStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#0087ff")).Render(fmt.Sprintf("%d", s.step))
@@ -163,5 +129,5 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	totalStr := lipgloss.NewStyle().Foreground(lipgloss.Color("#777777")).Render(fmt.Sprintf("%d", s.total))
 	counter := " " + stepStr + sep + totalStr
 
-	return bar.String() + counter
+	return bar + counter
 }

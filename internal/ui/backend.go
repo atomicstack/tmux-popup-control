@@ -47,6 +47,85 @@ func (m *Model) handleBackendDoneMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// levelUpdate pairs a menu level ID with the function that produces its items
+// from a menu.Context. Used to table-drive the find-update-sync cases in
+// applyBackendEvent; an ordered slice keeps side-effect determinism (cursor /
+// viewport sync order matters).
+type levelUpdate struct {
+	id      string
+	itemsFn func(menu.Context) []menu.Item
+}
+
+// applySimpleLevelUpdates runs the standard find-update-sync sequence for each
+// update whose level is currently present in the stack.
+func (m *Model) applySimpleLevelUpdates(ctx menu.Context, updates []levelUpdate) {
+	for _, u := range updates {
+		if lvl := m.findLevelByID(u.id); lvl != nil {
+			lvl.UpdateItems(u.itemsFn(ctx))
+			m.syncViewport(lvl)
+		}
+	}
+}
+
+// rebuildPullTree re-populates and rebuilds the window:pull-from-session tree
+// level, if present.
+func (m *Model) rebuildPullTree() {
+	lvl := m.findLevelByID("window:pull-from-session")
+	if lvl == nil {
+		return
+	}
+	m.populatePullTreeData()
+	if ts, ok := lvl.Data.(*menu.TreeState); ok && ts != nil {
+		m.rebuildTreeItems(lvl, ts)
+	}
+}
+
+// applyDeferredSessionRename handles a pending session:rename triggered via
+// direct invocation, once session data has arrived. Returns a focus command to
+// batch into the caller's previewCmd, or nil.
+func (m *Model) applyDeferredSessionRename(ctx menu.Context) tea.Cmd {
+	if m.deferredRename == nil || m.deferredRename.ID != "session:rename" {
+		return nil
+	}
+	m.deferredRename = nil
+	target := strings.TrimSpace(m.menuArgs)
+	return m.withPrompt(func() promptResult {
+		return promptResult{Cmd: m.startSessionForm(menu.SessionPrompt{
+			Context: ctx,
+			Action:  "session:rename",
+			Target:  target,
+			Initial: target,
+		})}
+	})
+}
+
+// applyDeferredWindowRename handles a pending window:rename triggered via direct
+// invocation, once window data has arrived. Returns a focus command to batch
+// into the caller's previewCmd, or nil.
+func (m *Model) applyDeferredWindowRename(ctx menu.Context) tea.Cmd {
+	if m.deferredRename == nil || m.deferredRename.ID != "window:rename" {
+		return nil
+	}
+	m.deferredRename = nil
+	target := strings.TrimSpace(m.menuArgs)
+	initial := target
+	for _, entry := range ctx.Windows {
+		if entry.ID == target {
+			if entry.Name != "" {
+				initial = entry.Name
+			}
+			break
+		}
+	}
+	return m.withPrompt(func() promptResult {
+		return promptResult{Cmd: m.startWindowForm(menu.WindowPrompt{
+			Context: ctx,
+			Target:  target,
+			Initial: initial,
+		})}
+	})
+}
+
 func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 	if m.backendState == nil {
 		m.backendState = make(map[backend.Kind]error)
@@ -65,57 +144,24 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 
 	if res.SessionsUpdated {
 		if lvl := m.findLevelByID("session:switch"); lvl != nil {
-			items := sessionSwitchItems(ctx)
-			lvl.UpdateItems(items)
+			lvl.UpdateItems(sessionSwitchItems(ctx))
 			if len(lvl.Items) > 0 {
 				m.clearInfo()
 			}
 			m.syncViewport(lvl)
 		}
-		if lvl := m.findLevelByID("session:rename"); lvl != nil {
-			lvl.UpdateItems(menu.SessionRenameItems(ctx.Sessions))
-			m.syncViewport(lvl)
-		}
-		base := menu.SessionEntriesToItems(ctx.Sessions)
-		for _, id := range []string{"session:detach", "session:kill"} {
-			if lvl := m.findLevelByID(id); lvl != nil {
-				lvl.UpdateItems(base)
-				m.syncViewport(lvl)
-			}
-		}
-		if lvl := m.findLevelByID("window:push-to-session"); lvl != nil {
-			items := make([]menu.Item, 0, len(ctx.Sessions))
-			for _, entry := range ctx.Sessions {
-				if entry.Name == ctx.CurrentWindowSession {
-					continue
-				}
-				items = append(items, menu.Item{ID: entry.Name, Label: entry.Label})
-			}
-			lvl.UpdateItems(items)
-			m.syncViewport(lvl)
-		}
-		if lvl := m.findLevelByID("window:pull-from-session"); lvl != nil {
-			m.populatePullTreeData()
-			if ts, ok := lvl.Data.(*menu.TreeState); ok && ts != nil {
-				m.rebuildTreeItems(lvl, ts)
-			}
-		}
+		m.applySimpleLevelUpdates(ctx, []levelUpdate{
+			{"session:rename", func(c menu.Context) []menu.Item { return menu.SessionRenameItems(c.Sessions) }},
+			{"session:detach", func(c menu.Context) []menu.Item { return menu.SessionEntriesToItems(c.Sessions) }},
+			{"session:kill", func(c menu.Context) []menu.Item { return menu.SessionEntriesToItems(c.Sessions) }},
+			{"window:push-to-session", windowPushToSessionItems},
+		})
+		m.rebuildPullTree()
 		if m.sessionForm != nil {
 			m.sessionForm.SetSessions(ctx.Sessions)
 		}
-		if m.deferredRename != nil && m.deferredRename.ID == "session:rename" {
-			m.deferredRename = nil
-			target := strings.TrimSpace(m.menuArgs)
-			if focusCmd := m.withPrompt(func() promptResult {
-				return promptResult{Cmd: m.startSessionForm(menu.SessionPrompt{
-					Context: ctx,
-					Action:  "session:rename",
-					Target:  target,
-					Initial: target,
-				})}
-			}); focusCmd != nil {
-				previewCmd = tea.Batch(previewCmd, focusCmd)
-			}
+		if focusCmd := m.applyDeferredSessionRename(ctx); focusCmd != nil {
+			previewCmd = tea.Batch(previewCmd, focusCmd)
 		}
 		if currentLvl != nil && currentLvl.ID == "session:switch" {
 			previewCmd = m.refreshPreviewForLevel(currentLvl)
@@ -124,54 +170,20 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 
 	if res.WindowsUpdated {
 		m.pendingWindowSwap = nil
-		if lvl := m.findLevelByID("window:switch"); lvl != nil {
-			lvl.UpdateItems(menu.WindowSwitchItems(ctx))
-			m.syncViewport(lvl)
-		}
-		if lvl := m.findLevelByID("window:pull-from-session"); lvl != nil {
-			m.populatePullTreeData()
-			if ts, ok := lvl.Data.(*menu.TreeState); ok && ts != nil {
-				m.rebuildTreeItems(lvl, ts)
-			}
-		}
-		if lvl := m.findLevelByID("window:swap"); lvl != nil {
-			items := menu.WindowEntriesToItems(ctx.Windows)
-			if currentItem, ok := currentWindowMenuItem(ctx); ok {
-				items = append([]menu.Item{currentItem}, items...)
-			}
-			lvl.UpdateItems(items)
-			m.syncViewport(lvl)
-		}
+		m.applySimpleLevelUpdates(ctx, []levelUpdate{
+			{"window:switch", menu.WindowSwitchItems},
+		})
+		m.rebuildPullTree()
+		m.applySimpleLevelUpdates(ctx, []levelUpdate{
+			{"window:swap", windowSwapItems},
+		})
 		if lvl := m.findLevelByID("window:kill"); lvl != nil {
-			items := menu.WindowEntriesToItems(ctx.Windows)
-			if currentItem, ok := currentWindowMenuItem(ctx); ok {
-				items = append([]menu.Item{currentItem}, items...)
-			}
-			lvl.UpdateItems(items)
+			lvl.UpdateItems(windowSwapItems(ctx))
 			m.applyNodeSettings(lvl)
 			m.syncViewport(lvl)
 		}
-		if m.deferredRename != nil && m.deferredRename.ID == "window:rename" {
-			m.deferredRename = nil
-			target := strings.TrimSpace(m.menuArgs)
-			initial := target
-			for _, entry := range ctx.Windows {
-				if entry.ID == target {
-					if entry.Name != "" {
-						initial = entry.Name
-					}
-					break
-				}
-			}
-			if focusCmd := m.withPrompt(func() promptResult {
-				return promptResult{Cmd: m.startWindowForm(menu.WindowPrompt{
-					Context: ctx,
-					Target:  target,
-					Initial: initial,
-				})}
-			}); focusCmd != nil {
-				previewCmd = tea.Batch(previewCmd, focusCmd)
-			}
+		if focusCmd := m.applyDeferredWindowRename(ctx); focusCmd != nil {
+			previewCmd = tea.Batch(previewCmd, focusCmd)
 		}
 		if currentLvl != nil && currentLvl.ID == "window:switch" {
 			previewCmd = m.refreshPreviewForLevel(currentLvl)
@@ -180,32 +192,26 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 
 	if res.PanesUpdated {
 		m.pendingPaneSwap = nil
-		if lvl := m.findLevelByID("pane:switch"); lvl != nil {
-			lvl.UpdateItems(paneSwitchItems(ctx))
-			m.syncViewport(lvl)
-		}
-		if lvl := m.findLevelByID("pane:break"); lvl != nil {
-			lvl.UpdateItems(paneBreakItems(ctx))
-			m.syncViewport(lvl)
-		}
+		m.applySimpleLevelUpdates(ctx, []levelUpdate{
+			{"pane:switch", paneSwitchItems},
+			{"pane:break", paneBreakItems},
+		})
 		if lvl := m.findLevelByID("pane:join"); lvl != nil {
 			lvl.UpdateItems(paneJoinItems(ctx))
 			m.applyNodeSettings(lvl)
 			m.syncViewport(lvl)
 		}
-		if lvl := m.findLevelByID("pane:swap"); lvl != nil {
-			lvl.UpdateItems(paneSwapItems(ctx))
-			m.syncViewport(lvl)
-		}
+		m.applySimpleLevelUpdates(ctx, []levelUpdate{
+			{"pane:swap", paneSwapItems},
+		})
 		if lvl := m.findLevelByID("pane:kill"); lvl != nil {
 			lvl.UpdateItems(paneKillItems(ctx))
 			m.applyNodeSettings(lvl)
 			m.syncViewport(lvl)
 		}
-		if lvl := m.findLevelByID("pane:rename"); lvl != nil {
-			lvl.UpdateItems(menu.PaneEntriesToItems(ctx.Panes))
-			m.syncViewport(lvl)
-		}
+		m.applySimpleLevelUpdates(ctx, []levelUpdate{
+			{"pane:rename", func(c menu.Context) []menu.Item { return menu.PaneEntriesToItems(c.Panes) }},
+		})
 		if m.paneForm != nil {
 			m.paneForm.SyncContext(ctx)
 		}
@@ -275,6 +281,25 @@ func (m *Model) hasBackendIssue() (bool, string) {
 
 func sessionSwitchItems(ctx menu.Context) []menu.Item {
 	return menu.SessionSwitchMenuItems(ctx)
+}
+
+func windowPushToSessionItems(ctx menu.Context) []menu.Item {
+	items := make([]menu.Item, 0, len(ctx.Sessions))
+	for _, entry := range ctx.Sessions {
+		if entry.Name == ctx.CurrentWindowSession {
+			continue
+		}
+		items = append(items, menu.Item{ID: entry.Name, Label: entry.Label})
+	}
+	return items
+}
+
+func windowSwapItems(ctx menu.Context) []menu.Item {
+	items := menu.WindowEntriesToItems(ctx.Windows)
+	if currentItem, ok := currentWindowMenuItem(ctx); ok {
+		items = append([]menu.Item{currentItem}, items...)
+	}
+	return items
 }
 
 func currentWindowMenuItem(ctx menu.Context) (menu.Item, bool) {

@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"math"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -828,7 +828,7 @@ func pluginInstallCellTextLine(style, borderStyle, bgStyle lipgloss.Style, conte
 }
 
 func pluginInstallCellStyledSegment(text string, style, bgStyle lipgloss.Style) string {
-	segmentStyle := style.Copy()
+	segmentStyle := style
 	if bg := bgStyle.GetBackground(); bg != nil {
 		segmentStyle = segmentStyle.Background(bg)
 	}
@@ -848,31 +848,15 @@ func (m *Model) buildPluginInstallProgressBar(s *pluginInstallState, width int) 
 		exactFilled = float64(barWidth) * float64(s.progressCurrent) / float64(s.progressTotal)
 		exactFilled = min(exactFilled, float64(barWidth))
 	}
-	wholeFilled := int(exactFilled)
-	frac := exactFilled - float64(wholeFilled)
 
-	type rgb struct{ r, g, b uint8 }
-	var startColor, endColor rgb
+	var startColor, endColor color.Color
 	switch s.operation {
 	case "update":
-		startColor = rgb{0x00, 0x87, 0xff}
-		endColor = rgb{0xff, 0xff, 0xff}
+		startColor, endColor = lipgloss.Color("#0087ff"), lipgloss.Color("#ffffff")
 	case "uninstall":
-		startColor = rgb{0xff, 0x55, 0x55}
-		endColor = rgb{0xff, 0xff, 0xff}
+		startColor, endColor = lipgloss.Color("#ff5555"), lipgloss.Color("#ffffff")
 	default:
-		startColor = rgb{0xff, 0xff, 0xff}
-		endColor = rgb{0x00, 0x87, 0xff}
-	}
-	colorAt := func(i int) string {
-		if barWidth <= 1 {
-			return fmt.Sprintf("#%02x%02x%02x", startColor.r, startColor.g, startColor.b)
-		}
-		t := float64(i) / float64(barWidth-1)
-		r := uint8(float64(startColor.r) + t*float64(int(endColor.r)-int(startColor.r)))
-		g := uint8(float64(startColor.g) + t*float64(int(endColor.g)-int(startColor.g)))
-		b := uint8(float64(startColor.b) + t*float64(int(endColor.b)-int(startColor.b)))
-		return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+		startColor, endColor = lipgloss.Color("#ffffff"), lipgloss.Color("#0087ff")
 	}
 
 	var bgStyle lipgloss.Style
@@ -880,29 +864,7 @@ func (m *Model) buildPluginInstallProgressBar(s *pluginInstallState, width int) 
 		bgStyle = *styles.ProgressEmptyBg
 	}
 
-	eighths := []string{" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
-
-	var bar strings.Builder
-	bar.WriteString("  ")
-	for i := range wholeFilled {
-		bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(i))).Render("█"))
-	}
-	if wholeFilled < barWidth {
-		idx := min(int(math.Round(frac*8)), 7)
-		if idx > 0 {
-			bar.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color(colorAt(wholeFilled))).
-				Inherit(bgStyle).
-				Render(eighths[idx]))
-		} else {
-			bar.WriteString(bgStyle.Render(" "))
-		}
-		if barWidth-wholeFilled-1 > 0 {
-			bar.WriteString(bgStyle.Render(strings.Repeat(" ", barWidth-wholeFilled-1)))
-		}
-	}
-	bar.WriteString(styles.Info.Render(counter))
-	rendered := bar.String()
+	rendered := "  " + renderGradientBar(barWidth, exactFilled, startColor, endColor, bgStyle) + styles.Info.Render(counter)
 	if lipgloss.Width(rendered) > width {
 		rendered = ansi.Truncate(rendered, width, "")
 	}
