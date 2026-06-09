@@ -171,6 +171,24 @@ func WriteSaveFile(path string, sf *SaveFile) error {
 	return nil
 }
 
+// validateSaveName rejects session/window names that contain control
+// characters or the tmux format-significant characters '#' and '}'. These are
+// never legitimate in a real tmux name (tmux strips/mangles them on creation)
+// and, since names from a save file are otherwise untrusted, keeping them out
+// avoids feeding format-significant data into downstream tmux commands.
+func validateSaveName(name string) error {
+	for _, r := range name {
+		if r == '#' || r == '}' {
+			return fmt.Errorf("name %q contains a disallowed character %q", name, r)
+		}
+		// reject ASCII control characters (including NUL, tab, newline, DEL).
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("name %q contains a control character", name)
+		}
+	}
+	return nil
+}
+
 // ReadSaveFile reads path and unmarshals its JSON into a SaveFile.
 func ReadSaveFile(path string) (*SaveFile, error) {
 	data, err := os.ReadFile(path)
@@ -183,6 +201,16 @@ func ReadSaveFile(path string) (*SaveFile, error) {
 	}
 	if sf.Kind == "" {
 		sf.Kind = SaveKindManual
+	}
+	for _, sess := range sf.Sessions {
+		if err := validateSaveName(sess.Name); err != nil {
+			return nil, fmt.Errorf("invalid session %w", err)
+		}
+		for _, win := range sess.Windows {
+			if err := validateSaveName(win.Name); err != nil {
+				return nil, fmt.Errorf("invalid window %w", err)
+			}
+		}
 	}
 	return &sf, nil
 }

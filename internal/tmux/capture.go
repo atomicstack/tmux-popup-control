@@ -27,7 +27,9 @@ func CapturePaneToFile(socketPath, paneTarget, filePath string, escSeqs bool) er
 		return fmt.Errorf("capture-pane %s: %w", target, err)
 	}
 	cleaned := trimCaptureOutput(output)
-	return os.WriteFile(filePath, []byte(cleaned), 0644)
+	// pane scrollback may contain secrets; keep it owner-only (0600) to match
+	// every other pane-content sink in the codebase.
+	return os.WriteFile(filePath, []byte(cleaned), 0o600)
 }
 
 // trimCaptureOutput removes trailing whitespace and blank lines from the end

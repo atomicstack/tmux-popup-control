@@ -596,3 +596,48 @@ func TestSwitchClientWithoutClientIDIntegration(t *testing.T) {
 
 	Shutdown()
 }
+
+// TestSessionOptionShowOptionsIntegration verifies that SessionOption (now
+// backed by `show-options -qv` with the option name passed as a separate
+// argument, never interpolated into a "#{...}" format) reads back a value set
+// via SetSessionOption, and returns "" for an unset option, against a live
+// tmux server.
+func TestSessionOptionShowOptionsIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+	t.Setenv("TMUX_TMPDIR", filepath.Dir(socket))
+
+	session := "session-option-test"
+	if err := NewSession(socket, session); err != nil {
+		t.Skipf("skipping: unable to create session (%v)", err)
+	}
+	waitForSession(t, socket, session)
+
+	option := "@tmux-popup-control-test-marker"
+
+	// unset option must read back as empty.
+	if val := SessionOption(socket, session, option); val != "" {
+		t.Fatalf("expected empty for unset option, got %q", val)
+	}
+
+	// set the option, then read it back.
+	if err := SetSessionOption(socket, session, option, "1"); err != nil {
+		t.Fatalf("SetSessionOption: %v", err)
+	}
+	if val := SessionOption(socket, session, option); val != "1" {
+		t.Fatalf("expected %q after set, got %q", "1", val)
+	}
+	t.Logf("show-options -qv round-trip succeeded: read back %q", "1")
+
+	// survive a reconnect (fresh control-mode client).
+	Shutdown()
+	if val := SessionOption(socket, session, option); val != "1" {
+		t.Fatalf("expected %q after reconnect, got %q", "1", val)
+	}
+
+	Shutdown()
+}

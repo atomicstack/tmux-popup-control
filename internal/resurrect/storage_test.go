@@ -153,6 +153,40 @@ func TestWriteReadSaveFile(t *testing.T) {
 	}
 }
 
+// TestReadSaveFileRejectsFormatChars verifies that a save file containing a
+// session name with tmux format-significant characters is rejected, while
+// legitimate names (spaces, dashes, dots, slashes, unicode) are accepted.
+func TestReadSaveFileRejectsFormatChars(t *testing.T) {
+	dir := t.TempDir()
+
+	// a session name laden with '#' and '}' must be rejected.
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte(`{"version":1,"sessions":[{"name":"evil#{whoami}"}]}`), 0o600); err != nil {
+		t.Fatalf("write bad save: %v", err)
+	}
+	if _, err := ReadSaveFile(bad); err == nil {
+		t.Fatalf("expected ReadSaveFile to reject session name with format chars")
+	}
+
+	// a window name with a control character must be rejected too.
+	badWin := filepath.Join(dir, "badwin.json")
+	if err := os.WriteFile(badWin, []byte("{\"version\":1,\"sessions\":[{\"name\":\"ok\",\"windows\":[{\"name\":\"a\\tb\"}]}]}"), 0o600); err != nil {
+		t.Fatalf("write bad-window save: %v", err)
+	}
+	if _, err := ReadSaveFile(badWin); err == nil {
+		t.Fatalf("expected ReadSaveFile to reject window name with control char")
+	}
+
+	// legitimate names with spaces, dashes, dots, slashes, unicode are fine.
+	good := filepath.Join(dir, "good.json")
+	if err := os.WriteFile(good, []byte(`{"version":1,"sessions":[{"name":"my proj-v1.2/branch ✨","windows":[{"name":"src/main"}]}]}`), 0o600); err != nil {
+		t.Fatalf("write good save: %v", err)
+	}
+	if _, err := ReadSaveFile(good); err != nil {
+		t.Fatalf("expected ReadSaveFile to accept legitimate names, got %v", err)
+	}
+}
+
 // TestLatestSave: symlink present and target exists.
 func TestLatestSave(t *testing.T) {
 	dir := t.TempDir()

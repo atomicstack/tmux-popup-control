@@ -583,7 +583,9 @@ func PaneCaptureCommand(ctx Context, template string, escSeqs bool) tea.Cmd {
 		}
 
 		dir := filepath.Dir(resolved)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		// owner-only (0700) for consistency with other sensitive dirs (the
+		// captured file holds pane scrollback that may contain secrets).
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return ActionResult{Err: fmt.Errorf("create directory %s: %w", dir, err)}
 		}
 

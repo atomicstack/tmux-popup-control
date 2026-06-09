@@ -173,15 +173,17 @@ func CapturePaneContents(socketPath, target string) (string, error) {
 }
 
 // SessionOption queries a session-level option. Returns empty string if unset.
-// Uses display-message with format syntax rather than show-option, because
-// show-option -qv doesn't reliably return values through control mode.
+// The option name is passed to show-options as a separate argument so it is
+// never interpreted as a tmux format string — this avoids interpolating an
+// untrusted option name (e.g. one derived from a session name read from a save
+// file) into a "#{...}" format. show-options -qv returns the bare value (or an
+// empty string with no error when the option is unset).
 func SessionOption(socketPath, session, option string) string {
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return ""
 	}
-	format := "#{" + option + "}"
-	out, err := client.Command("display-message", "-t", session+":", "-p", format)
+	out, err := client.Command("show-options", "-qv", "-t", session, option)
 	if err != nil {
 		return ""
 	}
