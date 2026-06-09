@@ -55,7 +55,7 @@ func currentPaneItem(ctx Context) (Item, bool) {
 	if label == "" {
 		label = id
 	}
-	return Item{ID: id, Label: "[current] " + label}, true
+	return Item{ID: id, Label: currentLabelPrefix + label}, true
 }
 
 func loadPaneSwitchMenu(ctx Context) ([]Item, error) {
@@ -70,11 +70,8 @@ func loadPaneSwitchMenu(ctx Context) ([]Item, error) {
 }
 
 func loadPaneBreakMenu(ctx Context) ([]Item, error) {
-	items := PaneEntriesToItems(ctx.Panes)
-	if current, ok := currentPaneItem(ctx); ok {
-		items = append([]Item{current}, items...)
-	}
-	return items, nil
+	current, ok := currentPaneItem(ctx)
+	return withCurrentFirst(PaneEntriesToItems(ctx.Panes), current, ok), nil
 }
 
 func loadPaneJoinMenu(ctx Context) ([]Item, error) {
@@ -89,27 +86,18 @@ func loadPaneJoinMenu(ctx Context) ([]Item, error) {
 }
 
 func loadPaneSwapMenu(ctx Context) ([]Item, error) {
-	items := PaneEntriesToItems(ctx.Panes)
-	if current, ok := currentPaneItem(ctx); ok {
-		items = append([]Item{current}, items...)
-	}
-	return items, nil
+	current, ok := currentPaneItem(ctx)
+	return withCurrentFirst(PaneEntriesToItems(ctx.Panes), current, ok), nil
 }
 
 func loadPaneKillMenu(ctx Context) ([]Item, error) {
-	items := PaneEntriesToItems(ctx.Panes)
-	if current, ok := currentPaneItem(ctx); ok {
-		items = append([]Item{current}, items...)
-	}
-	return items, nil
+	current, ok := currentPaneItem(ctx)
+	return withCurrentFirst(PaneEntriesToItems(ctx.Panes), current, ok), nil
 }
 
 func loadPaneRenameMenu(ctx Context) ([]Item, error) {
-	items := PaneEntriesToItems(ctx.Panes)
-	if current, ok := currentPaneItem(ctx); ok {
-		items = append([]Item{current}, items...)
-	}
-	return items, nil
+	current, ok := currentPaneItem(ctx)
+	return withCurrentFirst(PaneEntriesToItems(ctx.Panes), current, ok), nil
 }
 
 func loadPaneResizeMenu(Context) ([]Item, error) {
@@ -138,20 +126,18 @@ func loadPaneResizeDownMenu(Context) ([]Item, error)  { return loadPaneResizeAmo
 func PaneSwitchAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid pane target")} }
+		return failCmd("invalid pane target")
 	}
 	label := item.Label
-	return func() tea.Msg {
-		events.Pane.Switch(target)
-		if err := switchPaneFn(ctx.SocketPath, ctx.ClientID, target); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Switched to %s", label)}
-	}
+	return runAction(
+		func() { events.Pane.Switch(target) },
+		func() error { return switchPaneFn(ctx.SocketPath, ctx.ClientID, target) },
+		fmt.Sprintf("Switched to %s", label),
+	)
 }
 
 func PaneKillAction(ctx Context, item Item) tea.Cmd {
-	ids := splitPaneIDs(item.ID)
+	ids := splitSelectionIDs(item.ID)
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	label := item.Label
@@ -168,15 +154,17 @@ func PaneKillAction(ctx Context, item Item) tea.Cmd {
 }
 
 func PaneJoinAction(ctx Context, item Item) tea.Cmd {
-	ids := splitPaneIDs(item.ID)
+	ids := splitSelectionIDs(item.ID)
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	target := strings.TrimSpace(ctx.CurrentPaneID)
+	// Validate before tracing (consistent with PaneSwitchAction) so we never
+	// emit a join trace for a join that cannot happen.
+	if target == "" {
+		return failCmd("no current pane to join into")
+	}
 	return func() tea.Msg {
 		events.Pane.Join(sorted, target)
-		if target == "" {
-			return ActionResult{Err: fmt.Errorf("no current pane to join into")}
-		}
 		for _, id := range sorted {
 			if err := movePaneFn(ctx.SocketPath, id, target); err != nil {
 				return ActionResult{Err: err}
@@ -215,7 +203,7 @@ func PaneBreakAction(ctx Context, item Item) tea.Cmd {
 func PaneSwapAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid pane target")} }
+		return failCmd("invalid pane target")
 	}
 	return func() tea.Msg {
 		events.Pane.SwapSelect(target)
@@ -236,15 +224,13 @@ func PaneSwapCommand(ctx Context, first, second Item) tea.Cmd {
 func PaneResizeAction(ctx Context, direction, amount string) tea.Cmd {
 	size, err := strconv.Atoi(amount)
 	if err != nil {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid amount")} }
+		return failCmd("invalid amount")
 	}
-	return func() tea.Msg {
-		events.Pane.Resize(direction, size)
-		if err := resizePaneFn(ctx.SocketPath, direction, size); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Resized %s by %d", direction, size)}
-	}
+	return runAction(
+		func() { events.Pane.Resize(direction, size) },
+		func() error { return resizePaneFn(ctx.SocketPath, direction, size) },
+		fmt.Sprintf("Resized %s by %d", direction, size),
+	)
 }
 
 func PaneResizeLeftAction(ctx Context, item Item) tea.Cmd {
@@ -261,7 +247,7 @@ func PaneResizeDownAction(ctx Context, item Item) tea.Cmd {
 func PaneRenameAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid pane target")} }
+		return failCmd("invalid pane target")
 	}
 	initial := strings.TrimSpace(item.Label)
 	for _, entry := range ctx.Panes {
@@ -272,11 +258,7 @@ func PaneRenameAction(ctx Context, item Item) tea.Cmd {
 			break
 		}
 	}
-	if strings.HasPrefix(initial, "[current]") {
-		if _, after, ok := strings.Cut(initial, " "); ok {
-			initial = strings.TrimSpace(after)
-		}
-	}
+	initial = stripCurrentPrefix(initial)
 	return func() tea.Msg {
 		events.Pane.RenamePrompt(target)
 		return PanePrompt{Context: ctx, Target: target, Initial: initial}
@@ -337,30 +319,6 @@ func PaneEntriesToItems(entries []PaneEntry) []Item {
 		items = append(items, Item{ID: entry.ID, Label: entry.Label})
 	}
 	return items
-}
-
-func splitPaneIDs(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	parts := strings.FieldsFunc(raw, func(r rune) bool {
-		return r == '\n' || r == ',' || r == ' '
-	})
-	seen := make(map[string]struct{}, len(parts))
-	ids := make([]string, 0, len(parts))
-	for _, part := range parts {
-		clean := strings.TrimSpace(part)
-		if clean == "" {
-			continue
-		}
-		if _, ok := seen[clean]; ok {
-			continue
-		}
-		seen[clean] = struct{}{}
-		ids = append(ids, clean)
-	}
-	return ids
 }
 
 // PaneSwapPrompt asks the UI to select a second pane for swapping.
@@ -477,7 +435,7 @@ type PaneCapturePreviewMsg struct {
 func PaneCaptureAction(ctx Context, _ Item) tea.Cmd {
 	target := strings.TrimSpace(ctx.CurrentPaneID)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("no current pane")} }
+		return failCmd("no current pane")
 	}
 	return func() tea.Msg {
 		events.Pane.CapturePrompt(target)

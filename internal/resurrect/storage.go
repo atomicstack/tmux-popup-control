@@ -16,6 +16,10 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
+// ErrNoSavedSession is returned by LatestSave when no save symlink or target
+// exists. Callers should branch on it via errors.Is.
+var ErrNoSavedSession = errors.New("no saved session found")
+
 type StorageDeps struct {
 	ShowOption func(socket, opt string) string
 }
@@ -191,14 +195,14 @@ func LatestSave(dir string) (string, error) {
 	link := filepath.Join(dir, "last")
 	target, err := os.Readlink(link)
 	if err != nil {
-		return "", errors.New("no saved session found")
+		return "", ErrNoSavedSession
 	}
 	// target may be relative; resolve it relative to dir
 	if !filepath.IsAbs(target) {
 		target = filepath.Join(dir, target)
 	}
 	if _, err := os.Stat(target); err != nil {
-		return "", errors.New("no saved session found")
+		return "", ErrNoSavedSession
 	}
 	return target, nil
 }

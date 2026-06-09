@@ -20,36 +20,29 @@ func loadPluginsMenu(_ Context) ([]Item, error) {
 }
 
 func loadPluginsUpdateMenu(ctx Context) ([]Item, error) {
-	pluginDir := plugin.PluginDir()
-	installed, err := plugin.Installed(pluginDir)
-	if err != nil {
-		return nil, err
-	}
-	declaredNames := declaredPluginNames(ctx.SocketPath)
-	rows := make([][]string, len(installed))
-	for i, p := range installed {
-		status := pluginDeclStatus(declaredNames, p.Name)
-		date := ""
-		if !p.UpdatedAt.IsZero() {
-			date = p.UpdatedAt.Format(time.DateOnly)
-		}
-		rows[i] = []string{p.Name, status, date}
-	}
-	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignRight})
-	items := make([]Item, 0, len(installed)+1)
-	items = append(items, Item{ID: AllPluginsSentinel, Label: "[all]"})
-	for i, p := range installed {
-		status := pluginDeclStatus(declaredNames, p.Name)
-		items = append(items, Item{
-			ID:          p.Name,
-			Label:       aligned[i],
-			StyledLabel: pluginStatusReplace(aligned[i], status),
+	return pluginListMenu(ctx,
+		[]table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignRight},
+		func(p plugin.Plugin, status string) []string {
+			date := ""
+			if !p.UpdatedAt.IsZero() {
+				date = p.UpdatedAt.Format(time.DateOnly)
+			}
+			return []string{p.Name, status, date}
 		})
-	}
-	return items, nil
 }
 
 func loadPluginsUninstallMenu(ctx Context) ([]Item, error) {
+	return pluginListMenu(ctx,
+		[]table.Alignment{table.AlignLeft, table.AlignLeft},
+		func(p plugin.Plugin, status string) []string {
+			return []string{p.Name, status}
+		})
+}
+
+// pluginListMenu builds the shared "[all]" + per-plugin table used by the
+// update and uninstall menus. row maps each installed plugin and its declared
+// status to a table row; the differing column layouts are supplied per caller.
+func pluginListMenu(ctx Context, aligns []table.Alignment, row func(p plugin.Plugin, status string) []string) ([]Item, error) {
 	pluginDir := plugin.PluginDir()
 	installed, err := plugin.Installed(pluginDir)
 	if err != nil {
@@ -57,18 +50,19 @@ func loadPluginsUninstallMenu(ctx Context) ([]Item, error) {
 	}
 	declaredNames := declaredPluginNames(ctx.SocketPath)
 	rows := make([][]string, len(installed))
+	statuses := make([]string, len(installed))
 	for i, p := range installed {
-		rows[i] = []string{p.Name, pluginDeclStatus(declaredNames, p.Name)}
+		statuses[i] = pluginDeclStatus(declaredNames, p.Name)
+		rows[i] = row(p, statuses[i])
 	}
-	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft})
+	aligned := table.Format(rows, aligns)
 	items := make([]Item, 0, len(installed)+1)
 	items = append(items, Item{ID: AllPluginsSentinel, Label: "[all]"})
 	for i, p := range installed {
-		status := pluginDeclStatus(declaredNames, p.Name)
 		items = append(items, Item{
 			ID:          p.Name,
 			Label:       aligned[i],
-			StyledLabel: pluginStatusReplace(aligned[i], status),
+			StyledLabel: pluginStatusReplace(aligned[i], statuses[i]),
 		})
 	}
 	return items, nil
@@ -128,7 +122,7 @@ func PluginsUpdateAction(ctx Context, item Item) tea.Cmd {
 		declared := declaredPlugins(ctx.SocketPath)
 		installed = mergeDeclaredPluginMetadata(installed, declared)
 
-		selected := parseMultiSelectIDs(item.ID)
+		selected := splitSelectionIDs(item.ID)
 		updateAll := slices.Contains(selected, AllPluginsSentinel)
 
 		var toUpdate []plugin.Plugin
@@ -164,7 +158,7 @@ func PluginsUninstallAction(ctx Context, item Item) tea.Cmd {
 			return ActionResult{Err: err}
 		}
 
-		selected := parseMultiSelectIDs(item.ID)
+		selected := splitSelectionIDs(item.ID)
 		uninstallAll := slices.Contains(selected, AllPluginsSentinel)
 
 		var toRemove []plugin.Plugin
@@ -224,21 +218,6 @@ func declaredPlugins(socketPath string) []plugin.Plugin {
 		return nil
 	}
 	return declared
-}
-
-// parseMultiSelectIDs splits a newline-joined ID string from multi-select.
-func parseMultiSelectIDs(id string) []string {
-	if id == "" {
-		return nil
-	}
-	var ids []string
-	for s := range strings.SplitSeq(id, "\n") {
-		s = strings.TrimSpace(s)
-		if s != "" {
-			ids = append(ids, s)
-		}
-	}
-	return ids
 }
 
 // declaredPluginNames returns the set of plugin names declared in tmux config.

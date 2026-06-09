@@ -30,7 +30,7 @@ func loadKeybindingMenu(ctx Context) ([]Item, error) {
 func KeybindingAction(ctx Context, item Item) tea.Cmd {
 	binding := strings.TrimSpace(item.ID)
 	if binding == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid key binding selection")} }
+		return failCmd("invalid key binding selection")
 	}
 	return func() tea.Msg {
 		needsCopyMode := strings.Contains(binding, "copy-mode") && !strings.Contains(binding, "prefix")

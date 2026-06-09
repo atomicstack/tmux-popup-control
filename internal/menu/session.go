@@ -60,7 +60,7 @@ func SessionSwitchAction(ctx Context, item Item) tea.Cmd {
 func SessionRenameAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid session target")} }
+		return failCmd("invalid session target")
 	}
 	return func() tea.Msg {
 		events.Session.RenamePrompt(target)
@@ -77,30 +77,26 @@ func SessionDetachAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	label := strings.TrimSpace(item.Label)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid session target")} }
+		return failCmd("invalid session target")
 	}
-	return func() tea.Msg {
-		events.Session.Detach(target)
-		if err := tmux.DetachSessions(ctx.SocketPath, []string{target}); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Detached %s", label)}
-	}
+	return runAction(
+		func() { events.Session.Detach(target) },
+		func() error { return tmux.DetachSessions(ctx.SocketPath, []string{target}) },
+		fmt.Sprintf("Detached %s", label),
+	)
 }
 
 func SessionKillAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	label := strings.TrimSpace(item.Label)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid session target")} }
+		return failCmd("invalid session target")
 	}
-	return func() tea.Msg {
-		events.Session.Kill(target)
-		if err := tmux.KillSessions(ctx.SocketPath, []string{target}); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Killed %s", label)}
-	}
+	return runAction(
+		func() { events.Session.Kill(target) },
+		func() error { return tmux.KillSessions(ctx.SocketPath, []string{target}) },
+		fmt.Sprintf("Killed %s", label),
+	)
 }
 
 func SessionCreateCommand(req SessionRequest) tea.Cmd {
@@ -503,12 +499,7 @@ func sessionTableItems(entries []SessionEntry) []Item {
 		rows = append(rows, []string{name, windows, status, current})
 		ids = append(ids, entry.Name)
 	}
-	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignRight, table.AlignLeft, table.AlignLeft})
-	items := make([]Item, len(aligned))
-	for i, label := range aligned {
-		items[i] = Item{ID: ids[i], Label: label}
-	}
-	return items
+	return tableItems(rows, ids, []table.Alignment{table.AlignLeft, table.AlignRight, table.AlignLeft, table.AlignLeft})
 }
 
 func sessionStatus(entry SessionEntry) string {

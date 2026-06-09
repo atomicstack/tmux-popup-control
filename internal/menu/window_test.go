@@ -128,11 +128,13 @@ func TestWindowSwitchItemsSortedBySessionAndID(t *testing.T) {
 }
 
 func TestSplitWindowIDs(t *testing.T) {
-	ids := splitWindowIDs("win1\nwin2,win3 \nwin2")
-	if len(ids) != 3 {
-		t.Fatalf("expected 3 ids, got %d (%v)", len(ids), ids)
+	// The unified splitter splits on "\n" only (matching the UI's join), so a
+	// comma-bearing segment stays intact as a single id. Duplicates collapse.
+	ids := splitSelectionIDs("win1\nwin2,win3 \nwin1")
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 ids, got %d (%v)", len(ids), ids)
 	}
-	expected := []string{"win1", "win2", "win3"}
+	expected := []string{"win1", "win2,win3"}
 	for i, id := range expected {
 		if ids[i] != id {
 			t.Fatalf("expected %s at %d, got %s", id, i, ids[i])

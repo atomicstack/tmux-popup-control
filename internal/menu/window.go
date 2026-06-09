@@ -55,7 +55,7 @@ func currentWindowItem(ctx Context) (Item, bool) {
 	if label == "" {
 		label = id
 	}
-	return Item{ID: id, Label: "[current] " + label}, true
+	return Item{ID: id, Label: currentLabelPrefix + label}, true
 }
 
 func loadWindowSwitchMenu(ctx Context) ([]Item, error) {
@@ -67,60 +67,21 @@ func loadWindowRenameMenu(ctx Context) ([]Item, error) {
 }
 
 func windowRenameItems(ctx Context) []Item {
-	ordered := make([]WindowEntry, 0, len(ctx.Windows))
-	var current *WindowEntry
-	for _, entry := range ctx.Windows {
-		if entry.Current {
-			copy := entry
-			current = &copy
-			continue
-		}
-		ordered = append(ordered, entry)
-	}
-	sortWindowEntries(ordered)
-	if current != nil {
-		ordered = append([]WindowEntry{*current}, ordered...)
-	}
-	if len(ordered) == 0 {
-		return nil
-	}
-	rows := make([][]string, 0, len(ordered))
-	ids := make([]string, 0, len(ordered))
-	for _, entry := range ordered {
-		label := strings.TrimSpace(entry.Label)
-		label = strings.TrimPrefix(label, "[current] ")
-		name := strings.TrimSpace(entry.Name)
-		if name == "" {
-			name = label
-		}
-		windowID := strings.TrimSpace(entry.ID)
-		if windowID == "" {
-			windowID = fmt.Sprintf("#%d", entry.Index)
-		}
-		internalID := strings.TrimSpace(entry.InternalID)
-		if internalID == "" {
-			internalID = "-"
-		}
-		currentMark := ""
-		if entry.Current {
-			currentMark = "current"
-		}
-		rows = append(rows, []string{name, windowID, internalID, currentMark})
-		ids = append(ids, entry.ID)
-	}
-	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft})
-	items := make([]Item, len(aligned))
-	for i, label := range aligned {
-		items[i] = Item{ID: ids[i], Label: label}
-	}
-	return items
+	return windowTableItems(ctx, true)
 }
 
 func WindowSwitchItems(ctx Context) []Item {
+	return windowTableItems(ctx, ctx.WindowIncludeCurrent)
+}
+
+// windowTableItems builds the formatted window table shared by the rename and
+// switch menus. The current window is placed first; includeCurrent controls
+// whether it is shown at all (rename always includes it).
+func windowTableItems(ctx Context, includeCurrent bool) []Item {
 	ordered := make([]WindowEntry, 0, len(ctx.Windows))
 	var current *WindowEntry
 	for _, entry := range ctx.Windows {
-		if entry.Current && !ctx.WindowIncludeCurrent {
+		if entry.Current && !includeCurrent {
 			continue
 		}
 		if entry.Current {
@@ -140,8 +101,7 @@ func WindowSwitchItems(ctx Context) []Item {
 	rows := make([][]string, 0, len(ordered))
 	ids := make([]string, 0, len(ordered))
 	for _, entry := range ordered {
-		label := strings.TrimSpace(entry.Label)
-		label = strings.TrimPrefix(label, "[current] ")
+		label := stripCurrentPrefix(entry.Label)
 		name := strings.TrimSpace(entry.Name)
 		if name == "" {
 			name = label
@@ -161,12 +121,7 @@ func WindowSwitchItems(ctx Context) []Item {
 		rows = append(rows, []string{name, windowID, internalID, currentMark})
 		ids = append(ids, entry.ID)
 	}
-	aligned := table.Format(rows, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft})
-	items := make([]Item, len(aligned))
-	for i, label := range aligned {
-		items[i] = Item{ID: ids[i], Label: label}
-	}
-	return items
+	return tableItems(rows, ids, []table.Alignment{table.AlignLeft, table.AlignLeft, table.AlignLeft, table.AlignLeft})
 }
 
 func sortWindowEntries(entries []WindowEntry) {
@@ -273,34 +228,26 @@ func WindowPushToSessionAction(ctx Context, item Item) tea.Cmd {
 	source := strings.TrimSpace(ctx.CurrentWindowID)
 	targetSession := strings.TrimSpace(item.ID)
 	if source == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("no current window detected")} }
+		return failCmd("no current window detected")
 	}
 	if targetSession == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid target session")} }
+		return failCmd("invalid target session")
 	}
-	return func() tea.Msg {
-		events.Window.PushToSession(source, targetSession)
-		if err := moveWindowFn(ctx.SocketPath, source, targetSession); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Moved window to %s", targetSession)}
-	}
+	return runAction(
+		func() { events.Window.PushToSession(source, targetSession) },
+		func() error { return moveWindowFn(ctx.SocketPath, source, targetSession) },
+		fmt.Sprintf("Moved window to %s", targetSession),
+	)
 }
 
 func loadWindowSwapMenu(ctx Context) ([]Item, error) {
-	items := WindowEntriesToItems(ctx.Windows)
-	if current, ok := currentWindowItem(ctx); ok {
-		items = append([]Item{current}, items...)
-	}
-	return items, nil
+	current, ok := currentWindowItem(ctx)
+	return withCurrentFirst(WindowEntriesToItems(ctx.Windows), current, ok), nil
 }
 
 func loadWindowKillMenu(ctx Context) ([]Item, error) {
-	items := WindowEntriesToItems(ctx.Windows)
-	if current, ok := currentWindowItem(ctx); ok {
-		items = append([]Item{current}, items...)
-	}
-	return items, nil
+	current, ok := currentWindowItem(ctx)
+	return withCurrentFirst(WindowEntriesToItems(ctx.Windows), current, ok), nil
 }
 
 func loadWindowLayoutMenu(ctx Context) ([]Item, error) {
@@ -323,39 +270,36 @@ func loadWindowLayoutMenu(ctx Context) ([]Item, error) {
 func WindowLayoutAction(ctx Context, item Item) tea.Cmd {
 	layout := strings.TrimSpace(item.ID)
 	if layout == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid layout")} }
+		return failCmd("invalid layout")
 	}
-	return func() tea.Msg {
-		events.Window.Layout(layout)
-		if err := selectLayoutFn(ctx.SocketPath, layout); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Applied layout %s", layout)}
-	}
+	return runAction(
+		func() { events.Window.Layout(layout) },
+		func() error { return selectLayoutFn(ctx.SocketPath, layout) },
+		fmt.Sprintf("Applied layout %s", layout),
+	)
 }
 
 func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
 	windowID := item.ID
 	session, _, ok := strings.Cut(windowID, ":")
 	if !ok {
-		err := fmt.Errorf("invalid window id: %s", windowID)
-		return func() tea.Msg { return ActionResult{Err: err} }
+		return failCmd("invalid window id: %s", windowID)
 	}
 	label := item.Label
-	return func() tea.Msg {
-		events.Window.Switch(windowID)
-		if err := switchClientFn(ctx.SocketPath, ctx.ClientID, session); err != nil {
-			return ActionResult{Err: err}
-		}
-		if err := selectWindowFn(ctx.SocketPath, windowID); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Switched to %s", label)}
-	}
+	return runAction(
+		func() { events.Window.Switch(windowID) },
+		func() error {
+			if err := switchClientFn(ctx.SocketPath, ctx.ClientID, session); err != nil {
+				return err
+			}
+			return selectWindowFn(ctx.SocketPath, windowID)
+		},
+		fmt.Sprintf("Switched to %s", label),
+	)
 }
 
 func WindowKillAction(ctx Context, item Item) tea.Cmd {
-	ids := splitWindowIDs(item.ID)
+	ids := splitSelectionIDs(item.ID)
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	label := item.Label
@@ -374,7 +318,7 @@ func WindowKillAction(ctx Context, item Item) tea.Cmd {
 func WindowRenameAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target")} }
+		return failCmd("invalid window target")
 	}
 	initial := strings.TrimSpace(item.Label)
 	for _, entry := range ctx.Windows {
@@ -385,11 +329,7 @@ func WindowRenameAction(ctx Context, item Item) tea.Cmd {
 			break
 		}
 	}
-	if strings.HasPrefix(initial, "[current]") {
-		if _, after, ok := strings.Cut(initial, " "); ok {
-			initial = strings.TrimSpace(after)
-		}
-	}
+	initial = stripCurrentPrefix(initial)
 	if initial == "" {
 		if _, after, ok := strings.Cut(item.Label, " "); ok {
 			initial = strings.TrimSpace(after)
@@ -444,18 +384,16 @@ func WindowLinkAction(ctx Context, item Item) tea.Cmd {
 	source := strings.TrimSpace(item.ID)
 	targetSession := strings.TrimSpace(ctx.CurrentWindowSession)
 	if source == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target")} }
+		return failCmd("invalid window target")
 	}
 	if targetSession == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("no active session detected")} }
+		return failCmd("no active session detected")
 	}
-	return func() tea.Msg {
-		events.Window.Link(source, targetSession)
-		if err := linkWindowFn(ctx.SocketPath, source, targetSession); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Linked %s to %s", item.Label, targetSession)}
-	}
+	return runAction(
+		func() { events.Window.Link(source, targetSession) },
+		func() error { return linkWindowFn(ctx.SocketPath, source, targetSession) },
+		fmt.Sprintf("Linked %s to %s", item.Label, targetSession),
+	)
 }
 
 func WindowPullFromSessionAction(ctx Context, item Item) tea.Cmd {
@@ -469,24 +407,22 @@ func WindowPullFromSessionAction(ctx Context, item Item) tea.Cmd {
 	}
 	targetSession := strings.TrimSpace(ctx.CurrentWindowSession)
 	if source == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target")} }
+		return failCmd("invalid window target")
 	}
 	if targetSession == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("no active session detected")} }
+		return failCmd("no active session detected")
 	}
-	return func() tea.Msg {
-		events.Window.PullFromSession(source, targetSession)
-		if err := moveWindowFn(ctx.SocketPath, source, targetSession); err != nil {
-			return ActionResult{Err: err}
-		}
-		return ActionResult{Info: fmt.Sprintf("Pulled %s into %s", source, targetSession)}
-	}
+	return runAction(
+		func() { events.Window.PullFromSession(source, targetSession) },
+		func() error { return moveWindowFn(ctx.SocketPath, source, targetSession) },
+		fmt.Sprintf("Pulled %s into %s", source, targetSession),
+	)
 }
 
 func WindowSwapAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	if target == "" {
-		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target")} }
+		return failCmd("invalid window target")
 	}
 	return func() tea.Msg {
 		events.Window.SwapSelect(target)
@@ -602,31 +538,4 @@ func (f *WindowRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
 	updated, cmd := f.input.Update(msg)
 	f.input = updated
 	return cmd, false, false
-}
-
-func splitWindowIDs(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	parts := strings.FieldsFunc(raw, func(r rune) bool {
-		return r == '\n' || r == ','
-	})
-	ids := make([]string, 0, len(parts))
-	seen := make(map[string]struct{}, len(parts))
-	for _, part := range parts {
-		id := strings.TrimSpace(part)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
-	if len(ids) == 0 {
-		ids = append(ids, raw)
-	}
-	return ids
 }
