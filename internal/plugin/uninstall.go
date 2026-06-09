@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ func Uninstall(pluginDir string, plugins []Plugin) error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("%d plugin(s) failed to uninstall: %v", len(errs), errs)
+		return fmt.Errorf("%d plugin(s) failed to uninstall: %w", len(errs), errors.Join(errs...))
 	}
 	return nil
 }

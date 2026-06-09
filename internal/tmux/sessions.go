@@ -118,14 +118,29 @@ func KillSessions(socketPath string, targets []string) error {
 }
 
 func waitForSessionRemoval(socketPath, id string) bool {
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if !hasSessionCLI(socketPath, id) {
-			return true
-		}
-		time.Sleep(20 * time.Millisecond)
+	removed := pollUntil(2*time.Second, 20*time.Millisecond, func() bool {
+		return !hasSessionCLI(socketPath, id)
+	})
+	if removed {
+		return true
 	}
 	return !hasSessionCLI(socketPath, id)
+}
+
+// pollUntil repeatedly invokes done until it returns true or the timeout
+// elapses, sleeping interval between attempts. It returns true if done
+// succeeded within the timeout. The condition is always checked at least once.
+func pollUntil(timeout, interval time.Duration, done func() bool) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if done() {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(interval)
+	}
 }
 
 func ResolveSocketPath(flagValue string) (string, error) {

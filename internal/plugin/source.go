@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -34,7 +35,7 @@ func Source(pluginDir string, plugins []Plugin) error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("errors sourcing plugins: %v", errs)
+		return fmt.Errorf("%d plugin(s) failed to source: %w", len(errs), errors.Join(errs...))
 	}
 	return nil
 }

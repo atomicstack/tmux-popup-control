@@ -50,13 +50,20 @@ func Run(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("resolve socket path: %w", err)
 	}
-	defer tmux.Shutdown()
 	clientID := strings.TrimSpace(cfg.ClientID)
 	if clientID == "" {
 		clientID = tmux.CurrentClientID(socketPath)
 	}
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
-	defer watcher.Stop()
+	// Tear down in order: stop the watcher and drain its pollers fully before
+	// closing the shared control-mode client, so no poller is mid-fetch on a
+	// closed connection. LIFO defers would close the client first, hence the
+	// explicit ordered teardown here.
+	defer func() {
+		watcher.Stop()
+		watcher.Wait()
+		tmux.Shutdown()
+	}()
 	model := ui.NewModel(ui.ModelConfig{
 		SocketPath:  socketPath,
 		Width:       cfg.Width,

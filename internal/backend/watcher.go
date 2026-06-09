@@ -61,9 +61,7 @@ func NewWatcher(socketPath string, interval time.Duration) *Watcher {
 		events:     make(chan Event, 16),
 	}
 
-	w.startSessionPoller()
-	w.startWindowPoller()
-	w.startPanePoller()
+	w.startPollers()
 
 	go func() {
 		w.wg.Wait()
@@ -90,36 +88,39 @@ func (w *Watcher) Wait() {
 	w.wg.Wait()
 }
 
-func (w *Watcher) startSessionPoller() {
-	throttle := newThrottle(250 * time.Millisecond)
-	w.wg.Add(1)
-	go w.poll(KindSessions, func(context.Context) (any, error) {
-		throttle.wait()
-		return tmux.FetchSessions(w.socketPath)
-	})
+// fetchFunc retrieves a snapshot of one resource kind for the given socket.
+type fetchFunc func(socketPath string) (any, error)
+
+// startPollers launches one poller goroutine per resource kind. The pollers
+// differ only by Kind and the fetch function, so they share a single start
+// helper driven by a small table.
+func (w *Watcher) startPollers() {
+	pollers := []struct {
+		kind  Kind
+		fetch fetchFunc
+	}{
+		{KindSessions, func(socketPath string) (any, error) { return tmux.FetchSessions(socketPath) }},
+		{KindWindows, func(socketPath string) (any, error) { return tmux.FetchWindows(socketPath) }},
+		{KindPanes, func(socketPath string) (any, error) { return tmux.FetchPanes(socketPath) }},
+	}
+	for _, p := range pollers {
+		w.start(p.kind, p.fetch)
+	}
 }
 
-func (w *Watcher) startWindowPoller() {
+func (w *Watcher) start(kind Kind, fetch fetchFunc) {
 	throttle := newThrottle(250 * time.Millisecond)
-	w.wg.Add(1)
-	go w.poll(KindWindows, func(context.Context) (any, error) {
-		throttle.wait()
-		return tmux.FetchWindows(w.socketPath)
-	})
-}
-
-func (w *Watcher) startPanePoller() {
-	throttle := newThrottle(250 * time.Millisecond)
-	w.wg.Add(1)
-	go w.poll(KindPanes, func(context.Context) (any, error) {
-		throttle.wait()
-		return tmux.FetchPanes(w.socketPath)
+	w.wg.Go(func() {
+		w.poll(kind, func(ctx context.Context) (any, error) {
+			if err := throttle.wait(ctx); err != nil {
+				return nil, err
+			}
+			return fetch(w.socketPath)
+		})
 	})
 }
 
 func (w *Watcher) poll(kind Kind, fetch func(context.Context) (any, error)) {
-	defer w.wg.Done()
-
 	emit := func() bool {
 		span := logging.StartSpan("backend", "poll", logging.SpanOptions{
 			Target: kind.String(),

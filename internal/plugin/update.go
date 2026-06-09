@@ -1,6 +1,9 @@
 package plugin
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // UpdatePullOne pulls the latest changes for a single plugin.
 func UpdatePullOne(p Plugin) error {
@@ -48,7 +51,7 @@ func Update(pluginDir string, plugins []Plugin) error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("%d plugin(s) failed to update: %v", len(errs), errs)
+		return fmt.Errorf("%d plugin(s) failed to update: %w", len(errs), errors.Join(errs...))
 	}
 	return nil
 }

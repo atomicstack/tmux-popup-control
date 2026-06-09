@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -28,7 +29,7 @@ func Install(pluginDir string, plugins []Plugin) error {
 		}
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("%d plugin(s) failed to install: %v", len(errs), errs)
+		return fmt.Errorf("%d plugin(s) failed to install: %w", len(errs), errors.Join(errs...))
 	}
 	return nil
 }

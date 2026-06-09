@@ -12,8 +12,8 @@ import (
 func TestThrottleWaitReturnsImmediatelyForNilOrZeroInterval(t *testing.T) {
 	start := time.Now()
 	var nilThrottle *throttle
-	nilThrottle.wait()
-	newThrottle(0).wait()
+	nilThrottle.wait(context.Background())
+	newThrottle(0).wait(context.Background())
 	if elapsed := time.Since(start); elapsed > 10*time.Millisecond {
 		t.Fatalf("zero-interval throttle should return immediately, took %v", elapsed)
 	}
@@ -30,15 +30,16 @@ func TestPollEmitsImmediatelyAndOnInterval(t *testing.T) {
 	}
 
 	callCount := 0
-	w.wg.Add(1)
-	go w.poll(KindSessions, func(context.Context) (any, error) {
-		callCount++
-		return tmux.SessionSnapshot{
-			Sessions: []tmux.Session{
-				{Name: "main"},
-				{Name: "extra"},
-			}[:callCount],
-		}, nil
+	w.wg.Go(func() {
+		w.poll(KindSessions, func(context.Context) (any, error) {
+			callCount++
+			return tmux.SessionSnapshot{
+				Sessions: []tmux.Session{
+					{Name: "main"},
+					{Name: "extra"},
+				}[:callCount],
+			}, nil
+		})
 	})
 
 	first := <-w.events
@@ -69,9 +70,10 @@ func TestPollPropagatesFetchError(t *testing.T) {
 	}
 
 	wantErr := errors.New("boom")
-	w.wg.Add(1)
-	go w.poll(KindWindows, func(context.Context) (any, error) {
-		return nil, wantErr
+	w.wg.Go(func() {
+		w.poll(KindWindows, func(context.Context) (any, error) {
+			return nil, wantErr
+		})
 	})
 
 	got := <-w.events
@@ -83,6 +85,66 @@ func TestPollPropagatesFetchError(t *testing.T) {
 	}
 	if got.Kind != KindWindows {
 		t.Fatalf("expected KindWindows, got %v", got.Kind)
+	}
+}
+
+func TestThrottleWaitIsCancellable(t *testing.T) {
+	// A long throttle interval combined with a cancelled context must return
+	// promptly rather than sleeping for the full interval. This is what lets
+	// watcher.Stop() drain pollers without a 250ms (or longer) delay.
+	th := newThrottle(10 * time.Second)
+	// Prime next so the second wait must block on the timer.
+	if err := th.wait(context.Background()); err != nil {
+		t.Fatalf("priming wait returned error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	err := th.wait(ctx)
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("cancelled wait should return promptly, took %v", elapsed)
+	}
+}
+
+func TestWatcherStopDrainsPromptlyThroughThrottle(t *testing.T) {
+	// Stop() then Wait() must return promptly even though each poll goes
+	// through a throttle. This guards the C2 teardown invariant: the watcher
+	// fully drains before the shared tmux client is closed, and the C3a
+	// cancellable throttle keeps the drain prompt.
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &Watcher{
+		socketPath: "test.sock",
+		interval:   time.Millisecond,
+		ctx:        ctx,
+		cancel:     cancel,
+		events:     make(chan Event, 4),
+	}
+
+	throttle := newThrottle(10 * time.Second)
+	w.wg.Go(func() {
+		w.poll(KindSessions, func(pollCtx context.Context) (any, error) {
+			if err := throttle.wait(pollCtx); err != nil {
+				return nil, err
+			}
+			return tmux.SessionSnapshot{}, nil
+		})
+	})
+
+	// Drain the immediate first emit.
+	<-w.events
+
+	start := time.Now()
+	w.Stop()
+	w.Wait()
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("Stop+Wait should drain promptly, took %v", elapsed)
 	}
 }
 

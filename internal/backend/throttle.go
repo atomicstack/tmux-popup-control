@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -20,9 +21,13 @@ func newThrottle(interval time.Duration) *throttle {
 	return &throttle{interval: interval}
 }
 
-func (t *throttle) wait() {
+// wait blocks until the throttle interval has elapsed since the previous call,
+// or until ctx is cancelled. It returns ctx.Err() if cancelled, allowing the
+// caller (e.g. a poller responding to Stop) to bail out promptly instead of
+// being delayed by an uncancellable sleep.
+func (t *throttle) wait(ctx context.Context) error {
 	if t == nil || t.interval <= 0 {
-		return
+		return ctx.Err()
 	}
 	for {
 		t.mu.Lock()
@@ -30,10 +35,16 @@ func (t *throttle) wait() {
 		if wait <= 0 {
 			t.next = time.Now().Add(t.interval)
 			t.mu.Unlock()
-			return
+			return nil
 		}
 		t.mu.Unlock()
 		wait = min(wait, t.interval)
-		time.Sleep(wait)
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
 }

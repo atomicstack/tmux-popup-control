@@ -136,8 +136,7 @@ func openSQLiteSink(info SQLiteRunInfo) (*sqliteSink, error) {
 		runID: runID,
 		queue: make(chan any, sqliteQueueSize),
 	}
-	sink.writerWG.Add(1)
-	go sink.writer()
+	sink.writerWG.Go(sink.writer)
 	return sink, nil
 }
 
@@ -318,8 +317,6 @@ func (s *sqliteSink) enqueue(op any) {
 }
 
 func (s *sqliteSink) writer() {
-	defer s.writerWG.Done()
-
 	for {
 		op := <-s.queue
 
