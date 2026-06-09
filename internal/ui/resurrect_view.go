@@ -104,9 +104,7 @@ func (m *Model) buildResurrectProgressBar(s *resurrectState, availWidth int) str
 	exactFilled := 0.0
 	if s.total > 0 {
 		exactFilled = float64(barWidth) * s.displayStep / float64(s.total)
-		if exactFilled > float64(barWidth) {
-			exactFilled = float64(barWidth)
-		}
+		exactFilled = min(exactFilled, float64(barWidth))
 	}
 	wholeFilled := int(exactFilled)
 	frac := exactFilled - float64(wholeFilled)

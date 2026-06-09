@@ -2,6 +2,7 @@ package menu
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -178,8 +179,7 @@ func NewSessionForm(prompt SessionPrompt) *SessionForm {
 	title := "new"
 	help := "Press Enter to create. Esc to cancel."
 	target := strings.TrimSpace(prompt.Target)
-	switch prompt.Action {
-	case "session:rename":
+	if prompt.Action == "session:rename" {
 		mode = sessionFormModeRename
 		if target != "" {
 			title = fmt.Sprintf("rename %s", target)
@@ -388,11 +388,10 @@ func SessionTreeAction(ctx Context, item Item) tea.Cmd {
 		}
 	case strings.HasPrefix(id, TreePrefixWindow):
 		// tree:w:session:windowIndex
-		parts := strings.SplitN(strings.TrimPrefix(id, TreePrefixWindow), ":", 2)
-		if len(parts) < 2 {
+		session, windowIdx, ok := strings.Cut(strings.TrimPrefix(id, TreePrefixWindow), ":")
+		if !ok {
 			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target: %s", id)} }
 		}
-		session, windowIdx := parts[0], parts[1]
 		windowTarget := session + ":" + windowIdx
 		return func() tea.Msg {
 			events.Session.Switch(session)
@@ -426,7 +425,7 @@ func SessionEntriesFromTmux(sessions []tmux.Session) []SessionEntry {
 			Label:    sess.Label,
 			Attached: sess.Attached,
 			Current:  sess.Current,
-			Clients:  append([]string(nil), sess.Clients...),
+			Clients:  slices.Clone(sess.Clients),
 			Windows:  sess.Windows,
 		}
 		entries = append(entries, entry)

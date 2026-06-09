@@ -250,19 +250,14 @@ type Catalog struct {
 	hookNames     []string // sorted canonical names (hooks)
 }
 
-var (
-	defaultOnce    sync.Once
-	defaultCatalog *Catalog
-	defaultErr     error
-)
+var loadDefault = sync.OnceValues(func() (*Catalog, error) {
+	return Load(embeddedCatalog)
+})
 
 // Default returns the catalog loaded from the embedded JSON. It is safe
 // for concurrent use and parses the JSON only once.
 func Default() (*Catalog, error) {
-	defaultOnce.Do(func() {
-		defaultCatalog, defaultErr = Load(embeddedCatalog)
-	})
-	return defaultCatalog, defaultErr
+	return loadDefault()
 }
 
 // MustDefault is like Default but panics on error. Use during program

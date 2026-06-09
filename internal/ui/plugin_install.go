@@ -399,9 +399,7 @@ func (m *Model) bumpPluginInstallProgress() {
 	if s == nil {
 		return
 	}
-	if s.progressTotal <= 0 {
-		s.progressTotal = 1
-	}
+	s.progressTotal = max(s.progressTotal, 1)
 	if s.progressCurrent < s.progressTotal {
 		s.progressCurrent++
 	}
@@ -452,9 +450,7 @@ func (m *Model) pluginInstallView() string {
 	}
 
 	bodyRows := m.height - 1
-	if bodyRows < 0 {
-		bodyRows = 0
-	}
+	bodyRows = max(bodyRows, 0)
 
 	// Reserve a row immediately above the progress bar for the y/n
 	// confirmation prompt while the uninstall flow is still asking.
@@ -572,9 +568,7 @@ func pluginInstallVisibleEntries(entries []pluginInstallEntry, rows, width int, 
 	if visibleCount <= 0 {
 		return nil
 	}
-	if visibleCount > len(entries) {
-		visibleCount = len(entries)
-	}
+	visibleCount = min(visibleCount, len(entries))
 	start := len(entries) - visibleCount
 	lines := make([]styledLine, 0, visibleCount*blockRows)
 	for i := start; i < len(entries); i++ {
@@ -620,9 +614,7 @@ func pluginInstallEntryCellLines(e pluginInstallEntry, width int, operation stri
 	)
 
 	contentWidth := width - 2
-	if contentWidth < 0 {
-		contentWidth = 0
-	}
+	contentWidth = max(contentWidth, 0)
 	cellBgStyle := lipgloss.NewStyle().Background(lipgloss.Color(cellBg))
 	borderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor)).Background(lipgloss.Color(cellBg))
 	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Bold(true)
@@ -815,15 +807,11 @@ func pluginInstallCellSplitLine(leftStyle, rightStyle, borderStyle, bgStyle lipg
 	statusText := pluginInstallCellStyledSegment(right, rightStyle, bgStyle)
 	statusWidth := lipgloss.Width(right)
 	leftWidth := contentWidth - statusWidth - 1
-	if leftWidth < 0 {
-		leftWidth = 0
-	}
+	leftWidth = max(leftWidth, 0)
 	left = truncateText(left, leftWidth)
 	leftRendered := pluginInstallCellStyledSegment(left, leftStyle, bgStyle)
 	spacerWidth := contentWidth - lipgloss.Width(left) - rightWidth
-	if spacerWidth < 1 {
-		spacerWidth = 1
-	}
+	spacerWidth = max(spacerWidth, 1)
 	interior := leftRendered + bgStyle.Render(strings.Repeat(" ", spacerWidth)) + statusText
 	return borderStyle.Render("│") + interior + borderStyle.Render("│")
 }
@@ -835,9 +823,7 @@ func pluginInstallCellTextLine(style, borderStyle, bgStyle lipgloss.Style, conte
 	text = truncateText(text, contentWidth)
 	rendered := pluginInstallCellStyledSegment(text, style, bgStyle)
 	paddingWidth := contentWidth - lipgloss.Width(text)
-	if paddingWidth < 0 {
-		paddingWidth = 0
-	}
+	paddingWidth = max(paddingWidth, 0)
 	return borderStyle.Render("│") + rendered + bgStyle.Render(strings.Repeat(" ", paddingWidth)) + borderStyle.Render("│")
 }
 
@@ -855,16 +841,12 @@ func (m *Model) buildPluginInstallProgressBar(s *pluginInstallState, width int) 
 	}
 	counter := fmt.Sprintf(" %d/%d", s.progressCurrent, s.progressTotal)
 	barWidth := width - lipgloss.Width(counter) - 2
-	if barWidth < 1 {
-		barWidth = 1
-	}
+	barWidth = max(barWidth, 1)
 
 	exactFilled := 0.0
 	if s.progressTotal > 0 {
 		exactFilled = float64(barWidth) * float64(s.progressCurrent) / float64(s.progressTotal)
-		if exactFilled > float64(barWidth) {
-			exactFilled = float64(barWidth)
-		}
+		exactFilled = min(exactFilled, float64(barWidth))
 	}
 	wholeFilled := int(exactFilled)
 	frac := exactFilled - float64(wholeFilled)
@@ -902,7 +884,7 @@ func (m *Model) buildPluginInstallProgressBar(s *pluginInstallState, width int) 
 
 	var bar strings.Builder
 	bar.WriteString("  ")
-	for i := 0; i < wholeFilled; i++ {
+	for i := range wholeFilled {
 		bar.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(colorAt(i))).Render("█"))
 	}
 	if wholeFilled < barWidth {

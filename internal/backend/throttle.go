@@ -33,9 +33,7 @@ func (t *throttle) wait() {
 			return
 		}
 		t.mu.Unlock()
-		if wait > t.interval {
-			wait = t.interval
-		}
+		wait = min(wait, t.interval)
 		time.Sleep(wait)
 	}
 }

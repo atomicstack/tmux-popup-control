@@ -19,32 +19,17 @@ func renderScrollbar(total, visible, start int) []rune {
 		return nil
 	}
 	maxStart := total - visible
-	if start < 0 {
-		start = 0
-	}
-	if start > maxStart {
-		start = maxStart
-	}
+	start = min(max(start, 0), maxStart)
 
 	thumbLen := visible * visible / total
-	if thumbLen < 1 {
-		thumbLen = 1
-	}
-	if thumbLen > visible {
-		thumbLen = visible
-	}
+	thumbLen = min(max(thumbLen, 1), visible)
 
 	maxThumbStart := visible - thumbLen
 	thumbStart := 0
 	if maxStart > 0 {
 		thumbStart = start * maxThumbStart / maxStart
 	}
-	if thumbStart < 0 {
-		thumbStart = 0
-	}
-	if thumbStart > maxThumbStart {
-		thumbStart = maxThumbStart
-	}
+	thumbStart = min(max(thumbStart, 0), maxThumbStart)
 
 	const (
 		thumbRune = '│' // thin vertical line (U+2502)

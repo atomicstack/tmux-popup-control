@@ -1,6 +1,7 @@
 package state
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -43,17 +44,13 @@ func (l *Level) IndexOf(id string) int {
 	if id == "" {
 		return -1
 	}
-	for i, item := range l.Items {
-		if item.ID == id {
-			return i
-		}
+	if i := slices.IndexFunc(l.Items, func(item menu.Item) bool { return item.ID == id }); i >= 0 {
+		return i
 	}
 	if idx := strings.LastIndex(id, ":"); idx >= 0 {
 		suffix := id[idx+1:]
-		for i, item := range l.Items {
-			if item.ID == suffix {
-				return i
-			}
+		if i := slices.IndexFunc(l.Items, func(item menu.Item) bool { return item.ID == suffix }); i >= 0 {
+			return i
 		}
 	}
 	return -1
@@ -69,9 +66,7 @@ func (l *Level) UpdateItems(items []menu.Item) {
 		l.ViewportOffset = 0
 		return
 	}
-	if prevOffset < 0 {
-		prevOffset = 0
-	}
+	prevOffset = max(prevOffset, 0)
 	if prevOffset > len(l.Items)-1 {
 		l.ViewportOffset = 0
 		return

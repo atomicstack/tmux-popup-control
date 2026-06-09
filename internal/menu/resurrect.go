@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -161,9 +162,7 @@ func restoreListingItems(ctx Context) ([]Item, error) {
 	}
 
 	// Reverse to oldest-first so the most recent entry is at the bottom.
-	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
-		entries[i], entries[j] = entries[j], entries[i]
-	}
+	slices.Reverse(entries)
 
 	now := time.Now()
 	alignments := []table.Alignment{
@@ -239,9 +238,7 @@ func formatRestoreRow(row []string, widths []int, alignments []table.Alignment) 
 			b.WriteString("  ")
 		}
 		padding := widths[i] - len([]rune(cell))
-		if padding < 0 {
-			padding = 0
-		}
+		padding = max(padding, 0)
 		if i < len(alignments) && alignments[i] == table.AlignRight {
 			b.WriteString(strings.Repeat(" ", padding))
 			b.WriteString(cell)

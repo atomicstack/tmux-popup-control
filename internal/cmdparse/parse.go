@@ -212,19 +212,16 @@ func isBoolCluster(tok string) bool {
 // that takes an argument value).
 func isArgFlag(tok string, _ []string, _ int) bool {
 	inner := stripBrackets(tok)
-	parts := strings.SplitN(inner, " ", 2)
-	if len(parts) == 2 && strings.HasPrefix(parts[0], "-") && len(parts[0]) == 2 {
-		return true
-	}
-	return false
+	flagPart, _, ok := strings.Cut(inner, " ")
+	return ok && strings.HasPrefix(flagPart, "-") && len(flagPart) == 2
 }
 
 // parseArgFlag extracts the flag rune and argument type from an arg-flag token.
 func parseArgFlag(tok string, _ []string, _ int) (short rune, argType string, consumed int) {
 	inner := stripBrackets(tok)
-	parts := strings.SplitN(inner, " ", 2)
-	flag := []rune(parts[0])
-	return flag[1], parts[1], 1
+	flagPart, argType, _ := strings.Cut(inner, " ")
+	flag := []rune(flagPart)
+	return flag[1], argType, 1
 }
 
 // parsePositionals converts remaining tokens into positional definitions.

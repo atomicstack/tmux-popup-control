@@ -185,12 +185,13 @@ func (m *Model) handleDeleteSavedReloadedMsg(msg tea.Msg) tea.Cmd {
 	}
 	current.UpdateItems(update.items)
 	current.SetFilter(update.filter, update.filterCursor)
-	if len(current.Items) == 0 {
+	switch {
+	case len(current.Items) == 0:
 		current.Cursor = 0
-	} else if current.Cursor < 0 || current.Cursor >= len(current.Items) {
+	case current.Cursor < 0 || current.Cursor >= len(current.Items):
 		current.Cursor = 0
 		current.SkipHeaders(1)
-	} else if current.Cursor < len(current.Items) && current.Items[current.Cursor].Header {
+	case current.Cursor < len(current.Items) && current.Items[current.Cursor].Header:
 		current.SkipHeaders(1)
 	}
 	m.syncFilterViewport(current)

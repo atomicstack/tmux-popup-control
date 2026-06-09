@@ -1,6 +1,7 @@
 package state
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -70,7 +71,7 @@ func cloneSessionEntries(entries []menu.SessionEntry) []menu.SessionEntry {
 	for i, entry := range entries {
 		dup[i] = entry
 		if len(entry.Clients) > 0 {
-			dup[i].Clients = append([]string(nil), entry.Clients...)
+			dup[i].Clients = slices.Clone(entry.Clients)
 		}
 	}
 	return dup

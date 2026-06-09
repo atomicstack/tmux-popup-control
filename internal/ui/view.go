@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"time"
@@ -614,12 +615,8 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 
 	innerW := totalWidth - 2
 	innerH := height - 2
-	if innerW < 1 {
-		innerW = 1
-	}
-	if innerH < 1 {
-		innerH = 1
-	}
+	innerW = max(innerW, 1)
+	innerH = max(innerH, 1)
 
 	// Gather content and metadata.
 	titleLabel := "Preview"
@@ -642,12 +639,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 			// Clamp scroll offset.
 			maxOffset := len(preview.lines) - innerH
 			maxOffset = max(maxOffset, 0)
-			if preview.scrollOffset > maxOffset {
-				preview.scrollOffset = maxOffset
-			}
-			if preview.scrollOffset < 0 {
-				preview.scrollOffset = 0
-			}
+			preview.scrollOffset = min(max(preview.scrollOffset, 0), maxOffset)
 			end := preview.scrollOffset + innerH
 			end = min(end, len(preview.lines))
 			contentLines = preview.lines[preview.scrollOffset:end]
@@ -675,9 +667,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 		titleSeg = " … "
 		dashes = totalWidth - 4 - len([]rune(titleSeg))
 	}
-	if dashes < 0 {
-		dashes = 0
-	}
+	dashes = max(dashes, 0)
 	topLine := previewBorderStyle.Render(tlc+hz) +
 		styles.PreviewTitle.Render(titleSeg) +
 		previewBorderStyle.Render(strings.Repeat(hz, dashes)) +
@@ -699,7 +689,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 	// Build content rows — pad/truncate to innerH rows, each innerW wide.
 	rows := make([]string, 0, height)
 	rows = append(rows, topLine)
-	for i := 0; i < innerH; i++ {
+	for i := range innerH {
 		var content string
 		rawLine := rawANSI
 		if i < len(contentLines) {
@@ -719,7 +709,7 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 			w = lipgloss.Width(content)
 		}
 		if w < innerW {
-			content = content + strings.Repeat(" ", innerW-w)
+			content += strings.Repeat(" ", innerW-w)
 		}
 		var styledContent string
 		if rawLine {
@@ -753,16 +743,12 @@ func (m *Model) handleMouseMsg(msg tea.Msg) tea.Cmd {
 	switch ev.Button {
 	case tea.MouseWheelUp:
 		preview.scrollOffset -= 3
-		if preview.scrollOffset < 0 {
-			preview.scrollOffset = 0
-		}
+		preview.scrollOffset = max(preview.scrollOffset, 0)
 	case tea.MouseWheelDown:
 		maxOffset := len(preview.lines) - innerH
 		maxOffset = max(maxOffset, 0)
 		preview.scrollOffset += 3
-		if preview.scrollOffset > maxOffset {
-			preview.scrollOffset = maxOffset
-		}
+		preview.scrollOffset = min(preview.scrollOffset, maxOffset)
 	}
 	return nil
 }
@@ -844,13 +830,7 @@ func shouldRenderPreview(data *previewData) bool {
 }
 
 func previewTitleText(data *previewData) string {
-	label := strings.TrimSpace(data.label)
-	if label == "" {
-		label = strings.TrimSpace(data.target)
-	}
-	if label == "" {
-		label = "(unknown)"
-	}
+	label := cmp.Or(strings.TrimSpace(data.label), strings.TrimSpace(data.target), "(unknown)")
 	status := ""
 	if data.loading && data.err == "" {
 		status = " (loading…)"
@@ -884,7 +864,7 @@ func renderPreviewLine(preview *previewData, line string, absoluteRow int, bodyS
 		return line, preview.rawANSI
 	}
 	if preview.cursorX > lineWidth {
-		line = line + strings.Repeat(" ", preview.cursorX-lineWidth)
+		line += strings.Repeat(" ", preview.cursorX-lineWidth)
 		lineWidth = preview.cursorX
 	}
 
@@ -992,9 +972,7 @@ func (m *Model) overlayCompletion(rendered string) string {
 }
 
 func overlayAt(baseLine, overlayStr string, col, maxWidth int) string {
-	if col < 0 {
-		col = 0
-	}
+	col = max(col, 0)
 	prefix := ansi.Truncate(baseLine, col, "")
 	if pad := col - lipgloss.Width(prefix); pad > 0 {
 		prefix += strings.Repeat(" ", pad)

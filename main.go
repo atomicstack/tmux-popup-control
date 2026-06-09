@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -307,7 +308,7 @@ func startupTracePayload(cfg config.Config) map[string]any {
 func buildSQLiteRunInfo(cfg config.Config) logging.SQLiteRunInfo {
 	info := logging.SQLiteRunInfo{
 		Version:     Version,
-		Args:        append([]string(nil), cfg.Args...),
+		Args:        slices.Clone(cfg.Args),
 		Flags:       cloneStringMap(cfg.Flags),
 		SocketPath:  cfg.App.SocketPath,
 		RootMenu:    cfg.App.RootMenu,
@@ -344,7 +345,7 @@ func subcommandArgs(cfg config.Config) []string {
 	if len(cfg.Command) <= 1 {
 		return nil
 	}
-	return append([]string(nil), cfg.Command[1:]...)
+	return slices.Clone(cfg.Command[1:])
 }
 
 type ttyDetails struct {

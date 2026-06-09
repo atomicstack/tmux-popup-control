@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -83,7 +84,7 @@ func newCompletionState(opts CompletionOptions) *completionState {
 func newCompletionStateWithItems(items []completionItem, argType, typeLabel string, anchorCol int) *completionState {
 	cs := &completionState{
 		visible:   len(items) > 0,
-		items:     append([]completionItem(nil), items...),
+		items:     slices.Clone(items),
 		anchorCol: anchorCol,
 		argType:   argType,
 		typeLabel: typeLabel,
@@ -93,7 +94,7 @@ func newCompletionStateWithItems(items []completionItem, argType, typeLabel stri
 			cs.items[idx].Label = cs.items[idx].Value
 		}
 	}
-	cs.filtered = append([]completionItem(nil), cs.items...)
+	cs.filtered = slices.Clone(cs.items)
 	return cs
 }
 
@@ -169,9 +170,7 @@ func (cs *completionState) movePageUp() {
 		return
 	}
 	cs.cursor -= cs.pageStep()
-	if cs.cursor < 0 {
-		cs.cursor = 0
-	}
+	cs.cursor = max(cs.cursor, 0)
 }
 
 func (cs *completionState) selected() string {
@@ -192,12 +191,9 @@ func (cs *completionState) hasExactMatch(prefix string) bool {
 	if cs == nil || prefix == "" {
 		return false
 	}
-	for _, item := range cs.filtered {
-		if strings.EqualFold(item.Value, prefix) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(cs.filtered, func(item completionItem) bool {
+		return strings.EqualFold(item.Value, prefix)
+	})
 }
 
 func (cs *completionState) ghostHint(typedPrefix string) string {
@@ -233,9 +229,7 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 	if maxHeight > 0 && maxHeight < maxRows {
 		maxRows = maxHeight
 	}
-	if maxRows < 1 {
-		maxRows = 1
-	}
+	maxRows = max(maxRows, 1)
 
 	start := 0
 	if len(cs.filtered) > maxRows {
@@ -281,14 +275,15 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 		}
 	}
 	if capWidth > 0 && contentWidth > capWidth {
-		if !hasDescriptions {
+		switch {
+		case !hasDescriptions:
 			contentWidth = capWidth
 			leftWidth = capWidth
-		} else if leftWidth >= capWidth {
+		case leftWidth >= capWidth:
 			leftWidth = capWidth
 			rightWidth = 0
 			contentWidth = capWidth
-		} else {
+		default:
 			rightWidth = capWidth - leftWidth - 2
 			rightWidth = max(rightWidth, 0)
 			contentWidth = leftWidth

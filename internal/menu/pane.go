@@ -1,10 +1,11 @@
 package menu
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -151,8 +152,8 @@ func PaneSwitchAction(ctx Context, item Item) tea.Cmd {
 
 func PaneKillAction(ctx Context, item Item) tea.Cmd {
 	ids := splitPaneIDs(item.ID)
-	sorted := append([]string(nil), ids...)
-	sort.Sort(sort.Reverse(sort.StringSlice(sorted)))
+	sorted := slices.Clone(ids)
+	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	label := item.Label
 	return func() tea.Msg {
 		events.Pane.Kill(sorted)
@@ -168,8 +169,8 @@ func PaneKillAction(ctx Context, item Item) tea.Cmd {
 
 func PaneJoinAction(ctx Context, item Item) tea.Cmd {
 	ids := splitPaneIDs(item.ID)
-	sorted := append([]string(nil), ids...)
-	sort.Sort(sort.Reverse(sort.StringSlice(sorted)))
+	sorted := slices.Clone(ids)
+	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	target := strings.TrimSpace(ctx.CurrentPaneID)
 	return func() tea.Msg {
 		events.Pane.Join(sorted, target)
@@ -190,10 +191,7 @@ func PaneBreakAction(ctx Context, item Item) tea.Cmd {
 	label := item.Label
 	session := ctx.CurrentWindowSession
 	if session == "" {
-		parts := strings.SplitN(target, ":", 2)
-		if len(parts) > 0 {
-			session = parts[0]
-		}
+		session, _, _ = strings.Cut(target, ":")
 	}
 	nextIdx := 0
 	for _, win := range ctx.Windows {
@@ -275,9 +273,8 @@ func PaneRenameAction(ctx Context, item Item) tea.Cmd {
 		}
 	}
 	if strings.HasPrefix(initial, "[current]") {
-		parts := strings.SplitN(initial, " ", 2)
-		if len(parts) == 2 {
-			initial = strings.TrimSpace(parts[1])
+		if _, after, ok := strings.Cut(initial, " "); ok {
+			initial = strings.TrimSpace(after)
 		}
 	}
 	return func() tea.Msg {
@@ -424,8 +421,7 @@ func (f *PaneRenameForm) PendingLabel() string {
 }
 
 func (f *PaneRenameForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
-	switch m := msg.(type) {
-	case tea.KeyPressMsg:
+	if m, ok := msg.(tea.KeyPressMsg); ok {
 		switch m.String() {
 		case "ctrl+u":
 			if f.input.Value() != "" {
@@ -562,8 +558,7 @@ func (f *PaneCaptureForm) CheckboxView() string {
 
 // Update processes a key message and returns (cmd, done, cancel).
 func (f *PaneCaptureForm) Update(msg tea.Msg) (tea.Cmd, bool, bool) {
-	switch m := msg.(type) {
-	case tea.KeyPressMsg:
+	if m, ok := msg.(tea.KeyPressMsg); ok {
 		switch m.String() {
 		case "tab":
 			f.escSeqs = !f.escSeqs

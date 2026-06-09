@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"unicode"
@@ -676,14 +677,7 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	m.stack = []*level{root}
 	m.rootMenuID = node.ID
 
-	segment := headerSegmentForLevel(root)
-	if segment == "" {
-		segment = title
-	}
-	if segment == "" {
-		segment = node.ID
-	}
-	m.rootTitle = segment
+	m.rootTitle = cmp.Or(headerSegmentForLevel(root), title, node.ID)
 }
 
 func (m *Model) currentLevel() *level {

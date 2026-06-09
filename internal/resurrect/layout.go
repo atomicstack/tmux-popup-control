@@ -92,7 +92,7 @@ func scanLayoutNumber(s string, idx *int) bool {
 
 func layoutChecksum(layout string) uint16 {
 	var csum uint16
-	for i := 0; i < len(layout); i++ {
+	for i := range len(layout) {
 		csum = (csum >> 1) + ((csum & 1) << 15)
 		csum += uint16(layout[i])
 	}

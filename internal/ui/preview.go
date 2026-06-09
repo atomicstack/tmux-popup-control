@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -376,11 +377,10 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 		}
 	case "window":
 		// tree:w:session:windowIndex
-		parts := strings.SplitN(strings.TrimPrefix(target, menu.TreePrefixWindow), ":", 2)
-		if len(parts) < 2 {
+		session, windowIdx, ok := strings.Cut(strings.TrimPrefix(target, menu.TreePrefixWindow), ":")
+		if !ok {
 			return nil
 		}
-		session, windowIdx := parts[0], parts[1]
 		windowTarget := session + ":" + windowIdx
 		paneID := m.previewPaneIDForWindow(level, windowTarget)
 		if paneID == "" {
@@ -540,7 +540,7 @@ func (m *Model) handlePreviewLoadedMsg(msg tea.Msg) tea.Cmd {
 }
 
 func lastNonEmptyPreviewOffset(lines []string) int {
-	for i := len(lines) - 1; i >= 0; i-- {
+	for i := range slices.Backward(lines) {
 		if strings.TrimSpace(ansi.Strip(lines[i])) != "" {
 			return i
 		}

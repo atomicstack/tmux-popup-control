@@ -621,9 +621,7 @@ func (m *Model) acceptCompletion() tea.Cmd {
 	prefix := m.completion.prefix
 	prefixLen := len([]rune(prefix))
 	prefixStart := cursorPos - prefixLen
-	if prefixStart < 0 {
-		prefixStart = 0
-	}
+	prefixStart = max(prefixStart, 0)
 
 	// Replace the prefix at the cursor with the selected value,
 	// preserving any text after the cursor.
@@ -659,12 +657,7 @@ func promptCursorColumn(l *level) (int, bool) {
 	const promptPrefixWidth = 2 // "» "
 	runes := []rune(l.Filter)
 	runeOff := l.FilterCursor
-	if runeOff < 0 {
-		runeOff = 0
-	}
-	if runeOff > len(runes) {
-		runeOff = len(runes)
-	}
+	runeOff = min(max(runeOff, 0), len(runes))
 	prefix := string(runes[:runeOff])
 	col := promptPrefixWidth + ansi.StringWidth(prefix)
 	return col, true

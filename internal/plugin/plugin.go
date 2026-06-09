@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -42,7 +44,7 @@ func PluginDir() string {
 func Installed(pluginDir string) ([]Plugin, error) {
 	entries, err := os.ReadDir(pluginDir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err

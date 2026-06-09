@@ -296,17 +296,14 @@ func fetchSessionLabels(client tmuxClient, envFormat string) map[string]string {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 2)
-		name := strings.TrimSpace(parts[0])
+		namePart, labelPart, _ := strings.Cut(line, "\t")
+		name := strings.TrimSpace(namePart)
 		if name == "" {
 			continue
 		}
 		label := name
-		if len(parts) > 1 {
-			trimmed := strings.TrimSpace(parts[1])
-			if trimmed != "" {
-				label = trimmed
-			}
+		if trimmed := strings.TrimSpace(labelPart); trimmed != "" {
+			label = trimmed
 		}
 		labels[name] = label
 	}

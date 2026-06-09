@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -128,25 +129,15 @@ func waitForSessionRemoval(socketPath, id string) bool {
 }
 
 func ResolveSocketPath(flagValue string) (string, error) {
-	if flagValue != "" {
-		return flagValue, nil
-	}
-	if envSocket := os.Getenv("TMUX_POPUP_CONTROL_SOCKET"); envSocket != "" {
-		return envSocket, nil
-	}
-	if envSocket := os.Getenv("TMUX_POPUP_SOCKET"); envSocket != "" {
-		return envSocket, nil
+	if socket := cmp.Or(flagValue, os.Getenv("TMUX_POPUP_CONTROL_SOCKET"), os.Getenv("TMUX_POPUP_SOCKET")); socket != "" {
+		return socket, nil
 	}
 	if tmuxEnv := os.Getenv("TMUX"); tmuxEnv != "" {
-		parts := strings.Split(tmuxEnv, ",")
-		if len(parts) > 0 && parts[0] != "" {
-			return parts[0], nil
+		if first, _, _ := strings.Cut(tmuxEnv, ","); first != "" {
+			return first, nil
 		}
 	}
-	baseDir := os.Getenv("TMUX_TMPDIR")
-	if baseDir == "" {
-		baseDir = "/tmp"
-	}
+	baseDir := cmp.Or(os.Getenv("TMUX_TMPDIR"), "/tmp")
 	u, err := user.Current()
 	if err != nil {
 		return "", err

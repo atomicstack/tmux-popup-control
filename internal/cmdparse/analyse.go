@@ -1,6 +1,7 @@
 package cmdparse
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/atomicstack/tmux-popup-control/internal/shquote"
@@ -159,12 +160,9 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 
 // SchemaHasArgFlag reports whether the schema defines flag as an arg-taking flag.
 func SchemaHasArgFlag(schema *CommandSchema, flag rune) bool {
-	for _, af := range schema.ArgFlags {
-		if af.Short == flag {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(schema.ArgFlags, func(af ArgFlagDef) bool {
+		return af.Short == flag
+	})
 }
 
 // schemaArgFlagType returns the argument type string for the given arg flag.
@@ -185,12 +183,9 @@ func hasUnusedFlags(schema *CommandSchema, used []rune) bool {
 		usedSet[r] = true
 	}
 
-	for _, flag := range schema.OrderedFlags() {
-		if flag.Repeatable || !usedSet[flag.Short] {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(schema.OrderedFlags(), func(flag FlagDef) bool {
+		return flag.Repeatable || !usedSet[flag.Short]
+	})
 }
 
 // PositionalAt returns the positional definition at the given index, or nil if

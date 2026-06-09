@@ -3,7 +3,7 @@ package tmux
 import (
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -167,7 +167,7 @@ func UserOptions(socketPath string) ([]string, error) {
 		seen[key] = struct{}{}
 		names = append(names, key)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names, nil
 }
 

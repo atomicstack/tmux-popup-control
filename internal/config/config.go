@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -126,8 +127,8 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			"rootMenu":      strings.TrimSpace(*rootMenu),
 			"menuArgs":      strings.TrimSpace(*menuArgs),
 		},
-		Args:    append([]string(nil), args...),
-		Command: append([]string(nil), fs.Args()...),
+		Args:    slices.Clone(args),
+		Command: slices.Clone(fs.Args()),
 	}
 
 	return cfg, nil
@@ -139,11 +140,11 @@ func parseEnv(environ []string) map[string]string {
 		if entry == "" {
 			continue
 		}
-		parts := strings.SplitN(entry, "=", 2)
-		if len(parts) != 2 {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
 			continue
 		}
-		values[parts[0]] = parts[1]
+		values[key] = value
 	}
 	return values
 }

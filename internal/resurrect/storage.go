@@ -330,10 +330,8 @@ func AutoSaveName(ts time.Time) string {
 	return "auto-" + ts.Format("2006-01-02T15-04-05")
 }
 
-func PruneAutoSaves(dir string, max int) error {
-	if max < 1 {
-		max = 1
-	}
+func PruneAutoSaves(dir string, maxSaves int) error {
+	maxSaves = max(maxSaves, 1)
 	entries, err := ListSaves(dir)
 	if err != nil {
 		return err
@@ -345,11 +343,11 @@ func PruneAutoSaves(dir string, max int) error {
 			autoEntries = append(autoEntries, entry)
 		}
 	}
-	if len(autoEntries) <= max {
+	if len(autoEntries) <= maxSaves {
 		return nil
 	}
 
-	for _, entry := range autoEntries[max:] {
+	for _, entry := range autoEntries[maxSaves:] {
 		if err := os.Remove(entry.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("removing autosave %q: %w", entry.Path, err)
 		}

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -298,10 +299,8 @@ func (m *Model) initialSessionTreeCursor(items []menu.Item) int {
 	}
 
 	for _, candidate := range candidates {
-		for i, item := range items {
-			if item.ID == candidate {
-				return i
-			}
+		if i := slices.IndexFunc(items, func(item menu.Item) bool { return item.ID == candidate }); i >= 0 {
+			return i
 		}
 	}
 

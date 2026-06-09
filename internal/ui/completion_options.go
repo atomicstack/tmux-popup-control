@@ -2,7 +2,6 @@ package ui
 
 import (
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -421,9 +420,7 @@ func decorateStyleValue(value string, bodyStyle *lipgloss.Style) string {
 	any := false
 	var parts []string
 	for _, attr := range attrs {
-		if eq := strings.IndexByte(attr, '='); eq >= 0 {
-			key := attr[:eq]
-			colourName := attr[eq+1:]
+		if key, colourName, ok := strings.Cut(attr, "="); ok {
 			if (key == "fg" || key == "bg") && colourName != "" {
 				if spec, ok := colourSpecForName(colourName); ok {
 					coloured := lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(colourName)
@@ -603,7 +600,7 @@ func mergeUserOptions(catalogNames, userNames []string) []string {
 		seen[name] = struct{}{}
 		merged = append(merged, name)
 	}
-	sort.Strings(merged)
+	slices.Sort(merged)
 	return merged
 }
 

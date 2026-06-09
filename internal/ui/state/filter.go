@@ -15,12 +15,7 @@ func (l *Level) SetFilter(query string, cursor int) {
 	restore := -1
 	l.Filter = query
 	runes := []rune(l.Filter)
-	if cursor < 0 {
-		cursor = 0
-	}
-	if cursor > len(runes) {
-		cursor = len(runes)
-	}
+	cursor = min(max(cursor, 0), len(runes))
 	l.FilterCursor = cursor
 	if trimmed != "" {
 		if prevTrimmed == "" {

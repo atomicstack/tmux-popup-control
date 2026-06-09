@@ -80,10 +80,8 @@ func withWithAutosaveLockFn(fn func(string, func() error) error) func() {
 
 // RunAutoSave performs one autosave cycle: save, prune excess autosaves, then
 // persist the success timestamp for future schedule/icon checks.
-func RunAutoSave(cfg Config, max int) error {
-	if max < 1 {
-		max = 1
-	}
+func RunAutoSave(cfg Config, maxSaves int) error {
+	maxSaves = max(maxSaves, 1)
 
 	saveTime := autosaveNowFn()
 	cfg.Kind = SaveKindAuto
@@ -102,7 +100,7 @@ func RunAutoSave(cfg Config, max int) error {
 		return saveErr
 	}
 
-	if err := PruneAutoSaves(cfg.SaveDir, max); err != nil {
+	if err := PruneAutoSaves(cfg.SaveDir, maxSaves); err != nil {
 		return err
 	}
 	if err := WriteAutoSaveState(cfg.SaveDir, saveTime); err != nil {

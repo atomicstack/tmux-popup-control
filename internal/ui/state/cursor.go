@@ -41,16 +41,9 @@ func (l *Level) moveCursorBy(delta int) bool {
 		return false
 	}
 	old := l.Cursor
-	if l.Cursor < 0 {
-		l.Cursor = 0
-	}
+	l.Cursor = max(l.Cursor, 0)
 	l.Cursor += delta
-	if l.Cursor < 0 {
-		l.Cursor = 0
-	}
-	if l.Cursor >= len(l.Items) {
-		l.Cursor = len(l.Items) - 1
-	}
+	l.Cursor = min(max(l.Cursor, 0), len(l.Items)-1)
 	dir := 1
 	if delta < 0 {
 		dir = -1
@@ -71,22 +64,12 @@ func (l *Level) SkipHeaders(dir int) {
 	}
 	if l.Cursor < 0 || l.Cursor >= n || l.Items[l.Cursor].Header {
 		// hit boundary while still on a header; search opposite direction
-		if l.Cursor < 0 {
-			l.Cursor = 0
-		}
-		if l.Cursor >= n {
-			l.Cursor = n - 1
-		}
+		l.Cursor = min(max(l.Cursor, 0), n-1)
 		opp := -dir
 		for l.Cursor >= 0 && l.Cursor < n && l.Items[l.Cursor].Header {
 			l.Cursor += opp
 		}
-		if l.Cursor < 0 {
-			l.Cursor = 0
-		}
-		if l.Cursor >= n {
-			l.Cursor = n - 1
-		}
+		l.Cursor = min(max(l.Cursor, 0), n-1)
 	}
 }
 
@@ -99,9 +82,7 @@ func (l *Level) pageSize(maxVisible int) int {
 	if size <= 0 || size > total {
 		size = total
 	}
-	if size < 1 {
-		size = 1
-	}
+	size = max(size, 1)
 	return size
 }
 
@@ -112,27 +93,15 @@ func (l *Level) EnsureCursorVisible(maxVisible int) {
 		l.ViewportOffset = 0
 		return
 	}
-	if l.Cursor < 0 {
-		l.Cursor = 0
-	}
-	if l.Cursor >= len(l.Items) {
-		l.Cursor = len(l.Items) - 1
-	}
+	l.Cursor = min(max(l.Cursor, 0), len(l.Items)-1)
 	if maxVisible <= 0 {
 		l.ViewportOffset = 0
 		return
 	}
 	maxOffset := len(l.Items) - maxVisible
 	maxOffset = max(maxOffset, 0)
-	if l.ViewportOffset > maxOffset {
-		l.ViewportOffset = maxOffset
-	}
-	if l.ViewportOffset < 0 {
-		l.ViewportOffset = 0
-	}
-	if l.Cursor < l.ViewportOffset {
-		l.ViewportOffset = l.Cursor
-	}
+	l.ViewportOffset = min(max(l.ViewportOffset, 0), maxOffset)
+	l.ViewportOffset = min(l.ViewportOffset, l.Cursor)
 	upper := l.ViewportOffset + maxVisible - 1
 	if l.Cursor > upper {
 		l.ViewportOffset = l.Cursor - maxVisible + 1
@@ -149,24 +118,14 @@ func (l *Level) EnsureCursorVisibleWithAnchor(maxVisible int, anchorRow int) {
 		l.ViewportOffset = 0
 		return
 	}
-	if l.Cursor < 0 {
-		l.Cursor = 0
-	}
-	if l.Cursor >= len(l.Items) {
-		l.Cursor = len(l.Items) - 1
-	}
+	l.Cursor = min(max(l.Cursor, 0), len(l.Items)-1)
 	if maxVisible <= 0 {
 		l.ViewportOffset = 0
 		return
 	}
 	maxOffset := len(l.Items) - maxVisible
 	maxOffset = max(maxOffset, 0)
-	if anchorRow < 0 {
-		anchorRow = 0
-	}
-	if anchorRow >= maxVisible {
-		anchorRow = maxVisible - 1
-	}
+	anchorRow = min(max(anchorRow, 0), maxVisible-1)
 	offset := l.Cursor - anchorRow
 	offset = max(offset, 0)
 	offset = min(offset, maxOffset)

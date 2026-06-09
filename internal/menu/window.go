@@ -1,9 +1,9 @@
 package menu
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -209,15 +209,15 @@ type windowOrderKey struct {
 func buildWindowOrderKey(entry WindowEntry) windowOrderKey {
 	session := strings.TrimSpace(entry.Session)
 	raw := strings.TrimSpace(entry.ID)
-	parts := strings.SplitN(raw, ":", 2)
-	if session == "" && len(parts) > 0 {
-		session = strings.TrimSpace(parts[0])
+	prefix, indexStr, hasIndex := strings.Cut(raw, ":")
+	if session == "" {
+		session = strings.TrimSpace(prefix)
 	}
 	if session == "" {
 		session = raw
 	}
-	if len(parts) == 2 {
-		if idx, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
+	if hasIndex {
+		if idx, err := strconv.Atoi(strings.TrimSpace(indexStr)); err == nil {
 			return windowOrderKey{session: session, index: idx, hasIndex: true}
 		}
 	}
@@ -336,12 +336,11 @@ func WindowLayoutAction(ctx Context, item Item) tea.Cmd {
 
 func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
 	windowID := item.ID
-	parts := strings.SplitN(windowID, ":", 2)
-	if len(parts) != 2 {
+	session, _, ok := strings.Cut(windowID, ":")
+	if !ok {
 		err := fmt.Errorf("invalid window id: %s", windowID)
 		return func() tea.Msg { return ActionResult{Err: err} }
 	}
-	session := parts[0]
 	label := item.Label
 	return func() tea.Msg {
 		events.Window.Switch(windowID)
@@ -357,8 +356,8 @@ func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
 
 func WindowKillAction(ctx Context, item Item) tea.Cmd {
 	ids := splitWindowIDs(item.ID)
-	sorted := append([]string(nil), ids...)
-	sort.Sort(sort.Reverse(sort.StringSlice(sorted)))
+	sorted := slices.Clone(ids)
+	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	label := item.Label
 	return func() tea.Msg {
 		events.Window.Kill(sorted)
@@ -387,15 +386,13 @@ func WindowRenameAction(ctx Context, item Item) tea.Cmd {
 		}
 	}
 	if strings.HasPrefix(initial, "[current]") {
-		parts := strings.SplitN(initial, " ", 2)
-		if len(parts) == 2 {
-			initial = strings.TrimSpace(parts[1])
+		if _, after, ok := strings.Cut(initial, " "); ok {
+			initial = strings.TrimSpace(after)
 		}
 	}
 	if initial == "" {
-		parts := strings.SplitN(item.Label, " ", 2)
-		if len(parts) == 2 {
-			initial = strings.TrimSpace(parts[1])
+		if _, after, ok := strings.Cut(item.Label, " "); ok {
+			initial = strings.TrimSpace(after)
 		}
 	}
 	return func() tea.Msg {
@@ -466,9 +463,8 @@ func WindowPullFromSessionAction(ctx Context, item Item) tea.Cmd {
 	// Extract the tmux window target (session:windowIndex).
 	source := strings.TrimSpace(item.ID)
 	if trimmed, ok := strings.CutPrefix(source, TreePrefixWindow); ok {
-		parts := strings.SplitN(trimmed, ":", 2)
-		if len(parts) == 2 {
-			source = parts[0] + ":" + parts[1]
+		if sess, idx, ok := strings.Cut(trimmed, ":"); ok {
+			source = sess + ":" + idx
 		}
 	}
 	targetSession := strings.TrimSpace(ctx.CurrentWindowSession)

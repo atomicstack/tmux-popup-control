@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"os/exec"
+	"slices"
 	"sync"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -115,7 +116,7 @@ var (
 	runExecCommand = func(name string, args ...string) commander {
 		return tracedCommander{
 			name: name,
-			args: append([]string(nil), args...),
+			args: slices.Clone(args),
 			cmd:  realCommander{cmd: exec.Command(name, args...)},
 		}
 	}

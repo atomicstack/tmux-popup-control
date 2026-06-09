@@ -28,37 +28,31 @@ func normalizeCursorBlink(s string) string {
 	return cursorBlinkRE.ReplaceAllString(s, "$1")
 }
 
-var (
-	buildOnce    sync.Once
-	sharedBin    string
-	sharedBinErr error
-)
+var buildSharedBin = sync.OnceValues(func() (string, error) {
+	root := findRepoRoot()
+	binDir, err := os.MkdirTemp("", "tmux-popup-control-bin-*")
+	if err != nil {
+		return "", fmt.Errorf("create bin temp dir: %w", err)
+	}
+	bin := filepath.Join(binDir, "tmux-popup-control")
+	cmd := exec.Command("go", "build", "-o", bin, "./")
+	cmd.Dir = root
+	cmd.Env = buildEnv(root)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		_ = os.RemoveAll(binDir)
+		return "", fmt.Errorf("build binary: %s: %w", output, err)
+	}
+	return bin, nil
+})
 
 func buildBinary(t *testing.T) string {
 	t.Helper()
 	RequireTmux(t)
-	buildOnce.Do(func() {
-		root := findRepoRoot()
-		binDir, err := os.MkdirTemp("", "tmux-popup-control-bin-*")
-		if err != nil {
-			sharedBinErr = fmt.Errorf("create bin temp dir: %w", err)
-			return
-		}
-		bin := filepath.Join(binDir, "tmux-popup-control")
-		cmd := exec.Command("go", "build", "-o", bin, "./")
-		cmd.Dir = root
-		cmd.Env = buildEnv(root)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			sharedBinErr = fmt.Errorf("build binary: %s: %w", output, err)
-			_ = os.RemoveAll(binDir)
-			return
-		}
-		sharedBin = bin
-	})
-	if sharedBinErr != nil {
-		t.Fatalf("failed to build binary: %v", sharedBinErr)
+	bin, err := buildSharedBin()
+	if err != nil {
+		t.Fatalf("failed to build binary: %v", err)
 	}
-	return sharedBin
+	return bin
 }
 
 // buildEnv returns the environment for go build, using the workspace caches.

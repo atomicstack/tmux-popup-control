@@ -3,6 +3,7 @@ package tmux
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -236,7 +237,7 @@ func (c *tracedTmuxClient) Command(parts ...string) (string, error) {
 		target = parts[0]
 	}
 	return traceValue("tmux.control", "command", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{
-		"argv": append([]string(nil), parts...),
+		"argv": slices.Clone(parts),
 	}), func() (string, error) {
 		return c.inner.Command(parts...)
 	})
@@ -246,7 +247,7 @@ func (c tracedCommander) Run() error {
 	span := logging.StartSpan("tmux.exec", "run", logging.SpanOptions{
 		Target: commandTarget(c.name, c.args),
 		Attrs: map[string]any{
-			"argv": append([]string(nil), c.args...),
+			"argv": slices.Clone(c.args),
 		},
 	})
 	err := c.cmd.Run()
@@ -258,7 +259,7 @@ func (c tracedCommander) Output() ([]byte, error) {
 	span := logging.StartSpan("tmux.exec", "output", logging.SpanOptions{
 		Target: commandTarget(c.name, c.args),
 		Attrs: map[string]any{
-			"argv": append([]string(nil), c.args...),
+			"argv": slices.Clone(c.args),
 		},
 	})
 	output, err := c.cmd.Output()

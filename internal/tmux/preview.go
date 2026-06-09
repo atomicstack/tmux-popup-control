@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -253,7 +254,7 @@ func trimPreviewLines(lines []string, cursorRow int) []string {
 		return nil
 	}
 	keepUntil := 0
-	for i := len(lines) - 1; i >= 0; i-- {
+	for i := range slices.Backward(lines) {
 		if strings.TrimSpace(lines[i]) != "" {
 			keepUntil = i + 1
 			break
@@ -269,7 +270,7 @@ func trimPreviewLines(lines []string, cursorRow int) []string {
 }
 
 func lastMeaningfulPreviewLine(lines []string) int {
-	for i := len(lines) - 1; i >= 0; i-- {
+	for i := range slices.Backward(lines) {
 		if strings.TrimSpace(ansi.Strip(lines[i])) != "" {
 			return i
 		}

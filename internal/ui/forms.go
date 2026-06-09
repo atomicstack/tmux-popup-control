@@ -122,11 +122,12 @@ func (m *Model) viewWindowFormWithHeader(header string) (string, int) {
 func (m *Model) viewSessionFormWithHeader(header string) (string, int) {
 	lines := []string{}
 	title := m.sessionForm.Title()
-	if header != "" && title != "" {
+	switch {
+	case header != "" && title != "":
 		lines = append(lines, header+menuHeaderSeparator+strings.ToLower(title))
-	} else if header != "" {
+	case header != "":
 		lines = append(lines, header)
-	} else {
+	default:
 		lines = append(lines, title)
 	}
 	lines = append(lines, "", m.sessionForm.InputView())
