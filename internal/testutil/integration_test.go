@@ -11,14 +11,14 @@ import (
 )
 
 func TestRootMenuRendering(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() {
 		AssertNoServerCrash(t, logDir)
 	})
 	session := "rootmenu"
-	pane, _ := launchBinary(t, bin, socket, session, "")
+	pane, _ := LaunchBinary(t, bin, socket, session, "")
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	output := WaitForContent(t, ctx, socket, pane, "process")
@@ -29,13 +29,13 @@ func TestRootMenuRendering(t *testing.T) {
 // menu, filters to select the session category, navigates into it, then presses
 // Escape to confirm the root menu is restored.
 func TestNavigationOpensSubmenuAndEscapeReturns(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
 
 	// Launch at the root menu (no override).
-	pane, exitFile := launchBinary(t, bin, socket, "nav-session", "")
+	pane, exitFile := LaunchBinary(t, bin, socket, "nav-session", "")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -76,7 +76,7 @@ func TestNavigationOpensSubmenuAndEscapeReturns(t *testing.T) {
 // with two distinctly-named sessions and verifies that typing a filter string
 // hides the non-matching entry while keeping the matching one visible.
 func TestFilterNarrowsSessionList(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
@@ -88,7 +88,7 @@ func TestFilterNarrowsSessionList(t *testing.T) {
 		}
 	}
 
-	pane, exitFile := launchBinary(t, bin, socket, "filter-session", "session:switch")
+	pane, exitFile := LaunchBinary(t, bin, socket, "filter-session", "session:switch")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -126,7 +126,7 @@ func TestFilterNarrowsSessionList(t *testing.T) {
 // exits cleanly (no error displayed). This is a regression test for the
 // switch-client flow.
 func TestSessionSwitchExitsCleanly(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
@@ -136,7 +136,7 @@ func TestSessionSwitchExitsCleanly(t *testing.T) {
 		t.Fatalf("create target session: %v", err)
 	}
 
-	pane, exitFile := launchBinary(t, bin, socket, "switch-sess", "session:switch")
+	pane, exitFile := LaunchBinary(t, bin, socket, "switch-sess", "session:switch")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 	defer cancel()
@@ -176,12 +176,12 @@ func TestSessionSwitchExitsCleanly(t *testing.T) {
 // TestEscapeExitsFromRootMenu verifies that pressing Escape at the root menu
 // causes the binary to exit promptly with code 0.
 func TestEscapeExitsFromRootMenu(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
 
-	pane, exitFile := launchBinary(t, bin, socket, "escape-session", "")
+	pane, exitFile := LaunchBinary(t, bin, socket, "escape-session", "")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -209,7 +209,7 @@ func TestEscapeExitsFromRootMenu(t *testing.T) {
 // the full "move-window -r -t <target>" command in the filter bar and pressing
 // Enter to execute directly.
 func TestCommandMenuMoveWindowRenumber(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
@@ -250,7 +250,7 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 	}
 
 	// Launch the binary in a separate session at the "command" root menu.
-	pane, exitFile := launchBinary(t, bin, socket, "cmd-runner", "command")
+	pane, exitFile := LaunchBinary(t, bin, socket, "cmd-runner", "command")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
 	defer cancel()
@@ -304,7 +304,7 @@ func TestCommandMenuMoveWindowRenumber(t *testing.T) {
 // where TMUX_PANE is empty and the host pane ID is only available via
 // TMUX_POPUP_CONTROL_PANE_ID.
 func TestCommandMenuMoveWindowRenumberCurrentSession(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
@@ -396,7 +396,7 @@ func TestCommandMenuMoveWindowRenumberCurrentSession(t *testing.T) {
 // name, and verifies that only the matching session is shown — its windows
 // (which don't independently match) must NOT appear.
 func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
@@ -483,7 +483,7 @@ func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
 // matches the filter, its parent session is shown as an ancestor even if
 // the session name itself doesn't match.
 func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
@@ -546,7 +546,7 @@ func TestTreeFilterChildMatchShowsAncestor(t *testing.T) {
 // Reproduces a bug where #{pane_id} in the capture template resolves to %1
 // (from the first session) instead of the actual active pane (e.g. %4).
 func TestPaneCaptureResolvesCorrectPaneID(t *testing.T) {
-	bin := buildBinary(t)
+	bin := BuildBinary(t)
 	socket, cleanup, logDir := StartTmuxServer(t)
 	defer cleanup()
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })

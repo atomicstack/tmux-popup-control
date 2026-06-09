@@ -20,7 +20,7 @@ func TestThrottleWaitReturnsImmediatelyForNilOrZeroInterval(t *testing.T) {
 }
 
 func TestPollEmitsImmediatelyAndOnInterval(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	w := &Watcher{
 		socketPath: "test.sock",
 		interval:   5 * time.Millisecond,
@@ -58,7 +58,7 @@ func TestPollEmitsImmediatelyAndOnInterval(t *testing.T) {
 }
 
 func TestPollPropagatesFetchError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	w := &Watcher{
 		socketPath: "test.sock",

@@ -29,7 +29,7 @@ func normalizeCursorBlink(s string) string {
 }
 
 var buildSharedBin = sync.OnceValues(func() (string, error) {
-	root := findRepoRoot()
+	root := FindRepoRoot()
 	binDir, err := os.MkdirTemp("", "tmux-popup-control-bin-*")
 	if err != nil {
 		return "", fmt.Errorf("create bin temp dir: %w", err)
@@ -45,7 +45,10 @@ var buildSharedBin = sync.OnceValues(func() (string, error) {
 	return bin, nil
 })
 
-func buildBinary(t *testing.T) string {
+// BuildBinary compiles the tmux-popup-control binary once per test process
+// (via sync.OnceValues) and returns its path. Subsequent calls return the
+// cached binary so integration tests across packages don't recompile.
+func BuildBinary(t *testing.T) string {
 	t.Helper()
 	RequireTmux(t)
 	bin, err := buildSharedBin()
@@ -66,11 +69,11 @@ func buildEnv(root string) []string {
 	)
 }
 
-// launchBinary starts the tmux-popup-control binary in a new detached session
+// LaunchBinary starts the tmux-popup-control binary in a new detached session
 // on the given socket and returns the pane target ("session:0.0") and the path
 // to the file where the script will write the exit code once the binary exits.
 // rootMenu may be empty (root menu) or any valid menu path (e.g. "session:switch").
-func launchBinary(t *testing.T, bin, socket, session, rootMenu string) (pane, exitFile string) {
+func LaunchBinary(t *testing.T, bin, socket, session, rootMenu string) (pane, exitFile string) {
 	t.Helper()
 	scriptDir := t.TempDir()
 	exitFile = filepath.Join(scriptDir, "exit-code")
@@ -217,10 +220,12 @@ func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, ex
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
-	return findRepoRoot()
+	return FindRepoRoot()
 }
 
-func findRepoRoot() string {
+// FindRepoRoot walks up from the current working directory until it finds the
+// directory containing go.mod, returning it (or "." on failure).
+func FindRepoRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {
 		return "."

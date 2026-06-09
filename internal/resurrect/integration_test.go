@@ -15,20 +15,12 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
-// tmuxCmd builds a tmux command against the given socket with TMUX stripped
-// from the environment so we never contaminate the user's session.
+// tmuxCmd builds a tmux command against the given socket via the shared
+// testutil.TmuxCommand helper, which sanitises TMUX, TMUX_PANE and
+// TMUX_POPUP_CONTROL_* from the environment so we never contaminate the
+// user's session.
 func tmuxCmd(socket string, args ...string) *exec.Cmd {
-	all := append([]string{"-S", socket}, args...)
-	cmd := exec.Command("tmux", all...)
-	var env []string
-	for _, e := range cmd.Environ() {
-		if !strings.HasPrefix(e, "TMUX=") {
-			env = append(env, e)
-		}
-	}
-	env = append(env, "TMUX=")
-	cmd.Env = env
-	return cmd
+	return testutil.TmuxCommand(socket, args...)
 }
 
 // listSessionNames returns the sorted session names on the given socket.

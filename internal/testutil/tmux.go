@@ -52,6 +52,10 @@ func startSharedServer() {
 	// sleep is long enough to outlive any reasonable `make test` run; if
 	// ShutdownSharedServer is called it gets killed sooner.
 	cmd := TmuxCommand(socketPath, "-f", "/dev/null", "-vv", "new-session", "-d", "-s", keepaliveSession, "sleep", "3600")
+	// tmux -vv writes tmux-server-*.log to the spawning process's cwd. Pin it
+	// to baseDir so AssertNoServerCrash's glob over logDir actually finds the
+	// logs instead of scattering them across the package source directory.
+	cmd.Dir = baseDir
 	if err := cmd.Run(); err != nil {
 		sharedServerErr = fmt.Errorf("tmux new-session: %w", err)
 		_ = os.RemoveAll(baseDir)
@@ -119,6 +123,9 @@ func StartIsolatedTmuxServer(t *testing.T) (string, func(), string) {
 	t.Cleanup(func() { _ = os.RemoveAll(baseDir) })
 	socketPath := filepath.Join(baseDir, "tmux-test.sock")
 	cmd := TmuxCommand(socketPath, "-f", "/dev/null", "-vv", "new-session", "-d", "-s", keepaliveSession, "sleep", "600")
+	// Pin the server's cwd so its -vv logs land in baseDir (the logDir handed
+	// back to callers / AssertNoServerCrash) rather than the package source dir.
+	cmd.Dir = baseDir
 	if err := cmd.Run(); err != nil {
 		t.Skipf("skipping: failed to start tmux server: %v", err)
 	}

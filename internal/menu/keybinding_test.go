@@ -81,18 +81,8 @@ func TestCustomizeModeActionRunsTmuxCustomizeMode(t *testing.T) {
 		t.Fatalf("write fake tmux: %v", err)
 	}
 
-	oldPath := os.Getenv("PATH")
-	oldArgsFile := os.Getenv("CODEX_ARGS_FILE")
-	if err := os.Setenv("PATH", tmpDir+string(os.PathListSeparator)+oldPath); err != nil {
-		t.Fatalf("set PATH: %v", err)
-	}
-	if err := os.Setenv("CODEX_ARGS_FILE", argsFile); err != nil {
-		t.Fatalf("set CODEX_ARGS_FILE: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Setenv("PATH", oldPath)
-		_ = os.Setenv("CODEX_ARGS_FILE", oldArgsFile)
-	})
+	t.Setenv("PATH", tmpDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CODEX_ARGS_FILE", argsFile)
 
 	cmd := CustomizeModeAction(Context{SocketPath: "/tmp/test.sock"}, Item{ID: "customize-mode", Label: "customize-mode"})
 	msg := cmd()
