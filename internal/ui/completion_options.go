@@ -113,7 +113,7 @@ func (m *Model) tmuxOptCompletion(schema *cmdparse.CommandSchema, ctx cmdparse.C
 			}, true
 		}
 		isColour := false
-		if opt, _ := catalog.Lookup(optionName); opt != nil && opt.Type == tmuxopts.TypeColour {
+		if opt, _ := catalog.Lookup(optionName); opt != nil && opt.IsColour() {
 			isColour = true
 		}
 		values := make([]string, 0, len(candidates))
@@ -336,8 +336,8 @@ func tokenByteOffsets(s string, tokens []string) []int {
 // the form "optionName value" so it renders in keeping with the completion
 // dropdown's colour cues. The option name is rendered in its scope colour
 // when the name resolves to a known catalog entry or starts with "@" (user
-// option); additionally, when the option is TypeColour and the value
-// resolves to a renderable lipgloss colour, the value text itself is
+// option); additionally, when the option is a colour option (IsColour) and
+// the value resolves to a renderable lipgloss colour, the value text itself is
 // rendered in that colour. The returned text contains ANSI escapes. ok is
 // false when the line is malformed (no space) or has no applicable
 // decoration. bodyStyle — when non-nil — wraps the undecorated text so
@@ -368,7 +368,7 @@ func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bo
 	var valueRendered string
 	if value != "" {
 		opt, _ := catalog.Lookup(lookupName)
-		if opt != nil && opt.Type == tmuxopts.TypeColour {
+		if opt != nil && opt.IsColour() {
 			// Bare colour value — render the whole value in its colour.
 			if spec, ok := colourSpecForName(value); ok {
 				valueRendered = lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(value)

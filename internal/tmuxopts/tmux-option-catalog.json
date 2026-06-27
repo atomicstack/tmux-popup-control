@@ -148,6 +148,16 @@
       "copy-mode-selection-style",
       "cursor-colour",
       "cursor-style",
+      "dark-theme-black",
+      "dark-theme-blue",
+      "dark-theme-cyan",
+      "dark-theme-dark-grey",
+      "dark-theme-green",
+      "dark-theme-light-grey",
+      "dark-theme-magenta",
+      "dark-theme-red",
+      "dark-theme-white",
+      "dark-theme-yellow",
       "default-client-command",
       "default-command",
       "default-shell",
@@ -157,6 +167,7 @@
       "detach-on-destroy",
       "display-panes-active-colour",
       "display-panes-colour",
+      "display-panes-format",
       "display-panes-time",
       "display-time",
       "escape-time",
@@ -173,6 +184,16 @@
       "initial-repeat-time",
       "input-buffer-size",
       "key-table",
+      "light-theme-black",
+      "light-theme-blue",
+      "light-theme-cyan",
+      "light-theme-dark-grey",
+      "light-theme-green",
+      "light-theme-light-grey",
+      "light-theme-magenta",
+      "light-theme-red",
+      "light-theme-white",
+      "light-theme-yellow",
       "lock-after-time",
       "lock-command",
       "main-pane-height",
@@ -218,6 +239,7 @@
       "popup-border-style",
       "popup-style",
       "prefix-timeout",
+      "prompt-command-cursor-colour",
       "prompt-command-cursor-style",
       "prompt-cursor-colour",
       "prompt-cursor-style",
@@ -252,12 +274,16 @@
       "status-right-length",
       "status-right-style",
       "status-style",
+      "switch-mode-match-style",
       "synchronize-panes",
       "terminal-features",
       "terminal-overrides",
+      "theme",
       "tiled-layout-max-columns",
+      "tree-mode-border-style",
       "tree-mode-preview-format",
       "tree-mode-preview-style",
+      "tree-mode-selection-style",
       "update-environment",
       "user-keys",
       "variation-selector-always-wide",
@@ -320,6 +346,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "'\\177'"
@@ -355,6 +382,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "50"
@@ -393,6 +421,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "split-pane=split-window,splitp=split-window,server-info=show-messages -JT,info=show-messages -JT,choose-window=choose-tree -w,choose-session=choose-tree -s"
@@ -429,6 +458,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": ""
@@ -465,6 +495,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": ""
@@ -498,9 +529,10 @@
         "cursor-color"
       ],
       "array": false,
+      "colour_option": true,
       "default_source": {
-        "kind": "expression",
-        "value": "-1"
+        "kind": "string",
+        "value": ""
       },
       "description": "Colour of the cursor.",
       "documented_scope": "pane",
@@ -517,7 +549,7 @@
       "style_option": false,
       "summary": "Colour of the cursor",
       "syntax_name": "cursor-colour",
-      "type": "colour",
+      "type": "string",
       "value": {
         "domain": "colour",
         "menu": {
@@ -525,9 +557,10 @@
           "shared_domain_ref": "colour"
         },
         "notes": [
-          "Named colours are static, but colourN/colorN and #RRGGBB are pattern forms."
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
         ],
-        "set_time_validation": "strict_colour_parse",
+        "set_time_validation": "colour_parse_if_no_format_expansion",
         "static_checkability": "static-partial"
       }
     },
@@ -543,6 +576,7 @@
         "blinking-bar",
         "bar"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -585,6 +619,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "new-session"
@@ -617,6 +652,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "TMUX_TERM"
@@ -651,6 +687,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "_PATH_VI"
@@ -682,6 +719,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "10"
@@ -721,6 +759,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -754,6 +793,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -792,6 +832,7 @@
         "on",
         "always"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -833,6 +874,7 @@
         "csi-u",
         "xterm"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -869,6 +911,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -908,6 +951,7 @@
         "request",
         "both"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -946,6 +990,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": ""
@@ -977,6 +1022,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "INPUT_BUF_DEFAULT_SIZE"
@@ -1015,9 +1061,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "bg=themedarkgrey,fg=themewhite"
       },
       "description": "Default style of menu.",
       "documented_scope": "session",
@@ -1052,9 +1099,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=yellow,fg=black"
+        "value": "bg=themeyellow,fg=themeblack"
       },
       "description": "Default style of selected menu item.",
       "documented_scope": "session",
@@ -1089,9 +1137,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "bg=themedarkgrey,fg=themelightgrey"
       },
       "description": "Default style of menu borders.",
       "documented_scope": "session",
@@ -1135,6 +1184,7 @@
         "padded",
         "none"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "BOX_LINES_SINGLE"
@@ -1176,6 +1226,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1000"
@@ -1214,6 +1265,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -1253,6 +1305,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "100"
@@ -1296,6 +1349,7 @@
         "external",
         "on"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -1333,6 +1387,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "linux*:AX@"
@@ -1370,6 +1425,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "xterm*:clipboard:ccolour:cstyle:focus:title,screen*:title,rxvt*:ignorefkeys"
@@ -1406,7 +1462,793 @@
     },
     {
       "alternative_names": [],
+      "array": false,
+      "choices": [
+        "detect",
+        "terminal",
+        "light",
+        "dark"
+      ],
+      "colour_option": false,
+      "default_source": {
+        "kind": "expression",
+        "value": "0"
+      },
+      "description": "Whether tmux should detect the terminal theme, use terminal ANSI colours, or force the light or dark theme.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "theme",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Whether tmux should detect the terminal theme, use terminal ANSI colours, or force the light or dark theme.",
+      "syntax_name": "theme",
+      "type": "choice",
+      "value": {
+        "domain": "choice",
+        "menu": {
+          "kind": "enum",
+          "values": [
+            "detect",
+            "terminal",
+            "light",
+            "dark"
+          ]
+        },
+        "set_time_validation": "strict_enum",
+        "static_checkability": "static-exact",
+        "toggle_without_value": true
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray5,black}"
+      },
+      "description": "Dark theme colour for black.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-black",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for black.",
+      "syntax_name": "dark-theme-black",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray90,white}"
+      },
+      "description": "Dark theme colour for white.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-white",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for white.",
+      "syntax_name": "dark-theme-white",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray70,white}"
+      },
+      "description": "Dark theme colour for light grey.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-light-grey",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for light grey.",
+      "syntax_name": "dark-theme-light-grey",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray15,black}"
+      },
+      "description": "Dark theme colour for dark grey.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-dark-grey",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for dark grey.",
+      "syntax_name": "dark-theme-dark-grey",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},yellowgreen,green}"
+      },
+      "description": "Dark theme colour for green.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-green",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for green.",
+      "syntax_name": "dark-theme-green",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},darkgoldenrod,yellow}"
+      },
+      "description": "Dark theme colour for yellow.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-yellow",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for yellow.",
+      "syntax_name": "dark-theme-yellow",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},indianred,red}"
+      },
+      "description": "Dark theme colour for red.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-red",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for red.",
+      "syntax_name": "dark-theme-red",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},skyblue3,blue}"
+      },
+      "description": "Dark theme colour for blue.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-blue",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for blue.",
+      "syntax_name": "dark-theme-blue",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},cadetblue,cyan}"
+      },
+      "description": "Dark theme colour for cyan.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-cyan",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for cyan.",
+      "syntax_name": "dark-theme-cyan",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},mediumpurple,magenta}"
+      },
+      "description": "Dark theme colour for magenta.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "dark-theme-magenta",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Dark theme colour for magenta.",
+      "syntax_name": "dark-theme-magenta",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray10,black}"
+      },
+      "description": "Light theme colour for black.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-black",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for black.",
+      "syntax_name": "light-theme-black",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray95,white}"
+      },
+      "description": "Light theme colour for white.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-white",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for white.",
+      "syntax_name": "light-theme-white",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray80,white}"
+      },
+      "description": "Light theme colour for light grey.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-light-grey",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for light grey.",
+      "syntax_name": "light-theme-light-grey",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},gray45,black}"
+      },
+      "description": "Light theme colour for dark grey.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-dark-grey",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for dark grey.",
+      "syntax_name": "light-theme-dark-grey",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},seagreen,green}"
+      },
+      "description": "Light theme colour for green.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-green",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for green.",
+      "syntax_name": "light-theme-green",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},darkgoldenrod,yellow}"
+      },
+      "description": "Light theme colour for yellow.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-yellow",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for yellow.",
+      "syntax_name": "light-theme-yellow",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},indianred4,red}"
+      },
+      "description": "Light theme colour for red.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-red",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for red.",
+      "syntax_name": "light-theme-red",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},steelblue,blue}"
+      },
+      "description": "Light theme colour for blue.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-blue",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for blue.",
+      "syntax_name": "light-theme-blue",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},darkcyan,cyan}"
+      },
+      "description": "Light theme colour for cyan.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-cyan",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for cyan.",
+      "syntax_name": "light-theme-cyan",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": "#{?#{e|>=:#{client_colours},256},purple4,magenta}"
+      },
+      "description": "Light theme colour for magenta.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "light-theme-magenta",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Light theme colour for magenta.",
+      "syntax_name": "light-theme-magenta",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": ""
@@ -1442,6 +2284,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -1481,6 +2324,7 @@
         "current",
         "other"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "ALERT_OTHER"
@@ -1519,6 +2363,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -1558,6 +2403,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -1602,6 +2448,7 @@
         "current",
         "other"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "ALERT_ANY"
@@ -1640,6 +2487,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": ""
@@ -1671,6 +2519,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "_PATH_BSHELL"
@@ -1705,6 +2554,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "80x24"
@@ -1744,6 +2594,7 @@
         "keep-last",
         "keep-group"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -1789,6 +2640,7 @@
         "previous",
         "next"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -1830,9 +2682,10 @@
         "display-panes-active-color"
       ],
       "array": false,
+      "colour_option": true,
       "default_source": {
-        "kind": "expression",
-        "value": "1"
+        "kind": "string",
+        "value": "themered"
       },
       "description": "Colour of the active pane for 'display-panes'.",
       "documented_scope": "session",
@@ -1848,7 +2701,7 @@
       "style_option": false,
       "summary": "Active pane colour in display-panes",
       "syntax_name": "display-panes-active-colour",
-      "type": "colour",
+      "type": "string",
       "value": {
         "domain": "colour",
         "menu": {
@@ -1856,9 +2709,10 @@
           "shared_domain_ref": "colour"
         },
         "notes": [
-          "Named colours are static, but colourN/colorN and #RRGGBB are pattern forms."
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
         ],
-        "set_time_validation": "strict_colour_parse",
+        "set_time_validation": "colour_parse_if_no_format_expansion",
         "static_checkability": "static-partial"
       }
     },
@@ -1867,9 +2721,10 @@
         "display-panes-color"
       ],
       "array": false,
+      "colour_option": true,
       "default_source": {
-        "kind": "expression",
-        "value": "4"
+        "kind": "string",
+        "value": "themeblue"
       },
       "description": "Colour of not active panes for 'display-panes'.",
       "documented_scope": "session",
@@ -1885,7 +2740,7 @@
       "style_option": false,
       "summary": "Inactive pane colour in display-panes",
       "syntax_name": "display-panes-colour",
-      "type": "colour",
+      "type": "string",
       "value": {
         "domain": "colour",
         "menu": {
@@ -1893,15 +2748,50 @@
           "shared_domain_ref": "colour"
         },
         "notes": [
-          "Named colours are static, but colourN/colorN and #RRGGBB are pattern forms."
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
         ],
-        "set_time_validation": "strict_colour_parse",
+        "set_time_validation": "colour_parse_if_no_format_expansion",
         "static_checkability": "static-partial"
       }
     },
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
+      "default_source": {
+        "kind": "string",
+        "value": "#[align=right]#{pane_width}x#{pane_height}"
+      },
+      "description": "Format of text shown by 'display-panes', expanded for each pane.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "display-panes-format",
+      "scope": {
+        "default_inferred_scope": "session",
+        "scopes": [
+          "session"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Format of text shown by 'display-panes', expanded for each pane.",
+      "syntax_name": "display-panes-format",
+      "type": "string",
+      "value": {
+        "domain": "format_string",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "format_string"
+        },
+        "set_time_validation": "none",
+        "static_checkability": "dynamic"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1000"
@@ -1941,6 +2831,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "750"
@@ -1980,6 +2871,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2013,6 +2905,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "2000"
@@ -2052,6 +2945,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2091,6 +2985,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "root"
@@ -2125,6 +3020,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2164,6 +3060,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "TMUX_LOCK_CMD"
@@ -2195,11 +3092,12 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=black,fg=yellow,fill=black"
+        "value": "bg=themeblack,fg=themeyellow,#{?#{m/r:(^|#,)IS(PANE|MODE)($|#,),#{prompt_flags}},,fill=themeblack}"
       },
-      "description": "Style of the command prompt when in command mode, if 'mode-keys' is set to 'vi'.",
+      "description": "Style of the command prompt when in command mode, if 'status-keys' is set to 'vi'.",
       "documented_scope": "session",
       "kind": "option",
       "name": "message-command-style",
@@ -2232,6 +3130,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#[#{?#{command_prompt},#{E:message-command-style},#{E:message-style}}]#{message}"
@@ -2271,6 +3170,7 @@
         "3",
         "4"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2310,9 +3210,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=yellow,fg=black,fill=yellow"
+        "value": "bg=themeyellow,fg=themeblack,#{?#{m/r:(^|#,)IS(PANE|MODE)($|#,),#{prompt_flags}},,fill=themeyellow}"
       },
       "description": "Style of messages and the command prompt. A 'fill' attribute controls background clearing and a 'width' attribute (fixed or percentage) constrains the prompt area width.",
       "documented_scope": "session",
@@ -2347,6 +3248,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2380,6 +3282,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "'b'|KEYC_CTRL"
@@ -2415,6 +3318,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "KEYC_NONE"
@@ -2450,6 +3354,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2483,6 +3388,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "500"
@@ -2522,6 +3428,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2555,6 +3462,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#S:#I:#W - \"#T\" #{session_alerts}"
@@ -2593,6 +3501,7 @@
         "current",
         "other"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "ALERT_OTHER"
@@ -2639,6 +3548,7 @@
         "4",
         "5"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -2679,6 +3589,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "8"
@@ -2715,6 +3626,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "8"
@@ -2751,6 +3663,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "array_ref",
         "value": "options_table_status_format_default"
@@ -2783,6 +3696,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "15"
@@ -2828,6 +3742,7 @@
         "right",
         "absolute-centre"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -2870,6 +3785,7 @@
         "emacs",
         "vi"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "MODEKEY_EMACS"
@@ -2906,6 +3822,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "[#{session_name}] "
@@ -2938,6 +3855,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "10"
@@ -2976,6 +3894,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -3017,6 +3936,7 @@
         "top",
         "bottom"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -3053,6 +3973,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#{?window_bigger,[#{window_offset_x}#,#{window_offset_y}] ,}\"#{=21:pane_title}\" %H:%M %d-%b-%y"
@@ -3085,6 +4006,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "40"
@@ -3123,6 +4045,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -3160,9 +4083,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=green,fg=black"
+        "value": "bg=themegreen,fg=themeblack"
       },
       "description": "Style of the status line.",
       "documented_scope": "session",
@@ -3197,9 +4121,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "underscore"
       },
       "description": "Style of the current pane in the status line.",
       "documented_scope": "window",
@@ -3234,6 +4159,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -3273,9 +4199,10 @@
         "prompt-cursor-color"
       ],
       "array": false,
+      "colour_option": true,
       "default_source": {
-        "kind": "expression",
-        "value": "-1"
+        "kind": "string",
+        "value": ""
       },
       "description": "Colour of the cursor when in the command prompt.",
       "documented_scope": "session",
@@ -3291,7 +4218,7 @@
       "style_option": false,
       "summary": "Prompt cursor colour",
       "syntax_name": "prompt-cursor-colour",
-      "type": "colour",
+      "type": "string",
       "value": {
         "domain": "colour",
         "menu": {
@@ -3299,9 +4226,47 @@
           "shared_domain_ref": "colour"
         },
         "notes": [
-          "Named colours are static, but colourN/colorN and #RRGGBB are pattern forms."
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
         ],
-        "set_time_validation": "strict_colour_parse",
+        "set_time_validation": "colour_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": true,
+      "default_source": {
+        "kind": "string",
+        "value": ""
+      },
+      "description": "Colour of the cursor in the command prompt when in command mode, if 'status-keys' is set to 'vi'.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "prompt-command-cursor-colour",
+      "scope": {
+        "default_inferred_scope": "session",
+        "scopes": [
+          "session"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Colour of the cursor in the command prompt when in command mode, if 'status-keys' is set to 'vi'.",
+      "syntax_name": "prompt-command-cursor-colour",
+      "type": "string",
+      "value": {
+        "domain": "colour",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "colour"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "colour_parse_if_no_format_expansion",
         "static_checkability": "static-partial"
       }
     },
@@ -3317,6 +4282,7 @@
         "blinking-bar",
         "bar"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -3367,6 +4333,7 @@
         "blinking-bar",
         "bar"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -3408,9 +4375,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "underscore"
       },
       "description": "Style of the current session in the status line.",
       "documented_scope": "window",
@@ -3445,6 +4413,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -3482,9 +4451,10 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "DISPLAY KRB5CCNAME MSYSTEM SSH_ASKPASS SSH_AUTH_SOCK SSH_AGENT_PID SSH_CONNECTION WAYLAND_DISPLAY WINDOWID XAUTHORITY"
+        "value": "DISPLAY KRB5CCNAME MSYSTEM SSH_ASKPASS SSH_AUTH_SOCK SSH_AGENT_PID SSH_CONNECTION WAYLAND_DISPLAY WINDOWID XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE"
       },
       "description": "List of environment variables to update in the session environment when a client is attached.",
       "documented_scope": "session",
@@ -3518,6 +4488,7 @@
         "on",
         "both"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "VISUAL_OFF"
@@ -3560,6 +4531,7 @@
         "on",
         "both"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "VISUAL_OFF"
@@ -3602,6 +4574,7 @@
         "on",
         "both"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "VISUAL_OFF"
@@ -3639,6 +4612,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~"
@@ -3668,6 +4642,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -3706,6 +4681,7 @@
         "on",
         "all"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -3744,6 +4720,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -3778,6 +4755,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -3812,6 +4790,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -3846,6 +4825,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -3879,6 +4859,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#{?pane_in_mode,[tmux],#{pane_current_command}}#{?pane_dead,[dead],}"
@@ -3913,9 +4894,10 @@
         "clock-mode-color"
       ],
       "array": false,
+      "colour_option": true,
       "default_source": {
-        "kind": "expression",
-        "value": "4"
+        "kind": "string",
+        "value": "themeblue"
       },
       "description": "Colour of the clock in clock mode.",
       "documented_scope": "window",
@@ -3931,7 +4913,7 @@
       "style_option": false,
       "summary": "Clock colour in clock mode",
       "syntax_name": "clock-mode-colour",
-      "type": "colour",
+      "type": "string",
       "value": {
         "domain": "colour",
         "menu": {
@@ -3939,9 +4921,10 @@
           "shared_domain_ref": "colour"
         },
         "notes": [
-          "Named colours are static, but colourN/colorN and #RRGGBB are pattern forms."
+          "If the value has no #{...} expansion, tmux validates it with style_parse_colour at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
         ],
-        "set_time_validation": "strict_colour_parse",
+        "set_time_validation": "colour_parse_if_no_format_expansion",
         "static_checkability": "static-partial"
       }
     },
@@ -3954,6 +4937,7 @@
         "12-with-seconds",
         "24-with-seconds"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -3992,9 +4976,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=cyan,fg=black"
+        "value": "bg=themecyan,fg=themeblack"
       },
       "description": "Style of search matches in copy mode.",
       "documented_scope": "window",
@@ -4029,9 +5014,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=magenta,fg=black"
+        "value": "bg=thememagenta,fg=themeblack"
       },
       "description": "Style of the current search match in copy mode.",
       "documented_scope": "window",
@@ -4066,9 +5052,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=red,fg=black"
+        "value": "bg=themeyellow,fg=themeblack"
       },
       "description": "Style of the marked line in copy mode.",
       "documented_scope": "window",
@@ -4103,6 +5090,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#[align=right]#{t/p:top_line_time}#{?#{e|>:#{top_line_time},0}, ,}[#{copy_position}/#{copy_position_limit}]#{?search_timed_out, (timed out),#{?search_count, (#{search_count}#{?search_count_partial,+,} results),}}"
@@ -4136,6 +5124,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#{E:mode-style}"
@@ -4173,6 +5162,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#{E:mode-style}"
@@ -4210,9 +5200,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "fg=yellow"
+        "value": "fg=themeyellow"
       },
       "description": "Style of current line number in copy mode.",
       "documented_scope": null,
@@ -4247,9 +5238,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "fg=white,dim"
+        "value": "fg=themelightgrey,dim"
       },
       "description": "Style of line numbers in copy mode.",
       "documented_scope": null,
@@ -4291,6 +5283,7 @@
         "relative",
         "hybrid"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -4330,6 +5323,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": ""
@@ -4365,6 +5359,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "24"
@@ -4401,6 +5396,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "80"
@@ -4441,6 +5437,7 @@
         "emacs",
         "vi"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "MODEKEY_EMACS"
@@ -4477,9 +5474,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "noattr,bg=yellow,fg=black"
+        "value": "noattr,bg=themeyellow,fg=themeblack"
       },
       "description": "Style of indicators and highlighting in modes.",
       "documented_scope": "window",
@@ -4514,6 +5512,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -4547,6 +5546,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -4580,6 +5580,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -4618,6 +5619,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "0"
@@ -4654,6 +5656,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "0"
@@ -4690,9 +5693,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "#{?pane_in_mode,fg=yellow,#{?synchronize-panes,fg=red,fg=green}}"
+        "value": "fg=#{?pane_marked,thememagenta,#{?synchronize-panes,themered,#{?pane_in_mode,themeyellow,themegreen}}}"
       },
       "description": "Style of the active pane border.",
       "documented_scope": "window",
@@ -4728,6 +5732,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -4766,6 +5771,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#{?pane_active,#[reverse],}#{pane_index}#[default] \"#{pane_title}\"#{?#{mouse},#[align=right]#[range=control|8][#{?#{window_zoomed_flag},u,z}]#[norange]#[range=control|9][x]#[norange],}"
@@ -4805,6 +5811,7 @@
         "arrows",
         "both"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "PANE_BORDER_COLOUR"
@@ -4849,8 +5856,10 @@
         "heavy",
         "simple",
         "number",
-        "spaces"
+        "spaces",
+        "none"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "PANE_LINES_SINGLE"
@@ -4862,7 +5871,8 @@
       "scope": {
         "default_inferred_scope": "window",
         "scopes": [
-          "window"
+          "window",
+          "pane"
         ]
       },
       "scope_mismatch_with_manpage": false,
@@ -4880,7 +5890,8 @@
             "heavy",
             "simple",
             "number",
-            "spaces"
+            "spaces",
+            "none"
           ]
         },
         "set_time_validation": "strict_enum",
@@ -4894,8 +5905,11 @@
       "choices": [
         "off",
         "top",
-        "bottom"
+        "bottom",
+        "top-floating",
+        "bottom-floating"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "PANE_STATUS_OFF"
@@ -4907,7 +5921,8 @@
       "scope": {
         "default_inferred_scope": "window",
         "scopes": [
-          "window"
+          "window",
+          "pane"
         ]
       },
       "scope_mismatch_with_manpage": false,
@@ -4922,7 +5937,9 @@
           "values": [
             "off",
             "top",
-            "bottom"
+            "bottom",
+            "top-floating",
+            "bottom-floating"
           ]
         },
         "set_time_validation": "strict_enum",
@@ -4933,9 +5950,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "fg=themelightgrey"
       },
       "description": "Style of the pane status lines.",
       "documented_scope": "window",
@@ -4973,6 +5991,7 @@
         "pane-colors"
       ],
       "array": true,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": ""
@@ -5014,6 +6033,7 @@
         "modal",
         "on"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "PANE_SCROLLBARS_OFF"
@@ -5051,9 +6071,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "bg=black,fg=white,width=1,pad=0"
+        "value": "bg=themedarkgrey,fg=themelightgrey,width=1,pad=0"
       },
       "description": "Style of the pane scrollbar.",
       "documented_scope": "window",
@@ -5093,6 +6114,7 @@
         "right",
         "left"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "PANE_SCROLLBARS_RIGHT"
@@ -5129,9 +6151,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "bg=themedarkgrey,fg=themewhite"
       },
       "description": "Default style of popups.",
       "documented_scope": "window",
@@ -5166,9 +6189,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "bg=themedarkgrey,fg=themelightgrey"
       },
       "description": "Default style of popup borders.",
       "documented_scope": "window",
@@ -5212,6 +6236,7 @@
         "padded",
         "none"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "BOX_LINES_SINGLE"
@@ -5259,6 +6284,7 @@
         "failed",
         "key"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -5298,6 +6324,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "Pane is dead (#{?#{!=:#{pane_dead_status},},status #{pane_dead_status},}#{?#{!=:#{pane_dead_signal},},signal #{pane_dead_signal},}, #{t:pane_dead_time})"
@@ -5331,6 +6358,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -5365,6 +6393,46 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
+      "default_source": {
+        "kind": "string",
+        "value": "bg=cyan fg=black"
+      },
+      "description": "Style of matched characters in switch mode.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "switch-mode-match-style",
+      "scope": {
+        "default_inferred_scope": "window",
+        "scopes": [
+          "window",
+          "pane"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "separator": ",",
+      "style_option": true,
+      "summary": "Style of matched characters in switch mode.",
+      "syntax_name": "switch-mode-match-style",
+      "type": "string",
+      "value": {
+        "domain": "style",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "style"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "style_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -5399,6 +6467,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
@@ -5437,6 +6506,45 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
+      "default_source": {
+        "kind": "string",
+        "value": "bg=themedarkgrey,fg=themelightgrey"
+      },
+      "description": "Style of borders in tree mode.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "tree-mode-border-style",
+      "scope": {
+        "default_inferred_scope": "window",
+        "scopes": [
+          "window"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "separator": ",",
+      "style_option": true,
+      "summary": "Style of borders in tree mode.",
+      "syntax_name": "tree-mode-border-style",
+      "type": "string",
+      "value": {
+        "domain": "style",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "style"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "style_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#{?pane_format,#{pane_index}:#{pane_title},#{window_index}:#{window_name}}"
@@ -5470,9 +6578,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "fg=#{?#{||:#{&&:#{pane_format},#{pane_active}},#{&&:#{window_format},#{window_active}}},#{display-panes-active-colour},#{display-panes-colour}}"
+        "value": "fg=#{?#{||:#{&&:#{pane_format},#{pane_active}},#{&&:#{window_format},#{window_active}}},themered,themeblue}"
       },
       "description": "Style of preview indicator in tree mode.",
       "documented_scope": null,
@@ -5507,6 +6616,45 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
+      "default_source": {
+        "kind": "string",
+        "value": "#{E:mode-style}"
+      },
+      "description": "Style of the selected line in tree mode.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "tree-mode-selection-style",
+      "scope": {
+        "default_inferred_scope": "window",
+        "scopes": [
+          "window"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "separator": ",",
+      "style_option": true,
+      "summary": "Style of the selected line in tree mode.",
+      "syntax_name": "tree-mode-selection-style",
+      "type": "string",
+      "value": {
+        "domain": "style",
+        "menu": {
+          "kind": "freeform",
+          "shared_domain_ref": "style"
+        },
+        "notes": [
+          "If the value has no #{...} expansion, tmux validates it with style_parse at set time.",
+          "If #{...} appears, validation is deferred until runtime expansion."
+        ],
+        "set_time_validation": "style_parse_if_no_format_expansion",
+        "static_checkability": "static-partial"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -5545,6 +6693,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#P:[#T]#{?pane_flags,#{pane_flags}, }"
@@ -5577,6 +6726,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#P:[#T]#{?pane_flags,#{pane_flags}, }"
@@ -5615,6 +6765,7 @@
         "manual",
         "latest"
       ],
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "WINDOW_SIZE_LATEST"
@@ -5653,6 +6804,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -5691,6 +6843,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "reverse"
@@ -5728,6 +6881,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "reverse"
@@ -5765,6 +6919,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#I:#W#{?window_flags,#{window_flags}, }"
@@ -5797,9 +6952,10 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "default"
+        "value": "underscore"
       },
       "description": "Style of the current window in the status line.",
       "documented_scope": "window",
@@ -5834,6 +6990,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "#I:#W#{?window_flags,#{window_flags}, }"
@@ -5866,6 +7023,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -5903,6 +7061,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": " "
@@ -5934,6 +7093,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "string",
         "value": "default"
@@ -5971,6 +7131,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -6004,6 +7165,7 @@
     {
       "alternative_names": [],
       "array": false,
+      "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "1"
@@ -6038,6 +7200,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-bind-key",
       "documented_scope": null,
       "kind": "hook",
@@ -6071,6 +7234,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-capture-pane",
       "documented_scope": null,
       "kind": "hook",
@@ -6104,6 +7268,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-copy-mode",
       "documented_scope": null,
       "kind": "hook",
@@ -6137,6 +7302,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-display-message",
       "documented_scope": null,
       "kind": "hook",
@@ -6170,6 +7336,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-display-panes",
       "documented_scope": null,
       "kind": "hook",
@@ -6203,6 +7370,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-kill-pane",
       "documented_scope": null,
       "kind": "hook",
@@ -6236,6 +7404,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-list-buffers",
       "documented_scope": null,
       "kind": "hook",
@@ -6269,6 +7438,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-list-clients",
       "documented_scope": null,
       "kind": "hook",
@@ -6302,6 +7472,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-list-keys",
       "documented_scope": null,
       "kind": "hook",
@@ -6335,6 +7506,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-list-panes",
       "documented_scope": null,
       "kind": "hook",
@@ -6368,6 +7540,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-list-sessions",
       "documented_scope": null,
       "kind": "hook",
@@ -6401,6 +7574,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-list-windows",
       "documented_scope": null,
       "kind": "hook",
@@ -6434,6 +7608,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-load-buffer",
       "documented_scope": null,
       "kind": "hook",
@@ -6467,6 +7642,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-lock-server",
       "documented_scope": null,
       "kind": "hook",
@@ -6500,6 +7676,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-new-session",
       "documented_scope": null,
       "kind": "hook",
@@ -6533,6 +7710,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-new-window",
       "documented_scope": null,
       "kind": "hook",
@@ -6566,6 +7744,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-paste-buffer",
       "documented_scope": null,
       "kind": "hook",
@@ -6599,6 +7778,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-pipe-pane",
       "documented_scope": null,
       "kind": "hook",
@@ -6632,6 +7812,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-queue",
       "documented_scope": null,
       "kind": "hook",
@@ -6665,6 +7846,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-refresh-client",
       "documented_scope": null,
       "kind": "hook",
@@ -6698,6 +7880,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-rename-session",
       "documented_scope": null,
       "kind": "hook",
@@ -6731,6 +7914,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-rename-window",
       "documented_scope": null,
       "kind": "hook",
@@ -6764,6 +7948,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-resize-pane",
       "documented_scope": null,
       "kind": "hook",
@@ -6797,6 +7982,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-resize-window",
       "documented_scope": null,
       "kind": "hook",
@@ -6830,6 +8016,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-save-buffer",
       "documented_scope": null,
       "kind": "hook",
@@ -6863,6 +8050,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-select-layout",
       "documented_scope": null,
       "kind": "hook",
@@ -6896,6 +8084,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-select-pane",
       "documented_scope": null,
       "kind": "hook",
@@ -6929,6 +8118,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-select-window",
       "documented_scope": null,
       "kind": "hook",
@@ -6962,6 +8152,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-send-keys",
       "documented_scope": null,
       "kind": "hook",
@@ -6995,6 +8186,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-set-buffer",
       "documented_scope": null,
       "kind": "hook",
@@ -7028,6 +8220,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-set-environment",
       "documented_scope": null,
       "kind": "hook",
@@ -7061,6 +8254,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-set-hook",
       "documented_scope": null,
       "kind": "hook",
@@ -7094,6 +8288,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-set-option",
       "documented_scope": null,
       "kind": "hook",
@@ -7127,6 +8322,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-show-environment",
       "documented_scope": null,
       "kind": "hook",
@@ -7160,6 +8356,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-show-messages",
       "documented_scope": null,
       "kind": "hook",
@@ -7193,6 +8390,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-show-options",
       "documented_scope": null,
       "kind": "hook",
@@ -7226,6 +8424,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-split-window",
       "documented_scope": null,
       "kind": "hook",
@@ -7259,6 +8458,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: after-unbind-key",
       "documented_scope": null,
       "kind": "hook",
@@ -7292,6 +8492,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: alert-activity",
       "documented_scope": null,
       "kind": "hook",
@@ -7325,6 +8526,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: alert-bell",
       "documented_scope": null,
       "kind": "hook",
@@ -7358,6 +8560,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: alert-silence",
       "documented_scope": null,
       "kind": "hook",
@@ -7391,6 +8594,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-active",
       "documented_scope": null,
       "kind": "hook",
@@ -7424,6 +8628,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-attached",
       "documented_scope": null,
       "kind": "hook",
@@ -7457,6 +8662,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-detached",
       "documented_scope": null,
       "kind": "hook",
@@ -7490,6 +8696,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-focus-in",
       "documented_scope": null,
       "kind": "hook",
@@ -7523,6 +8730,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-focus-out",
       "documented_scope": null,
       "kind": "hook",
@@ -7556,6 +8764,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-resized",
       "documented_scope": null,
       "kind": "hook",
@@ -7589,6 +8798,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-session-changed",
       "documented_scope": null,
       "kind": "hook",
@@ -7622,6 +8832,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-light-theme",
       "documented_scope": null,
       "kind": "hook",
@@ -7655,6 +8866,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: client-dark-theme",
       "documented_scope": null,
       "kind": "hook",
@@ -7688,6 +8900,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: command-error",
       "documented_scope": null,
       "kind": "hook",
@@ -7721,6 +8934,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: pane-died",
       "documented_scope": null,
       "kind": "hook",
@@ -7755,6 +8969,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: pane-exited",
       "documented_scope": null,
       "kind": "hook",
@@ -7789,6 +9004,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: pane-focus-in",
       "documented_scope": null,
       "kind": "hook",
@@ -7823,6 +9039,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: pane-focus-out",
       "documented_scope": null,
       "kind": "hook",
@@ -7857,6 +9074,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: pane-mode-changed",
       "documented_scope": null,
       "kind": "hook",
@@ -7891,6 +9109,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: pane-set-clipboard",
       "documented_scope": null,
       "kind": "hook",
@@ -7925,6 +9144,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: pane-title-changed",
       "documented_scope": null,
       "kind": "hook",
@@ -7959,6 +9179,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: session-closed",
       "documented_scope": null,
       "kind": "hook",
@@ -7992,6 +9213,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: session-created",
       "documented_scope": null,
       "kind": "hook",
@@ -8025,6 +9247,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: session-renamed",
       "documented_scope": null,
       "kind": "hook",
@@ -8058,6 +9281,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: session-window-changed",
       "documented_scope": null,
       "kind": "hook",
@@ -8091,6 +9315,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: window-layout-changed",
       "documented_scope": null,
       "kind": "hook",
@@ -8124,6 +9349,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: window-linked",
       "documented_scope": null,
       "kind": "hook",
@@ -8157,6 +9383,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: window-pane-changed",
       "documented_scope": null,
       "kind": "hook",
@@ -8190,6 +9417,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: window-renamed",
       "documented_scope": null,
       "kind": "hook",
@@ -8223,6 +9451,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: window-resized",
       "documented_scope": null,
       "kind": "hook",
@@ -8256,6 +9485,7 @@
     {
       "alternative_names": [],
       "array": true,
+      "colour_option": false,
       "description": "Hook option: window-unlinked",
       "documented_scope": null,
       "kind": "hook",
@@ -9005,6 +10235,10 @@
           "value_type": "string"
         },
         {
+          "name": "client_colours",
+          "value_type": "string"
+        },
+        {
           "name": "client_control_mode",
           "value_type": "string"
         },
@@ -9170,10 +10404,6 @@
         },
         {
           "name": "last_window_index",
-          "value_type": "string"
-        },
-        {
-          "name": "loop_last_flag",
           "value_type": "string"
         },
         {
@@ -9418,6 +10648,18 @@
         },
         {
           "name": "pane_width",
+          "value_type": "string"
+        },
+        {
+          "name": "pane_x",
+          "value_type": "string"
+        },
+        {
+          "name": "pane_y",
+          "value_type": "string"
+        },
+        {
+          "name": "pane_z",
           "value_type": "string"
         },
         {
@@ -11260,6 +12502,10 @@
         {
           "alias": "switchc",
           "name": "switch-client"
+        },
+        {
+          "alias": null,
+          "name": "switch-mode"
         },
         {
           "alias": "unbind",

@@ -162,6 +162,36 @@ func TestValueCandidatesColour(t *testing.T) {
 	}
 }
 
+func TestValueCandidatesColourOptionField(t *testing.T) {
+	c := MustDefault()
+	// cursor-colour is Type=="string" with ColourOption==true in the
+	// refreshed catalog (it used to be Type=="colour"). It must still yield
+	// the full colour candidate list via the colour_option signal.
+	opt, _ := c.Lookup("cursor-colour")
+	if opt == nil {
+		t.Fatal("expected cursor-colour in catalog")
+	}
+	if opt.Type == TypeColour {
+		t.Fatalf("expected cursor-colour to be re-typed away from colour, got %q", opt.Type)
+	}
+	if !opt.IsColour() {
+		t.Fatal("expected cursor-colour.IsColour() to be true via colour_option")
+	}
+	candidates, _ := c.ValueCandidates("cursor-colour")
+	if len(candidates) < 10 {
+		t.Fatalf("expected many colour candidates for cursor-colour, got %d", len(candidates))
+	}
+	got := make([]string, len(candidates))
+	for i, cand := range candidates {
+		got[i] = cand.Value
+	}
+	for _, want := range []string{"red", "blue", "black", "white"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("expected basic colour %q in cursor-colour candidates", want)
+		}
+	}
+}
+
 func TestValueCandidatesDynamic(t *testing.T) {
 	c := MustDefault()
 	// status-format is an array of format strings — freeform.

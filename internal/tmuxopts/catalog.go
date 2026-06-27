@@ -1,7 +1,8 @@
 // Package tmuxopts exposes the tmux option catalog as Go data.
 //
-// The catalog is generated upstream (see ~/git_tree/tmux/tmux-option-catalog.md
-// for the schema) and embedded here so consumers can offer completion,
+// The catalog is generated upstream (see
+// ~/git_tree/tmux/option-catalog/tmux-option-catalog.md for the schema) and
+// embedded here so consumers can offer completion,
 // validation, and inline help for tmux option names and values without any
 // tmux runtime dependency.
 //
@@ -126,6 +127,7 @@ type Option struct {
 	Type               Type                `json:"type"`
 	Array              bool                `json:"array"`
 	StyleOption        bool                `json:"style_option"`
+	ColourOption       bool                `json:"colour_option"`
 	AlternativeNames   []string            `json:"alternative_names,omitempty"`
 	Summary            string              `json:"summary"`
 	Description        string              `json:"description"`
@@ -135,6 +137,18 @@ type Option struct {
 	Separator          string              `json:"separator,omitempty"`
 	NumericConstraints *NumericConstraints `json:"numeric_constraints,omitempty"`
 	Status             Status              `json:"status,omitempty"`
+}
+
+// IsColour reports whether the option's value is a tmux colour. As of
+// catalog schema v1 (refreshed 2026-06-27) most colour options carry
+// Type=="string" plus ColourOption==true; only a few (status-bg, status-fg,
+// pane-colours) retain the legacy Type=="colour". Consumers wanting colour
+// completion/decoration must check both rather than Type alone.
+func (o *Option) IsColour() bool {
+	if o == nil {
+		return false
+	}
+	return o.Type == TypeColour || o.ColourOption
 }
 
 // PseudoOption represents a schema entry for names not enumerated

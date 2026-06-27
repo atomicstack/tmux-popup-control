@@ -40,6 +40,13 @@ func (c *Catalog) ValueCandidates(name string) ([]ValueCandidate, Checkability) 
 		return nil, CheckDynamic
 	}
 
+	// Colour options no longer all carry Type=="colour" (most are now
+	// Type=="string" with ColourOption==true), so check IsColour before the
+	// type switch to keep colour completion for the whole colour domain.
+	if opt.IsColour() {
+		return colourCandidates(c.domains.Colour), opt.Value.StaticCheckability
+	}
+
 	switch opt.Type {
 	case TypeFlag:
 		if c.domains.Flag != nil && len(c.domains.Flag.CanonicalValues) > 0 {
@@ -50,8 +57,6 @@ func (c *Catalog) ValueCandidates(name string) ([]ValueCandidate, Checkability) 
 		if len(opt.Choices) > 0 {
 			return toCandidates(opt.Choices, nil), opt.Value.StaticCheckability
 		}
-	case TypeColour:
-		return colourCandidates(c.domains.Colour), opt.Value.StaticCheckability
 	case TypeKey:
 		if c.domains.Key != nil {
 			return toCandidates(c.domains.Key.BaseKeyNames, nil), opt.Value.StaticCheckability

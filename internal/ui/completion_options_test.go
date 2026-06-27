@@ -246,6 +246,23 @@ func TestDecorateShowOptionsLineDecoratesColourOption(t *testing.T) {
 	}
 }
 
+func TestDecorateShowOptionsLineDecoratesColourOptionField(t *testing.T) {
+	// clock-mode-colour is Type=="string" with ColourOption==true in the
+	// refreshed catalog (it used to be Type=="colour"). Its value must still
+	// be rendered in the colour it names via the IsColour signal.
+	decorated, ok := decorateShowOptionsLine("clock-mode-colour red", nil)
+	if !ok {
+		t.Fatal("expected decoration for 'clock-mode-colour red'")
+	}
+	if !strings.Contains(decorated, "\x1b[31m") {
+		t.Errorf("expected ANSI red foreground on value text, got %q", decorated)
+	}
+	stripped := ansi.Strip(decorated)
+	if !strings.Contains(stripped, "red") {
+		t.Errorf("expected 'red' in stripped output, got %q", stripped)
+	}
+}
+
 func TestDecorateShowOptionsLineScopeColoursKnownOption(t *testing.T) {
 	// mouse is a session-scoped TypeFlag; no colour decoration applies
 	// but the name must still be rendered in the session scope colour.
