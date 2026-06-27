@@ -19,7 +19,7 @@ import (
 var (
 	switchPaneFn = tmux.SwitchPane
 	killPanesFn  = tmux.KillPanes
-	movePaneFn   = tmux.MovePane
+	joinPaneFn   = tmux.JoinPane
 	breakPaneFn  = tmux.BreakPane
 	swapPanesFn  = tmux.SwapPanes
 	resizePaneFn = tmux.ResizePane
@@ -166,7 +166,7 @@ func PaneJoinAction(ctx Context, item Item) tea.Cmd {
 	return func() tea.Msg {
 		events.Pane.Join(sorted, target)
 		for _, id := range sorted {
-			if err := movePaneFn(ctx.SocketPath, id, target); err != nil {
+			if err := joinPaneFn(ctx.SocketPath, id, target); err != nil {
 				return ActionResult{Err: err}
 			}
 		}

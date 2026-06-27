@@ -806,6 +806,31 @@ func TestMovePaneAllowsOptionalTarget(t *testing.T) {
 	}
 }
 
+func TestJoinPaneRequiresSourceAndTarget(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+
+	// Unlike move-pane, join-pane needs an explicit destination — the
+	// pane:join action always supplies one. Empty source or target must be
+	// rejected before reaching the client.
+	if err := JoinPane("sock", "", "%1"); err == nil {
+		t.Fatal("expected error for empty source")
+	}
+	if err := JoinPane("sock", "%0", ""); err == nil {
+		t.Fatal("expected error for empty target")
+	}
+	if fake.joinPaneCalls != 0 {
+		t.Fatalf("client.JoinPane should not be called on validation failure, got %d", fake.joinPaneCalls)
+	}
+
+	if err := JoinPane("sock", "%0", "%1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fake.joinPaneCalls != 1 {
+		t.Fatalf("expected one join pane call, got %d", fake.joinPaneCalls)
+	}
+}
+
 func TestBreakPaneValidation(t *testing.T) {
 	if err := BreakPane("", " ", ""); err == nil {
 		t.Fatalf("expected error for missing source")

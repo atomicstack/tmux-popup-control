@@ -70,6 +70,25 @@ func MovePane(socketPath, source, target string) error {
 	return client.MovePane(source, target)
 }
 
+// JoinPane joins source into target's window as a split (tmux `join-pane`).
+// This is the correct command for the pane:join action: tmux's `move-pane`
+// (see MovePane) was repurposed in tmux next-3.7 to reposition *floating*
+// panes and rejects ordinary panes with "pane is not floating".
+func JoinPane(socketPath, source, target string) error {
+	if strings.TrimSpace(source) == "" {
+		return fmt.Errorf("pane source required")
+	}
+	if strings.TrimSpace(target) == "" {
+		return fmt.Errorf("pane target required")
+	}
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+
+	return client.JoinPane(source, target)
+}
+
 func BreakPane(socketPath, source, destination string) error {
 	if strings.TrimSpace(source) == "" {
 		return fmt.Errorf("pane source required")

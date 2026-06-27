@@ -84,10 +84,10 @@ func TestPaneResizeLeftAction(t *testing.T) {
 	}
 }
 
-func TestPaneJoinActionUsesMovePane(t *testing.T) {
+func TestPaneJoinActionUsesJoinPane(t *testing.T) {
 	type call struct{ source, target string }
 	var calls []call
-	restore := withPaneStub(&movePaneFn, func(_ string, source, target string) error {
+	restore := withPaneStub(&joinPaneFn, func(_ string, source, target string) error {
 		calls = append(calls, call{source: source, target: target})
 		return nil
 	})
@@ -110,7 +110,7 @@ func TestPaneJoinActionUsesMovePane(t *testing.T) {
 
 func TestPaneJoinActionRefusesEmptyTarget(t *testing.T) {
 	var calls int
-	restore := withPaneStub(&movePaneFn, func(_, _, _ string) error {
+	restore := withPaneStub(&joinPaneFn, func(_, _, _ string) error {
 		calls++
 		return nil
 	})
@@ -121,7 +121,7 @@ func TestPaneJoinActionRefusesEmptyTarget(t *testing.T) {
 		t.Fatal("expected error when CurrentPaneID is empty")
 	}
 	if calls != 0 {
-		t.Fatalf("expected MovePane to not be called when target unknown, got %d calls", calls)
+		t.Fatalf("expected JoinPane to not be called when target unknown, got %d calls", calls)
 	}
 }
 
