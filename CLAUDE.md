@@ -175,6 +175,15 @@ CLI flags and env vars are both supported. Key env vars:
 | `TMUX_POPUP_CONTROL_WINDOW_FORMAT/FILTER` | Custom format/filter for window list |
 | `TMUX_POPUP_CONTROL_SWITCH_CURRENT` | Include current session/window/pane in switch menus |
 
+### tmux option catalog (`internal/tmuxopts/`)
+
+`internal/tmuxopts/` embeds a JSON catalog of every tmux option/hook (names, scopes, value types, choices, shared value domains) so the command menu can offer name/value completion, validation, and inline help **without a tmux runtime dependency**. The package is consumer-agnostic (no bubbletea/lipgloss).
+
+- **Source of truth is upstream**, not this repo: the catalog is generated at `~/git_tree/tmux/option-catalog/` (note the `option-catalog/` subdir; an older path was `~/git_tree/tmux/`). To refresh, `cp ~/git_tree/tmux/option-catalog/tmux-option-catalog.json internal/tmuxopts/tmux-option-catalog.json` and **include that repo's HEAD commit hash in the commit message** so the embedded snapshot is traceable. The `.md`/`.py` files there are the schema doc and generator — don't hand-edit the JSON.
+- **JSON shape**: top-level `schema_version` (currently 1), `options`, `pseudo_options` (just `@<name>` user options), `name_aliases` (alias↔canonical, e.g. `display-panes-color`→`display-panes-colour`), `shared_domains` (`colour`, `flag`, `key`, `style`, `tmux_command`, `format_string`, `terminal_features`, `terminal_override_capabilities`). The Go structs in `catalog.go` only model the fields the UI consumes; extra JSON fields (`documented_scope`, `default_source`, `scope_mismatch_with_manpage`, etc.) are ignored by `json.Unmarshal` — add a struct field only when a consumer needs it.
+- **Colour options are NOT identified by `type=="colour"` alone.** As of the 2026-06-27 refresh the catalog decoupled colour-ness from `type`: most colour options (cursor-colour, clock-mode-colour, display-panes[-active]-colour, the dark-/light-theme-* palette, prompt[-command]-cursor-colour — 26 in total) are now `type=="string"` with a new `colour_option: true` boolean, while only status-bg, status-fg, and pane-colours retain `type=="colour"`. Always use `Option.IsColour()` (`type==colour || colour_option`; equivalent to `value.domain=="colour"`) for colour completion/decoration, never a bare `Type==TypeColour` check.
+- **Consumers**: `values.go` (`ValueCandidates`/`ValueHint`/`OptionSummary`), `internal/ui/completion_options.go` (name/hook/value completion + `decorateShowOptionsLine` colour swatches), and `internal/tmux/client.go`. Load via `tmuxopts.Default()` (parses the embedded JSON once via `sync.OnceValues`).
+
 ### Filter / fuzzy search
 
 `github.com/lithammer/fuzzysearch` is used for live filter input on menu levels. Filter state (text, cursor position) lives in `internal/ui/state/filter.go` on the `Level` type.
