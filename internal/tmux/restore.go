@@ -1,10 +1,12 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
@@ -105,14 +107,30 @@ func RespawnPane(spec PaneSpec) error {
 	return err
 }
 
-// WaitFor blocks until the tmux wait-for channel has been signaled.
-func WaitFor(socketPath, channel string) error {
-	client, err := newTmux(socketPath)
-	if err != nil {
-		return err
+// WaitFor blocks until the tmux wait-for channel has been signaled, the
+// context is cancelled, or (when timeout > 0) the timeout elapses.
+//
+// This runs `tmux wait-for <channel>` as a one-shot exec subprocess rather
+// than over the shared control-mode connection. A blocking wait-for on the
+// control client would serialize every later command behind it, and if the
+// signaling side (a pane's content-replay cat) dies before calling
+// `wait-for -S`, the control connection would wedge permanently. exec +
+// context.CommandContext gives us a bounded, cancellable wait whose process is
+// killed on deadline/cancel.
+func WaitFor(ctx context.Context, socketPath, channel string, timeout time.Duration) error {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
-	_, err = client.Command("wait-for", channel)
-	return err
+	args := append(baseArgs(socketPath), "wait-for", channel)
+	if err := runExecCommandContext(ctx, "tmux", args...).Run(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("wait-for %s: %w", channel, ctxErr)
+		}
+		return fmt.Errorf("wait-for %s: %w", channel, err)
+	}
+	return nil
 }
 
 // SelectLayoutTarget applies the named layout to the given target window.

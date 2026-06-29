@@ -1,6 +1,7 @@
 package resurrect
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"maps"
@@ -38,17 +39,17 @@ func writeSaveFile(t *testing.T, dir string, name string, sf *SaveFile) string {
 }
 
 // stubNoOp returns a function that accepts any args and returns nil.
-func noopSession(tmux.SessionSpec) error { return nil }
-func noopWindow(tmux.WindowSpec) error   { return nil }
-func noopRename(_, _, _ string) error    { return nil }
-func noopSplit(tmux.PaneSpec) error      { return nil }
-func noopLayout(_, _, _ string) error    { return nil }
-func noopPane(_, _ string) error         { return nil }
-func noopSelectWindow(_, _ string) error { return nil }
-func noopSwitch(_, _, _ string) error    { return nil }
-func noopWait(_, _ string) error         { return nil }
-func noopRespawn(tmux.PaneSpec) error    { return nil }
-func noopDefaultCommand(_ string) string { return "/bin/bash" }
+func noopSession(tmux.SessionSpec) error            { return nil }
+func noopWindow(tmux.WindowSpec) error              { return nil }
+func noopRename(_, _, _ string) error               { return nil }
+func noopSplit(tmux.PaneSpec) error                 { return nil }
+func noopLayout(_, _, _ string) error               { return nil }
+func noopPane(_, _ string) error                    { return nil }
+func noopSelectWindow(_, _ string) error            { return nil }
+func noopSwitch(_, _, _ string) error               { return nil }
+func noopWait(_ context.Context, _, _ string) error { return nil }
+func noopRespawn(tmux.PaneSpec) error               { return nil }
+func noopDefaultCommand(_ string) string            { return "/bin/bash" }
 
 // TestSessionStepCountMatchesComputeRestoreTotal guards against drift between
 // the per-session step count used by the skip-already-merged branch
@@ -615,7 +616,7 @@ func TestRestoreWaitsForPaneReplayBeforeSelectingAndSwitching(t *testing.T) {
 	defer r13()
 	r14 := withRespawnPaneFn(noopRespawn)
 	defer r14()
-	r15 := withWaitForFn(func(_, channel string) error {
+	r15 := withWaitForFn(func(_ context.Context, _, channel string) error {
 		order = append(order, "wait:"+channel)
 		return nil
 	})

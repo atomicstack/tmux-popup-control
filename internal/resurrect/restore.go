@@ -22,7 +22,7 @@ type RestoreDeps struct {
 	SplitPane             func(tmux.PaneSpec) error
 	SelectLayoutTarget    func(socketPath, target, layout string) error
 	RespawnPane           func(tmux.PaneSpec) error
-	WaitFor               func(socketPath, channel string) error
+	WaitFor               func(ctx context.Context, socketPath, channel string) error
 	SelectPane            func(socketPath, target string) error
 	SelectWindow          func(socketPath, target string) error
 	SwitchClient          func(socketPath, clientID, target string) error
@@ -34,13 +34,15 @@ type RestoreDeps struct {
 }
 
 var restoreDeps = RestoreDeps{
-	CreateSession:         tmux.CreateSession,
-	CreateWindow:          tmux.CreateWindow,
-	RenameWindow:          tmux.RenameWindow,
-	SplitPane:             tmux.SplitPane,
-	SelectLayoutTarget:    tmux.SelectLayoutTarget,
-	RespawnPane:           tmux.RespawnPane,
-	WaitFor:               tmux.WaitFor,
+	CreateSession:      tmux.CreateSession,
+	CreateWindow:       tmux.CreateWindow,
+	RenameWindow:       tmux.RenameWindow,
+	SplitPane:          tmux.SplitPane,
+	SelectLayoutTarget: tmux.SelectLayoutTarget,
+	RespawnPane:        tmux.RespawnPane,
+	WaitFor: func(ctx context.Context, socketPath, channel string) error {
+		return tmux.WaitFor(ctx, socketPath, channel, replayWaitTimeout)
+	},
 	SelectPane:            tmux.SelectPane,
 	SelectWindow:          tmux.SelectWindow,
 	SwitchClient:          tmux.SwitchClient,
@@ -50,6 +52,14 @@ var restoreDeps = RestoreDeps{
 	SessionOption:         tmux.SessionOption,
 	SetSessionOption:      tmux.SetSessionOption,
 }
+
+// replayWaitTimeout bounds how long the restore waits for a single pane's
+// content-replay channel to be signaled. Once tmux is draining pane PTYs
+// normally (see the no-output flow-control change), a `cat` of saved
+// scrollback signals in well under a second; this generous ceiling exists only
+// so a pane whose replay died never wedges the whole restore — it fails with a
+// clear error instead of blocking forever.
+const replayWaitTimeout = 30 * time.Second
 
 // restoreMarkerKey returns the tmux session option name used to record that
 // a saved session has already been merged into an existing session.
@@ -96,7 +106,7 @@ func withRespawnPaneFn(fn func(tmux.PaneSpec) error) func() {
 	return func() { restoreDeps.RespawnPane = orig }
 }
 
-func withWaitForFn(fn func(string, string) error) func() {
+func withWaitForFn(fn func(ctx context.Context, socketPath, channel string) error) func() {
 	orig := restoreDeps.WaitFor
 	restoreDeps.WaitFor = fn
 	return func() { restoreDeps.WaitFor = orig }
@@ -550,7 +560,7 @@ func (r *restoreRun) finalizeSession(sess Session, indexMap map[int]int, replayW
 	}
 
 	for _, channel := range replayWaitChannels {
-		if err := restoreDeps.WaitFor(r.cfg.SocketPath, channel); err != nil {
+		if err := restoreDeps.WaitFor(r.ctx, r.cfg.SocketPath, channel); err != nil {
 			return sendError(r.ctx, r.ch, "waiting for pane replay %s: %w", channel, err)
 		}
 	}

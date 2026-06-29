@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"os/exec"
 	"slices"
 	"sync"
@@ -119,6 +120,18 @@ var (
 			name: name,
 			args: slices.Clone(args),
 			cmd:  realCommander{cmd: exec.Command(name, args...)},
+		}
+	}
+
+	// runExecCommandContext is the cancellable counterpart of runExecCommand,
+	// used where a tmux exec must honour a context deadline / cancellation
+	// (notably WaitFor, where a never-signaled channel would otherwise block
+	// forever). Swapped in tests.
+	runExecCommandContext = func(ctx context.Context, name string, args ...string) commander {
+		return tracedCommander{
+			name: name,
+			args: slices.Clone(args),
+			cmd:  realCommander{cmd: exec.CommandContext(ctx, name, args...)},
 		}
 	}
 
