@@ -61,6 +61,7 @@ var (
 	traceStartupFn           = traceStartup
 	appRunFn                 = app.Run
 	logErrorFn               = logging.Error
+	shutdownTmuxFn           = tmux.Shutdown
 )
 
 type commandHandler struct {
@@ -120,6 +121,13 @@ func runWithDeps(deps MainDeps) (exitCode int) {
 
 	cmd := subcommand(runtimeCfg)
 	if handler, ok := commandHandlers()[cmd]; ok {
+		// Subcommands (autosave, autosave-status, save/restore-sessions,
+		// plugin helpers) may open a cached gotmuxcc control-mode client via
+		// newTmux. Unlike the TUI path (app.Run defers its own Shutdown), they
+		// have no other teardown, so the tmux -C subprocess would leak on exit.
+		// tmux runs autosave-status ~once/sec, so these orphans accumulate and
+		// can saturate the server during a large restore. Close on exit here.
+		defer shutdownTmuxFn()
 		if err := handler.Run(runtimeCfg, deps); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", handler.ErrorLabel, err)
 			exitStatus = "error"
