@@ -203,6 +203,13 @@ func SetSessionOption(socketPath, session, option, value string) error {
 // ShowOption queries a tmux server-level (global) option value. Returns an
 // empty string if the option is not set or an error occurs. Results are
 // memoized per (socket, option) for the life of the process — see cache.go.
+//
+// This reads via a one-shot `tmux show-options -gqv`, not the control-mode
+// connection. ShowOption feeds the autosave-status path (which tmux runs
+// roughly once per second) and the restore path; a control-mode attach in
+// either forces a full server state-sync and saturates the single-threaded
+// server during a large restore. The per-process memoization below keeps the
+// exec cost to one invocation per (socket, option).
 func ShowOption(socketPath, option string) string {
 	key := optionCacheKey(socketPath, option)
 	optionCacheMu.RLock()
@@ -212,15 +219,12 @@ func ShowOption(socketPath, option string) string {
 	}
 	optionCacheMu.RUnlock()
 
-	client, err := newTmux(socketPath)
+	args := append(baseArgs(socketPath), "show-options", "-gqv", option)
+	output, err := runExecCommand("tmux", args...).Output()
 	if err != nil {
 		return ""
 	}
-	val, err := client.GlobalOption(option)
-	if err != nil {
-		return ""
-	}
-	trimmed := strings.TrimSpace(val)
+	trimmed := strings.TrimSpace(string(output))
 	optionCacheMu.Lock()
 	optionCache[key] = trimmed
 	optionCacheMu.Unlock()

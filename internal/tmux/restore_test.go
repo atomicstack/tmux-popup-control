@@ -3,6 +3,7 @@ package tmux
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -302,29 +303,33 @@ func TestCapturePaneContentsClientError(t *testing.T) {
 // --- ShowOption ---
 
 func TestShowOptionSuccess(t *testing.T) {
-	fake := &fakeClient{
-		globalOptionFn: func(key string) (string, error) {
-			if key == "@my-option" {
-				return "  myvalue  ", nil
-			}
-			return "", nil
-		},
-	}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	// ShowOption resolves via one-shot `tmux show-options -gqv`, not control
+	// mode: it feeds the autosave-status path (~once/sec) and the restore path,
+	// where a control-mode attach forces a full state-sync. newTmux is stubbed
+	// to fail so any control-mode use would surface.
+	withStubTmux(t, func(string) (tmuxClient, error) {
+		return nil, errors.New("control-mode must not be used")
+	})
+	var gotArgs []string
+	withStubCommander(t, func(name string, args ...string) commander {
+		gotArgs = append([]string{name}, args...)
+		return stubCommander{output: []byte("  myvalue  \n")}
+	})
 
 	got := ShowOption("", "@my-option")
 	if got != "myvalue" {
 		t.Errorf("expected %q, got %q", "myvalue", got)
 	}
+	joined := strings.Join(gotArgs, " ")
+	if !strings.Contains(joined, "show-options") || !strings.Contains(joined, "@my-option") {
+		t.Errorf("unexpected exec invocation: %q", joined)
+	}
 }
 
 func TestShowOptionError(t *testing.T) {
-	fake := &fakeClient{
-		globalOptionFn: func(string) (string, error) {
-			return "", errors.New("option error")
-		},
-	}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(string, ...string) commander {
+		return stubCommander{err: errors.New("option error")}
+	})
 
 	got := ShowOption("", "@missing")
 	if got != "" {
@@ -339,13 +344,10 @@ func TestShowOptionError(t *testing.T) {
 // dominate startup latency under load.
 func TestShowOptionCachesResult(t *testing.T) {
 	calls := 0
-	fake := &fakeClient{
-		globalOptionFn: func(key string) (string, error) {
-			calls++
-			return "value", nil
-		},
-	}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(string, ...string) commander {
+		calls++
+		return stubCommander{output: []byte("value\n")}
+	})
 
 	for i := range 5 {
 		if got := ShowOption("/tmp/socket", "@cached-option"); got != "value" {
@@ -372,15 +374,12 @@ func TestShowOptionCachesResult(t *testing.T) {
 // --- DefaultCommand ---
 
 func TestDefaultCommandFromTmux(t *testing.T) {
-	fake := &fakeClient{
-		globalOptionFn: func(key string) (string, error) {
-			if key == "default-command" {
-				return "/usr/local/bin/fish", nil
-			}
-			return "", nil
-		},
-	}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(name string, args ...string) commander {
+		if strings.Contains(strings.Join(args, " "), "default-command") {
+			return stubCommander{output: []byte("/usr/local/bin/fish\n")}
+		}
+		return stubCommander{output: nil}
+	})
 
 	got := DefaultCommand("")
 	if got != "/usr/local/bin/fish" {
@@ -389,8 +388,9 @@ func TestDefaultCommandFromTmux(t *testing.T) {
 }
 
 func TestDefaultCommandFallsBackToShell(t *testing.T) {
-	fake := &fakeClient{}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(string, ...string) commander {
+		return stubCommander{output: nil}
+	})
 
 	t.Setenv("SHELL", "/bin/zsh")
 	got := DefaultCommand("")
@@ -400,8 +400,9 @@ func TestDefaultCommandFallsBackToShell(t *testing.T) {
 }
 
 func TestDefaultCommandFallsBackToBinSh(t *testing.T) {
-	fake := &fakeClient{}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(string, ...string) commander {
+		return stubCommander{output: nil}
+	})
 
 	t.Setenv("SHELL", "")
 	got := DefaultCommand("")

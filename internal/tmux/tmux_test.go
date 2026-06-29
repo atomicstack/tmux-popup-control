@@ -29,6 +29,29 @@ func withStubTmux(t *testing.T, fn func(string) (tmuxClient, error)) {
 	})
 }
 
+// stubCommander is a fake commander for stubbing runExecCommand in tests.
+type stubCommander struct {
+	output []byte
+	err    error
+}
+
+func (s stubCommander) Run() error              { return s.err }
+func (s stubCommander) Output() ([]byte, error) { return s.output, s.err }
+
+// withStubCommander swaps runExecCommand so exec-based helpers (ShowOption,
+// ServerStartTime, the CLI fallbacks) can be driven without a live tmux. fn
+// receives the same (name, args...) the production code passes to tmux.
+func withStubCommander(t *testing.T, fn func(name string, args ...string) commander) {
+	t.Helper()
+	prev := runExecCommand
+	runExecCommand = fn
+	resetCaches()
+	t.Cleanup(func() {
+		runExecCommand = prev
+		resetCaches()
+	})
+}
+
 type stubWindowHandle struct {
 	selectCalls int
 	selectErr   error
@@ -1511,12 +1534,9 @@ func TestNewTmuxCachesConnection(t *testing.T) {
 }
 
 func TestEnvOrOptionPrefersEnvVar(t *testing.T) {
-	fake := &fakeClient{
-		globalOptionFn: func(key string) (string, error) {
-			return "from-tmux", nil
-		},
-	}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(string, ...string) commander {
+		return stubCommander{output: []byte("from-tmux\n")}
+	})
 	t.Setenv("TEST_ENV_OR_OPT", "from-env")
 	result := envOrOption("", "TEST_ENV_OR_OPT", "@test-option")
 	if result != "from-env" {
@@ -1525,15 +1545,12 @@ func TestEnvOrOptionPrefersEnvVar(t *testing.T) {
 }
 
 func TestEnvOrOptionFallsBackToTmuxOption(t *testing.T) {
-	fake := &fakeClient{
-		globalOptionFn: func(key string) (string, error) {
-			if key == "@test-option" {
-				return "from-tmux", nil
-			}
-			return "", nil
-		},
-	}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(name string, args ...string) commander {
+		if strings.Contains(strings.Join(args, " "), "@test-option") {
+			return stubCommander{output: []byte("from-tmux\n")}
+		}
+		return stubCommander{output: nil}
+	})
 	t.Setenv("TEST_ENV_OR_OPT", "")
 	result := envOrOption("", "TEST_ENV_OR_OPT", "@test-option")
 	if result != "from-tmux" {
@@ -1542,8 +1559,9 @@ func TestEnvOrOptionFallsBackToTmuxOption(t *testing.T) {
 }
 
 func TestEnvOrOptionReturnsEmptyWhenBothUnset(t *testing.T) {
-	fake := &fakeClient{}
-	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	withStubCommander(t, func(string, ...string) commander {
+		return stubCommander{output: nil}
+	})
 	t.Setenv("TEST_ENV_OR_OPT", "")
 	result := envOrOption("", "TEST_ENV_OR_OPT", "@nonexistent")
 	if result != "" {
