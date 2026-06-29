@@ -154,9 +154,11 @@ type fakeClient struct {
 		target string
 		opts   *gotmux.SplitWindowOptions
 	}
-	splitWindowErr error
-	globalOptionFn func(key string) (string, error)
-	optionsFn      func(target, level string) ([]*gotmux.Option, error)
+	splitWindowErr  error
+	globalOptionFn  func(key string) (string, error)
+	optionsFn       func(target, level string) ([]*gotmux.Option, error)
+	controlFlags    []string
+	controlFlagsErr error
 
 	// Display and format queries.
 	displayMessageFn        func(target, format string) (string, error)
@@ -330,6 +332,11 @@ func (f *fakeClient) GlobalOption(key string) (string, error) {
 		return f.globalOptionFn(key)
 	}
 	return "", nil
+}
+
+func (f *fakeClient) SetControlFlags(flags string) error {
+	f.controlFlags = append(f.controlFlags, flags)
+	return f.controlFlagsErr
 }
 
 func (f *fakeClient) Options(target, level string) ([]*gotmux.Option, error) {

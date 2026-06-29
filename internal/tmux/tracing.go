@@ -188,6 +188,12 @@ func (c *tracedTmuxClient) SplitWindow(target string, options *gotmux.SplitWindo
 	})
 }
 
+func (c *tracedTmuxClient) SetControlFlags(flags string) error {
+	return c.traceErr("set_control_flags", "client", mergeTracingAttrs(c.baseAttrs(), map[string]any{"flags": flags}), func() error {
+		return c.inner.SetControlFlags(flags)
+	})
+}
+
 func (c *tracedTmuxClient) GlobalOption(key string) (string, error) {
 	return traceValue("tmux.control", "global_option", key, c.baseAttrs(), func() (string, error) {
 		return c.inner.GlobalOption(key)

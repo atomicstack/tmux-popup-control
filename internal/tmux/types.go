@@ -110,6 +110,7 @@ var (
 		}
 		cachedClient = newTracedTmuxClient(socketPath, c)
 		cachedSocket = socketPath
+		configureControlClient(cachedClient)
 		return cachedClient, nil
 	}
 
@@ -119,6 +120,21 @@ var (
 			args: slices.Clone(args),
 			cmd:  realCommander{cmd: exec.Command(name, args...)},
 		}
+	}
+
+	// configureControlClient applies one-time setup to a freshly established
+	// control-mode client. It suppresses %output notifications via
+	// `refresh-client -f no-output`: this app never consumes pane-output events
+	// (previews use request/response capture-pane; the backend polls list-*),
+	// and during a restore the output buffered for an otherwise-idle control
+	// client can stall tmux's draining of pane PTYs (flow control), blocking
+	// content replay. Best-effort — an older tmux that rejects the flag must
+	// not fail the connection.
+	configureControlClient = func(c tmuxClient) {
+		if c == nil {
+			return
+		}
+		_ = c.SetControlFlags("no-output")
 	}
 
 	newWindowHandle = func(w *gotmux.Window) windowHandle {
@@ -165,6 +181,9 @@ type tmuxClient interface {
 	// Option queries (control-mode).
 	GlobalOption(key string) (string, error)
 	Options(target, level string) ([]*gotmux.Option, error)
+	// SetControlFlags sets control-mode client flags via `refresh-client -f`
+	// (e.g. "no-output" to suppress %output notifications).
+	SetControlFlags(flags string) error
 	// Display and custom-format queries (control-mode).
 	DisplayMessage(target, format string) (string, error)
 	ListSessionsFormat(format string) ([]string, error)

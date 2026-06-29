@@ -35,6 +35,27 @@ func TestServerStartTimeUsesExec(t *testing.T) {
 	}
 }
 
+// TestConfigureControlClientSuppressesOutput verifies that a freshly
+// established control-mode client is told to suppress %output notifications via
+// `refresh-client -f no-output`. This app never consumes pane-output events
+// (previews use request/response capture-pane; the backend polls list-*), so
+// receiving them is pure waste — and during a restore the buffered output for
+// our client can stall tmux's draining of pane PTYs, blocking content replay.
+func TestConfigureControlClientSuppressesOutput(t *testing.T) {
+	fake := &fakeClient{}
+	configureControlClient(fake)
+	if len(fake.controlFlags) != 1 || fake.controlFlags[0] != "no-output" {
+		t.Fatalf("expected SetControlFlags(\"no-output\"), got %v", fake.controlFlags)
+	}
+}
+
+// TestConfigureControlClientIgnoresError ensures flag setup is best-effort: an
+// older tmux that rejects the flag must not fail the connection.
+func TestConfigureControlClientIgnoresError(t *testing.T) {
+	fake := &fakeClient{controlFlagsErr: errors.New("unknown flag")}
+	configureControlClient(fake) // must not panic or propagate
+}
+
 func TestServerStartTimeExecError(t *testing.T) {
 	withStubCommander(t, func(string, ...string) commander {
 		return stubCommander{err: errors.New("boom")}
