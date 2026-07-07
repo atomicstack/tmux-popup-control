@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/atomicstack/tmux-popup-control/internal/extract"
 	testutil "github.com/atomicstack/tmux-popup-control/internal/testutil"
 )
 
@@ -640,4 +641,76 @@ func TestSessionOptionShowOptionsIntegration(t *testing.T) {
 	}
 
 	Shutdown()
+}
+
+// TestExtractCaptureExtractInsertIntegration proves the extract feature's
+// full chain end-to-end against a live tmux server: capture a pane's visible
+// content via CaptureVisible, extract a path token via extract.Extract, then
+// insert a token back into the pane via InsertText. This mirrors
+// TestPanePreviewCapturesLiveCursorIntegration's approach of running "cat" in
+// a detached session so typed/pasted input echoes to the screen for
+// verification.
+func TestExtractCaptureExtractInsertIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	sessionName := "extract-integration"
+	if err := exec.Command("tmux", "-S", socket, "new-session", "-d", "-s", sessionName, "cat").Run(); err != nil {
+		t.Fatalf("failed to create extract integration session: %v", err)
+	}
+	waitForSession(t, socket, sessionName)
+
+	paneOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", sessionName, "-p", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("get pane id: %v", err)
+	}
+	paneID := strings.TrimSpace(string(paneOut))
+	if paneID == "" {
+		t.Fatal("expected pane id")
+	}
+
+	testutil.SendText(t, socket, paneID, "open internal/menu/registry.go")
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	testutil.WaitForContent(t, ctx, socket, paneID, "registry.go")
+
+	// CAPTURE: pull the visible pane content via the same control-mode path
+	// the extract feature uses.
+	text, err := CaptureVisible(socket, paneID)
+	if err != nil {
+		t.Fatalf("CaptureVisible failed: %v", err)
+	}
+	t.Logf("CaptureVisible returned: %q", text)
+	if !strings.Contains(text, "internal/menu/registry.go") {
+		t.Fatalf("expected captured text to contain %q, got %q", "internal/menu/registry.go", text)
+	}
+
+	// EXTRACT: run the real extractor over the captured text and confirm the
+	// path token comes back.
+	toks := extract.Extract(text, extract.Path)
+	found := false
+	for _, tok := range toks {
+		if strings.Contains(tok.Text, "internal/menu/registry.go") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected a path token containing %q, got %#v", "internal/menu/registry.go", toks)
+	}
+	t.Logf("extract.Extract(Path) tokens: %#v", toks)
+
+	// INSERT: paste a marker back into the live pane and confirm it actually
+	// landed (cat echoes it back to the screen).
+	if err := InsertText(socket, paneID, "PASTE_MARKER_XYZ"); err != nil {
+		t.Fatalf("InsertText failed: %v", err)
+	}
+	ctx2, cancel2 := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel2()
+	after := testutil.WaitForContent(t, ctx2, socket, paneID, "PASTE_MARKER_XYZ")
+	t.Logf("pane content after InsertText confirms paste landed:\n%s", after)
 }
