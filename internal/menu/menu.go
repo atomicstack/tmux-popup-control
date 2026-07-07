@@ -2,6 +2,8 @@ package menu
 
 import (
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/atomicstack/tmux-popup-control/internal/extract"
 )
 
 // Item represents a selectable menu entry.
@@ -37,6 +39,7 @@ type Context struct {
 	CurrentPaneID        string
 	CurrentPaneLabel     string
 	PaneIncludeCurrent   bool
+	ExtractCategory      extract.Category
 }
 
 // WindowEntry represents a tmux window reference for menu loaders.
@@ -106,6 +109,7 @@ type SessionRequest struct {
 // RootItems returns the top-level menu entries.
 func RootItems() []Item {
 	return []Item{
+		{ID: "extract", Label: "extract"},
 		{ID: "process", Label: "process"},
 		{ID: "clipboard", Label: "clipboard"},
 		{ID: "customize-mode", Label: "customize-mode"},
@@ -122,6 +126,7 @@ func RootItems() []Item {
 // CategoryLoaders lists submenu loaders keyed by root item ID.
 func CategoryLoaders() map[string]Loader {
 	return map[string]Loader{
+		"extract":    loadExtractMenu,
 		"process":    loadProcessMenu,
 		"clipboard":  loadClipboardMenu,
 		"keybinding": loadKeybindingMenu,
