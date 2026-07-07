@@ -343,6 +343,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeFor[menu.PaneCapturePreviewMsg](): m.handlePaneCapturePreviewMsg,
 		reflect.TypeFor[deleteSavedReloadedMsg]():     m.handleDeleteSavedReloadedMsg,
 		reflect.TypeFor[extractReloadMsg]():           m.handleExtractReloadMsg,
+		reflect.TypeFor[extractDoneMsg]():             m.handleExtractDoneMsg,
 	}
 }
 

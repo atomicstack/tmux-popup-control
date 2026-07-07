@@ -6,10 +6,21 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/extract"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 // extractLevelID identifies the extract (extrakto-style token picker) level.
 const extractLevelID = "extract"
+
+// extractInsertFn and extractCopyFn are injectable seams over the tmux
+// package so tests can stub the actual tmux paste-buffer / set-buffer calls.
+var (
+	extractInsertFn = tmux.InsertText
+	extractCopyFn   = tmux.CopyText
+)
+
+// extractDoneMsg carries the result of an extractInsert/extractCopy action.
+type extractDoneMsg struct{ err error }
 
 // extractReloadMsg carries the result of an async re-extract triggered by
 // ctrl-f cycling the active category. seq ties the reply back to the
@@ -107,4 +118,70 @@ func extractSubtitle(active extract.Category) string {
 		parts = append(parts, label)
 	}
 	return strings.Join(parts, "  ") + "   " + styles.FilterPlaceholder.Render("‹ctrl-f›")
+}
+
+// extractSelectedText returns the text to act on for an insert/copy action:
+// marked items if any are selected, else the item under the cursor. Item IDs
+// are the raw token text (see internal/menu/extract.go loadExtractMenu).
+// Tokens are joined with a newline for the All/Line categories (whole-line
+// semantics) and a space otherwise. Returns ("", false) when there is
+// nothing to act on (empty list or an out-of-range cursor).
+func (m *Model) extractSelectedText() (string, bool) {
+	current := m.currentLevel()
+	if current == nil || len(current.Items) == 0 {
+		return "", false
+	}
+	var toks []string
+	if sel := current.SelectedItems(); len(sel) > 0 {
+		for _, s := range sel {
+			toks = append(toks, s.ID)
+		}
+	} else {
+		if current.Cursor < 0 || current.Cursor >= len(current.Items) {
+			return "", false
+		}
+		toks = append(toks, current.Items[current.Cursor].ID)
+	}
+	sep := " "
+	if m.extractCategory == extract.All || m.extractCategory == extract.Line {
+		sep = "\n"
+	}
+	return strings.Join(toks, sep), true
+}
+
+// extractInsert pastes the selected token(s) into the pane that launched the
+// popup (tmux.OriginPaneID), then quits on success.
+func (m *Model) extractInsert() tea.Cmd {
+	text, ok := m.extractSelectedText()
+	if !ok {
+		return nil
+	}
+	sock := m.socketPath
+	target := tmux.OriginPaneID()
+	return func() tea.Msg { return extractDoneMsg{err: extractInsertFn(sock, target, text)} }
+}
+
+// extractCopy stores the selected token(s) in the tmux paste buffer, then
+// quits on success.
+func (m *Model) extractCopy() tea.Cmd {
+	text, ok := m.extractSelectedText()
+	if !ok {
+		return nil
+	}
+	sock := m.socketPath
+	return func() tea.Msg { return extractDoneMsg{err: extractCopyFn(sock, text)} }
+}
+
+// handleExtractDoneMsg reports a failed insert/copy via m.errMsg (no quit) or
+// quits the app on success.
+func (m *Model) handleExtractDoneMsg(msg tea.Msg) tea.Cmd {
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		return nil
+	}
+	if done.err != nil {
+		m.errMsg = done.err.Error()
+		return nil
+	}
+	return tea.Quit
 }

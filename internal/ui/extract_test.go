@@ -260,6 +260,193 @@ func TestExtractEntryInvalidatesStaleReload(t *testing.T) {
 	}
 }
 
+// TestExtractEnterInsertsSelectedToken verifies that pressing enter on the
+// extract level inserts the token under the cursor into the origin pane
+// (via the injectable extractInsertFn) and quits.
+func TestExtractEnterInsertsSelectedToken(t *testing.T) {
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", "%9")
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "run internal/target.go now", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	// Cycle from the default word category to path so the cursor can land on
+	// a path token.
+	h.Send(ctrlF())
+	if got := h.Model().extractCategory; got != extract.Path {
+		t.Fatalf("category after ctrl+f = %v, want path", got)
+	}
+
+	current := h.Model().currentLevel()
+	idx := current.IndexOf("internal/target.go")
+	if idx < 0 {
+		ids := make([]string, 0, len(current.Items))
+		for _, item := range current.Items {
+			ids = append(ids, item.ID)
+		}
+		t.Fatalf("path items missing internal/target.go: %v", ids)
+	}
+	current.Cursor = idx
+
+	origInsert := extractInsertFn
+	var inserted struct{ target, text string }
+	extractInsertFn = func(sock, target, text string) error {
+		inserted.target, inserted.text = target, text
+		return nil
+	}
+	defer func() { extractInsertFn = origInsert }()
+
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatalf("expected a command from enter")
+	}
+	msg := cmd()
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		t.Fatalf("expected extractDoneMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("unexpected error: %v", done.err)
+	}
+	if inserted.text != "internal/target.go" {
+		t.Fatalf("inserted text = %q, want %q", inserted.text, "internal/target.go")
+	}
+	if inserted.target != "%9" {
+		t.Fatalf("inserted target = %q, want %%9", inserted.target)
+	}
+
+	_, cmd2 := h.Model().Update(msg)
+	if cmd2 == nil {
+		t.Fatalf("expected a quit command after successful insert")
+	}
+	qmsg := cmd2()
+	if _, ok := qmsg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", qmsg)
+	}
+}
+
+// TestExtractCtrlYCopiesSelectedToken verifies that ctrl-y on the extract
+// level copies the token under the cursor (via extractCopyFn) and quits.
+func TestExtractCtrlYCopiesSelectedToken(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	current := h.Model().currentLevel()
+	idx := current.IndexOf("please")
+	if idx < 0 {
+		ids := make([]string, 0, len(current.Items))
+		for _, item := range current.Items {
+			ids = append(ids, item.ID)
+		}
+		t.Fatalf("word items missing please: %v", ids)
+	}
+	current.Cursor = idx
+
+	origCopy := extractCopyFn
+	var copied string
+	extractCopyFn = func(sock, text string) error {
+		copied = text
+		return nil
+	}
+	defer func() { extractCopyFn = origCopy }()
+
+	ctrlY := tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl}
+	if got := ctrlY.String(); got != "ctrl+y" {
+		t.Fatalf("ctrl+y key string = %q, want ctrl+y", got)
+	}
+
+	_, cmd := h.Model().Update(ctrlY)
+	if cmd == nil {
+		t.Fatalf("expected a command from ctrl+y")
+	}
+	msg := cmd()
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		t.Fatalf("expected extractDoneMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("unexpected error: %v", done.err)
+	}
+	if copied != "please" {
+		t.Fatalf("copied = %q, want %q", copied, "please")
+	}
+
+	_, cmd2 := h.Model().Update(msg)
+	if cmd2 == nil {
+		t.Fatalf("expected a quit command after successful copy")
+	}
+	qmsg := cmd2()
+	if _, ok := qmsg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", qmsg)
+	}
+}
+
+// TestExtractMultiSelectJoinsWithSpace verifies that marking multiple word
+// tokens with tab, then copying with ctrl-y, joins the marked tokens with a
+// space (word/path/url/quote categories use space; All/Line use newline).
+func TestExtractMultiSelectJoinsWithSpace(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "alpha bravo charlie", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	current := h.Model().currentLevel()
+	if !current.MultiSelect {
+		t.Fatalf("expected extract level to be multi-select")
+	}
+
+	idxAlpha := current.IndexOf("alpha")
+	idxBravo := current.IndexOf("bravo")
+	if idxAlpha < 0 || idxBravo < 0 {
+		ids := make([]string, 0, len(current.Items))
+		for _, item := range current.Items {
+			ids = append(ids, item.ID)
+		}
+		t.Fatalf("word items missing alpha/bravo: %v", ids)
+	}
+
+	current.Cursor = idxAlpha
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	current = h.Model().currentLevel()
+	current.Cursor = idxBravo
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	origCopy := extractCopyFn
+	var copied string
+	extractCopyFn = func(sock, text string) error {
+		copied = text
+		return nil
+	}
+	defer func() { extractCopyFn = origCopy }()
+
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatalf("expected a command from ctrl+y")
+	}
+	msg := cmd()
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		t.Fatalf("expected extractDoneMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("unexpected error: %v", done.err)
+	}
+	if copied != "alpha bravo" && copied != "bravo alpha" {
+		t.Fatalf("copied = %q, want space-joined alpha/bravo", copied)
+	}
+}
+
 func TestExtractCyclePreservesFilterQuery(t *testing.T) {
 	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
 		return "alpha https://alpha.dev/x beta internal/beta.go", nil

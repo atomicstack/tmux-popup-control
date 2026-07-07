@@ -94,6 +94,12 @@ func (m *Model) handleEnterKey() tea.Cmd {
 	if current == nil || len(current.Items) == 0 {
 		return nil
 	}
+	if current.ID == extractLevelID {
+		// Extract reads its own selection (marked items or cursor), unlike
+		// the generic multi-select join below, so intercept before the
+		// child/action dispatch.
+		return m.extractInsert()
+	}
 	ctx := m.menuContext()
 	item := current.Items[current.Cursor]
 	if item.Header {
@@ -365,10 +371,14 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 			}
 		}
 	}
-	// Extract level: ctrl-f cycles the token category in place.
+	// Extract level: ctrl-f cycles the token category in place, ctrl-y copies
+	// the selected token(s) to the tmux paste buffer.
 	if current := m.currentLevel(); current != nil && current.ID == extractLevelID {
-		if keyMsg.String() == "ctrl+f" {
+		switch keyMsg.String() {
+		case "ctrl+f":
 			return m.extractCycleCmd()
+		case "ctrl+y":
+			return m.extractCopy()
 		}
 	}
 	var previewCmd tea.Cmd
