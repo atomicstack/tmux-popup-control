@@ -13,7 +13,7 @@ type Token struct {
 func Extract(text string, cat Category) []Token {
 	switch cat {
 	case Line:
-		return finalize(extractLines(text), cat)
+		return finalize(extractLines(text))
 	case All:
 		return extractAll(text)
 	default:
@@ -21,7 +21,7 @@ func Extract(text string, cat Category) []Token {
 		if !ok {
 			return nil
 		}
-		return finalize(runFilter(text, def, cat), cat)
+		return finalize(runFilter(text, def, cat))
 	}
 }
 
@@ -70,12 +70,12 @@ func extractAll(text string) []Token {
 		}
 		out = append(out, runFilter(text, def, cat)...)
 	}
-	return finalize(out, All)
+	return finalize(out)
 }
 
 // finalize dedups (order-preserving) then reverses so the most-recent token
 // on screen sorts first, matching extrakto's res.reverse().
-func finalize(in []Token, cat Category) []Token {
+func finalize(in []Token) []Token {
 	seen := make(map[string]struct{}, len(in))
 	deduped := make([]Token, 0, len(in))
 	for _, t := range in {

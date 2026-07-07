@@ -21,6 +21,11 @@ const DefaultCategory = Word
 // order is the ctrl-f cycle order.
 var order = []Category{Word, Path, URL, Quote, SQuote, Line, All}
 
+// Categories returns the category cycle order (word→path→url→quote→s-quote→line→all).
+// Callers get a copy, so mutating the returned slice cannot corrupt the
+// package-level cycle order used by Next().
+func Categories() []Category { return append([]Category(nil), order...) }
+
 func (c Category) String() string {
 	switch c {
 	case Word:

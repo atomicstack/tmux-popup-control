@@ -91,13 +91,6 @@ func (m *Model) handleExtractReloadMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// extractCategoryOrder lists the categories in ctrl-f cycle order, used to
-// render the category header.
-var extractCategoryOrder = []extract.Category{
-	extract.Word, extract.Path, extract.URL, extract.Quote,
-	extract.SQuote, extract.Line, extract.All,
-}
-
 // extractSubtitle renders the category cycle header with the active category
 // emphasized and a ctrl-f hint. Reuses existing theme styles: FilterPrompt
 // (already used to mark the "active" filter prompt) for the active category,
@@ -107,8 +100,9 @@ var extractCategoryOrder = []extract.Category{
 // lipgloss Style.Render calls, so callers that place it in a styledLine must
 // mark that line raw (see viewVertical's Subtitle handling).
 func extractSubtitle(active extract.Category) string {
-	parts := make([]string, 0, len(extractCategoryOrder))
-	for _, c := range extractCategoryOrder {
+	cats := extract.Categories()
+	parts := make([]string, 0, len(cats))
+	for _, c := range cats {
 		label := c.String()
 		if c == active {
 			label = styles.FilterPrompt.Render(label)
