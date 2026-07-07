@@ -36,3 +36,14 @@ Here’s what’s happened so far:
   - Task 12 complete: `internal/ui/completion_harness_test.go` — harness coverage for trigger, filtering, navigation, tab accept, escape dismiss, and resize behavior.
   - Task 13 complete: `internal/ui/backend.go` + `internal/ui/input_test.go` — resize dismissal, command-name regression coverage, and backend-driven dropdown refresh when live data arrives after typing starts.
   - Task 14 complete: `internal/ui/completion_integration_test.go` — live tmux test verifying dropdown candidates appear from real session data and tab inserts the resolved target.
+
+## extract feature — extrakto mvp (feature/extract-extrakto-mvp branch, 2026-07-08)
+
+Extrakto-style token extractor. Spec/plan in obsidian vault (tmux-popup-control/2026-07-07/extract-extrakto-mvp{,-plan}.md). Subagent-driven-development; every task spec+quality reviewed, final whole-branch review clean (ready to merge). Full `make test` green (22 pkgs), binary builds.
+
+- `internal/extract/` — pure engine (no bubbletea/tmux/menu imports): `Category` enum (word/path/url/quote/s-quote/line/all) + cycle order via `Categories()`; `Extract(text, cat) []Token`. RE2 patterns ported verbatim from `~/.tmux/plugins/extrakto/extrakto.conf`; `"\n"+text` prefix, minLen 5, lstrip/rstrip/exclude, dedup then reverse; `line` fast-path; `All`=union(path,url,quote,s-quote) excluding word+line.
+- `internal/tmux/extract.go` + `host.go` — `OriginPaneID()`, `CaptureVisible()` (capture-pane -pJ visible screen), `InsertText()` (set-buffer + paste-buffer -p), `CopyText()` (set-buffer only; buffer-only, OSC-52 deferred).
+- `internal/menu/` — `Context.ExtractCategory`; `loadExtractMenu` (item ID==Label==token text); `extract` registered as root category (first item) + in CategoryLoaders + markMultiSelect; `SetExtractCaptureForTest` seam.
+- `internal/ui/extract.go` (+ model/commands/navigation/view) — token list is a normal Level (reuses fuzzy filter/multiselect/render); ctrl-f cycles category in place (async, seq-guarded, filter preserved, category reset to word on entry); header via Level.Subtitle (theme styles, raw:true); enter=insert into origin pane, ctrl-y=copy to buffer; multi-select join newline for all/line else space; quit-on-escape for direct invocation.
+- Tests: engine unit (ported extrakto corpus), UI harness (cycle/insert/copy/escape/multiselect/seq-guard), live-tmux integration (`internal/tmux`: capture→extract→insert paste-landed). Regenerated `testdata/capture/root_menu.txt` golden for the new extract root item.
+- Deferred (inventory in spec §9): grab-area cycle, edit/open actions, clip-mode/OSC-52 system clipboard, alt-variants, prefix-name, @extrakto-* config compat.
