@@ -12,6 +12,12 @@ func hostPaneID() string {
 	return strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_ID"))
 }
 
+// OriginPaneID returns the pane ID that launched the popup. Exported wrapper
+// around hostPaneID for consumers outside this package (the extract feature).
+func OriginPaneID() string {
+	return hostPaneID()
+}
+
 // hostSessionID returns the session ID of the popup's host session in
 // tmux's "$N" format (e.g. "$1"). It checks TMUX_POPUP_CONTROL_SESSION_ID
 // (set by main.sh) first, then falls back to parsing the TMUX env var.
