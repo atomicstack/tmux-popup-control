@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -463,5 +464,167 @@ func TestExtractCyclePreservesFilterQuery(t *testing.T) {
 
 	if got := h.Model().currentLevel().Filter; got != "be" {
 		t.Fatalf("filter after cycle = %q, want %q", got, "be")
+	}
+}
+
+// TestExtractDirectInvocationEscapeQuits verifies that pressing Escape when the
+// extract level is directly invoked (via RootMenu: "extract") quits the app
+// rather than popping to a root menu. Per the direct-invocation convention,
+// forms/submenus invoked via hotkey must quit on escape.
+func TestExtractDirectInvocationEscapeQuits(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	// Stack has only the extract level (direct invocation).
+	if len(h.Model().stack) != 1 {
+		t.Fatalf("direct-invocation stack depth = %d, want 1", len(h.Model().stack))
+	}
+	if got := h.Model().currentLevel().ID; got != extractLevelID {
+		t.Fatalf("current level ID = %q, want extract", got)
+	}
+
+	// Escape should return a quit command.
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatalf("escape from directly-invoked extract should return a command")
+	}
+	msg := cmd()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
+// TestExtractFromRootMenuEscapeReturnsToRoot verifies that pressing Escape when
+// the extract level is entered from the root menu pops back to root, not quit.
+// This demonstrates the distinction between direct invocation (quit on escape)
+// and navigating into a submenu (pop on escape).
+func TestExtractFromRootMenuEscapeReturnsToRoot(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	// Verify starting state: at root level.
+	if got := h.Model().currentLevel().ID; got != "root" {
+		t.Fatalf("initial level ID = %q, want root", got)
+	}
+
+	// Navigate to extract level by finding "extract" item (first in root) and pressing Enter.
+	root := h.Model().currentLevel()
+	idx := root.IndexOf("extract")
+	if idx != 0 {
+		t.Fatalf("expected extract item at index 0, got %d", idx)
+	}
+	root.Cursor = idx
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	// Verify we're now in extract level.
+	current := h.Model().currentLevel()
+	if got := current.ID; got != extractLevelID {
+		t.Fatalf("after enter, level ID = %q, want extract", got)
+	}
+
+	// Escape should pop back to root, not quit.
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if got := h.Model().currentLevel().ID; got != "root" {
+		t.Fatalf("after escape, level ID = %q, want root", got)
+	}
+}
+
+// TestExtractMultiSelectAllJoinsWithNewline verifies that selecting multiple
+// tokens in the All category and copying them joins them with a newline rather
+// than space. The All category treats each token as a whole line, consistent
+// with Line-category semantics. This closes a Task-7 coverage gap for newline-
+// join behavior.
+func TestExtractMultiSelectAllJoinsWithNewline(t *testing.T) {
+	// Use a capture string with multiple URLs and paths, which the All category
+	// will extract. The All category draws from Path, URL, Quote, SQuote.
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "https://one.example.com /path/to/file https://two.example.com", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	// Verify initial category is Word.
+	if got := h.Model().extractCategory; got != extract.Word {
+		t.Fatalf("initial category = %v, want word", got)
+	}
+
+	// Cycle to All category via ctrl+f.
+	for h.Model().extractCategory != extract.All {
+		h.Send(ctrlF())
+	}
+
+	if got := h.Model().extractCategory; got != extract.All {
+		t.Fatalf("after cycling, category = %v, want all", got)
+	}
+
+	current := h.Model().currentLevel()
+	if !current.MultiSelect {
+		t.Fatalf("expected extract level to be multi-select")
+	}
+
+	// Find two extractable items: a URL and a path.
+	urlIdx := current.IndexOf("https://one.example.com")
+	pathIdx := current.IndexOf("/path/to/file")
+
+	if urlIdx < 0 || pathIdx < 0 {
+		ids := make([]string, 0, len(current.Items))
+		for _, item := range current.Items {
+			ids = append(ids, item.ID)
+		}
+		t.Fatalf("All category missing URL/path items: %v", ids)
+	}
+
+	// Select two items using tab.
+	current.Cursor = urlIdx
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	current = h.Model().currentLevel()
+	current.Cursor = pathIdx
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+
+	// Stub extractCopyFn to capture the text.
+	origCopy := extractCopyFn
+	var copied string
+	extractCopyFn = func(sock, text string) error {
+		copied = text
+		return nil
+	}
+	defer func() { extractCopyFn = origCopy }()
+
+	// Press ctrl+y to copy the selected items.
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatalf("expected a command from ctrl+y")
+	}
+	msg := cmd()
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		t.Fatalf("expected extractDoneMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("unexpected error: %v", done.err)
+	}
+
+	// Verify copied text contains newline (order may vary due to marked order).
+	if !strings.Contains(copied, "\n") {
+		t.Fatalf("copied text %q does not contain newline (All category must use newline join)", copied)
+	}
+
+	// Verify both items are present.
+	if !strings.Contains(copied, "https://one.example.com") || !strings.Contains(copied, "/path/to/file") {
+		t.Fatalf("copied text missing one or both items: %q", copied)
 	}
 }
