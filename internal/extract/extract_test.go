@@ -57,3 +57,51 @@ func TestExtractDedup(t *testing.T) {
 		t.Fatalf("dedup = %v, want %v", got, want)
 	}
 }
+
+func TestExtractQuote(t *testing.T) {
+	got := texts(Extract(`run "hello world" now`, Quote))
+	want := []string{`"hello world"`}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("quote = %v, want %v", got, want)
+	}
+}
+
+func TestExtractSQuote(t *testing.T) {
+	got := texts(Extract("run 'hello world' now", SQuote))
+	want := []string{"'hello world'"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("s-quote = %v, want %v", got, want)
+	}
+}
+
+func TestExtractLine(t *testing.T) {
+	got := texts(Extract("  first line  \nx\nsecond line", Line))
+	// "x" dropped (len<5); reverse order.
+	want := []string{"second line", "first line"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("line = %v, want %v", got, want)
+	}
+}
+
+func TestExtractAllUnionExcludesWordAndLine(t *testing.T) {
+	got := texts(Extract(`open https://example.com path internal/menu/x.go "quoted val"`, All))
+	// contains url, path, quote — but not the bare word "open"/"path".
+	assertContains(t, got, "https://example.com")
+	assertContains(t, got, "internal/menu/x.go")
+	assertContains(t, got, `"quoted val"`)
+	for _, tok := range got {
+		if tok == "open" || tok == "path" {
+			t.Fatalf("All must exclude bare words, got %q", tok)
+		}
+	}
+}
+
+func assertContains(t *testing.T, hay []string, needle string) {
+	t.Helper()
+	for _, h := range hay {
+		if h == needle {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %v", needle, hay)
+}
