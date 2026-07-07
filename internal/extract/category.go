@@ -1,0 +1,53 @@
+// Package extract implements extrakto-style token extraction from captured
+// pane text. It is consumer-agnostic: no bubbletea/tmux/menu imports.
+package extract
+
+// Category selects which kind of token Extract produces.
+type Category int
+
+const (
+	Word Category = iota
+	Path
+	URL
+	Quote
+	SQuote
+	Line
+	All
+)
+
+// DefaultCategory is the category shown when the extract view first opens.
+const DefaultCategory = Word
+
+// order is the ctrl-f cycle order.
+var order = []Category{Word, Path, URL, Quote, SQuote, Line, All}
+
+func (c Category) String() string {
+	switch c {
+	case Word:
+		return "word"
+	case Path:
+		return "path"
+	case URL:
+		return "url"
+	case Quote:
+		return "quote"
+	case SQuote:
+		return "s-quote"
+	case Line:
+		return "line"
+	case All:
+		return "all"
+	default:
+		return "word"
+	}
+}
+
+// Next returns the next category in cycle order, wrapping after All.
+func (c Category) Next() Category {
+	for i, o := range order {
+		if o == c {
+			return order[(i+1)%len(order)]
+		}
+	}
+	return DefaultCategory
+}
