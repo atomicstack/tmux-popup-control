@@ -39,8 +39,10 @@ func TestExtractPath(t *testing.T) {
 }
 
 func TestExtractPathExcludesSpeeds(t *testing.T) {
-	// "5k/s" and "1/2" match the exclude regex and must be dropped.
-	got := texts(Extract("rate 5k/s page 1/2", Path))
+	// Tokens must be long enough (≥5 runes) to survive minLen so that only
+	// the exclude regex drops them. "12345k/s" (8 runes) matches [kmgKMG]/s$
+	// and "123456/654321" (13 runes) matches ^\d+/\d+$.
+	got := texts(Extract("rate 12345k/s page 123456/654321", Path))
 	if len(got) != 0 {
 		t.Fatalf("path = %v, want empty (excluded)", got)
 	}
