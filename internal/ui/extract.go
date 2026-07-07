@@ -48,8 +48,12 @@ func (m *Model) extractLoader() menu.Loader {
 }
 
 // handleExtractReloadMsg applies the async re-extract result to the current
-// level in place, guarding against a stale reload landing after the user has
-// already navigated away from the extract level.
+// level in place, guarding against a stale reload landing after a later
+// ctrl-f (or a re-entry into the extract level) has superseded it. Entry into
+// the extract level (handleEnterKey / applyRootMenuOverride) bumps
+// m.extractSeq, so a reload dispatched during an earlier visit can never
+// match m.extractSeq after the user navigates away and back in — even if the
+// level ID check below still matches extractLevelID.
 func (m *Model) handleExtractReloadMsg(msg tea.Msg) tea.Cmd {
 	reload, ok := msg.(extractReloadMsg)
 	if !ok {
@@ -60,7 +64,9 @@ func (m *Model) handleExtractReloadMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	if reload.seq != m.extractSeq {
-		// Stale reply from an earlier ctrl-f, overtaken by a later one.
+		// Stale reply from an earlier ctrl-f (overtaken by a later one) or
+		// from a prior visit to this level (invalidated by the entry-time
+		// seq bump).
 		return nil
 	}
 	if reload.err != nil {

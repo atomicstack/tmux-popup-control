@@ -171,8 +171,11 @@ func (m *Model) handleEnterKey() tea.Cmd {
 				if child.ID == extractLevelID {
 					// Reset the active category before the loader is
 					// dispatched so the async load reads the reset value,
-					// not a stale category from a previous visit.
+					// not a stale category from a previous visit. Also bump
+					// extractSeq so any ctrl-f reload still in flight from a
+					// prior visit is invalidated (see handleExtractReloadMsg).
 					m.extractCategory = extract.DefaultCategory
+					m.extractSeq++
 				}
 				m.loading = true
 				m.pendingID = child.ID
@@ -590,8 +593,11 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	if node.ID == extractLevelID {
 		// Reset the active category before the loader runs (synchronously,
 		// here) so it reads the reset value rather than a stale category
-		// from a previous visit.
+		// from a previous visit. Also bump extractSeq so any ctrl-f reload
+		// still in flight from a prior visit is invalidated (see
+		// handleExtractReloadMsg).
 		m.extractCategory = extract.DefaultCategory
+		m.extractSeq++
 	}
 
 	items := []menu.Item(nil)

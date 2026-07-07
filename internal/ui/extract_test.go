@@ -189,6 +189,77 @@ func TestExtractStaleReloadIgnored(t *testing.T) {
 	}
 }
 
+// TestExtractEntryInvalidatesStaleReload proves that (re)entering the extract
+// level bumps m.extractSeq, so a ctrl-f reload dispatched during an earlier
+// visit cannot land after the user has navigated away and back in. Without
+// the entry-time seq bump, nothing invalidates the earlier request's
+// captured seq, so a stale extractReloadMsg would still satisfy
+// reload.seq == m.extractSeq and clobber the freshly-reset items.
+func TestExtractEntryInvalidatesStaleReload(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello https://example.com world", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	root := h.Model().currentLevel()
+	if root == nil || root.ID != "root" {
+		t.Fatalf("expected root level, got %+v", root)
+	}
+	idx := root.IndexOf("extract")
+	if idx != 0 {
+		t.Fatalf("expected extract item at index 0, got %d", idx)
+	}
+	root.Cursor = idx
+
+	// Enter extract, then cycle once via ctrl-f. This bumps extractSeq and
+	// dispatches (and, in the harness, resolves) a reload stamped with that
+	// seq.
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	current := h.Model().currentLevel()
+	if current == nil || current.ID != extractLevelID {
+		t.Fatalf("expected extract level to be current after Enter, got %+v", current)
+	}
+	h.Send(ctrlF())
+	staleSeq := h.Model().extractSeq
+
+	// Escape back to root, then re-enter extract.
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if root := h.Model().currentLevel(); root == nil || root.ID != "root" {
+		t.Fatalf("expected root level after escape, got %+v", root)
+	}
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	current = h.Model().currentLevel()
+	if current == nil || current.ID != extractLevelID {
+		t.Fatalf("expected extract level to be current after re-entry, got %+v", current)
+	}
+
+	if got := h.Model().extractSeq; got <= staleSeq {
+		t.Fatalf("re-entry did not bump extractSeq: got %d, want > %d", got, staleSeq)
+	}
+
+	// Record the freshly-loaded items, then feed in a reload stamped with the
+	// stale (prior-visit) seq. It must be dropped rather than overwriting
+	// the current items.
+	wantItems := make([]menu.Item, len(current.Items))
+	copy(wantItems, current.Items)
+
+	bogus := []menu.Item{{ID: "bogus", Label: "bogus"}}
+	h.Send(extractReloadMsg{items: bogus, seq: staleSeq})
+
+	current = h.Model().currentLevel()
+	if len(current.Items) != len(wantItems) {
+		t.Fatalf("stale prior-visit reload changed item count: got %d, want %d (bogus items applied)", len(current.Items), len(wantItems))
+	}
+	for _, item := range current.Items {
+		if item.ID == "bogus" {
+			t.Fatalf("stale prior-visit reload (seq %d) was applied despite entry-time seq bump", staleSeq)
+		}
+	}
+}
+
 func TestExtractCyclePreservesFilterQuery(t *testing.T) {
 	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
 		return "alpha https://alpha.dev/x beta internal/beta.go", nil
