@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
+	"github.com/atomicstack/tmux-popup-control/internal/extract"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/logging/events"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
@@ -355,6 +356,12 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 			}
 		}
 	}
+	// Extract level: ctrl-f cycles the token category in place.
+	if current := m.currentLevel(); current != nil && current.ID == extractLevelID {
+		if keyMsg.String() == "ctrl+f" {
+			return m.extractCycleCmd()
+		}
+	}
 	var previewCmd tea.Cmd
 	switch keyMsg.String() {
 	case "enter":
@@ -476,6 +483,10 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 		level.Data = menu.NewTreeState(false)
 		level.Cursor = 0
 		m.populatePullTreeData()
+	}
+	if update.id == extractLevelID {
+		m.extractCategory = extract.DefaultCategory
+		level.Subtitle = extractSubtitle(m.extractCategory)
 	}
 	m.applyNodeSettings(level)
 	m.syncViewport(level)
@@ -608,6 +619,10 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		root.Data = menu.NewTreeState(false)
 		root.Cursor = 0
 		m.populatePullTreeData()
+	}
+	if node.ID == extractLevelID {
+		m.extractCategory = extract.DefaultCategory
+		root.Subtitle = extractSubtitle(m.extractCategory)
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)

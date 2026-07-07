@@ -217,8 +217,16 @@ func (m *Model) viewVertical(header string) (string, int) {
 		lines = append(lines, styledLine{text: header, style: styles.Header})
 	}
 	if current := m.currentLevel(); current != nil && current.Subtitle != "" {
-		dimStyle := lipgloss.NewStyle().Faint(true)
-		lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
+		if current.ID == extractLevelID {
+			// extractSubtitle already renders each category segment with its
+			// own lipgloss style; wrapping the whole line in another style
+			// would nest ANSI escapes and corrupt ANSI-unaware truncation, so
+			// render it raw (see buildMultiSelectLine for the same pattern).
+			lines = append(lines, styledLine{text: current.Subtitle, raw: true})
+		} else {
+			dimStyle := lipgloss.NewStyle().Faint(true)
+			lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
+		}
 	}
 	if current := m.currentLevel(); current != nil {
 		lines = append(lines, m.renderMenuLines(current, m.width)...)

@@ -241,6 +241,7 @@ func (m *Model) menuContext() menu.Context {
 		CurrentPaneID:        currentPaneIDWithFallback(m.panes.CurrentID()),
 		CurrentPaneLabel:     m.panes.CurrentLabel(),
 		PaneIncludeCurrent:   m.panes.IncludeCurrent(),
+		ExtractCategory:      m.extractCategory,
 	}
 	for _, w := range ctx.Windows {
 		if w.Current {

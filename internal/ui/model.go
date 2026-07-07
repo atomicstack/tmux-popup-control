@@ -13,6 +13,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/cmdhelp"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
 	"github.com/atomicstack/tmux-popup-control/internal/data/dispatcher"
+	"github.com/atomicstack/tmux-popup-control/internal/extract"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/state"
@@ -113,6 +114,7 @@ type Model struct {
 	commandOutputTitle         string
 	commandOutputLines         []string
 	commandOutputOffset        int
+	extractCategory            extract.Category
 
 	handlers map[reflect.Type]msgHandler
 
@@ -339,6 +341,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeFor[menu.PaneCapturePrompt]():     m.handlePaneCapturePromptMsg,
 		reflect.TypeFor[menu.PaneCapturePreviewMsg](): m.handlePaneCapturePreviewMsg,
 		reflect.TypeFor[deleteSavedReloadedMsg]():     m.handleDeleteSavedReloadedMsg,
+		reflect.TypeFor[extractReloadMsg]():           m.handleExtractReloadMsg,
 	}
 }
 
