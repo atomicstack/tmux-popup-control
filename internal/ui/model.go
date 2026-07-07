@@ -115,6 +115,7 @@ type Model struct {
 	commandOutputLines         []string
 	commandOutputOffset        int
 	extractCategory            extract.Category
+	extractSeq                 int
 
 	handlers map[reflect.Type]msgHandler
 

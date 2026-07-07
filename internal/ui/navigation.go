@@ -168,6 +168,12 @@ func (m *Model) handleEnterKey() tea.Cmd {
 					return nil
 				}
 				current.LastCursor = current.Cursor
+				if child.ID == extractLevelID {
+					// Reset the active category before the loader is
+					// dispatched so the async load reads the reset value,
+					// not a stale category from a previous visit.
+					m.extractCategory = extract.DefaultCategory
+				}
 				m.loading = true
 				m.pendingID = child.ID
 				m.pendingLabel = item.Label
@@ -485,7 +491,9 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 		m.populatePullTreeData()
 	}
 	if update.id == extractLevelID {
-		m.extractCategory = extract.DefaultCategory
+		// Category was already reset to DefaultCategory when navigation into
+		// extract was initiated (handleEnterKey / applyRootMenuOverride),
+		// before this loader ran. Only the header needs (re)rendering here.
 		level.Subtitle = extractSubtitle(m.extractCategory)
 	}
 	m.applyNodeSettings(level)
@@ -579,6 +587,13 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		return
 	}
 
+	if node.ID == extractLevelID {
+		// Reset the active category before the loader runs (synchronously,
+		// here) so it reads the reset value rather than a stale category
+		// from a previous visit.
+		m.extractCategory = extract.DefaultCategory
+	}
+
 	items := []menu.Item(nil)
 	if node.Loader != nil {
 		loaded, err := node.Loader(m.menuContext())
@@ -621,7 +636,8 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		m.populatePullTreeData()
 	}
 	if node.ID == extractLevelID {
-		m.extractCategory = extract.DefaultCategory
+		// Category was already reset above, before the loader ran. Only the
+		// header needs (re)rendering here.
 		root.Subtitle = extractSubtitle(m.extractCategory)
 	}
 	m.applyNodeSettings(root)

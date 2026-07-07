@@ -12,22 +12,29 @@ import (
 const extractLevelID = "extract"
 
 // extractReloadMsg carries the result of an async re-extract triggered by
-// ctrl-f cycling the active category.
+// ctrl-f cycling the active category. seq ties the reply back to the
+// request that triggered it, so a stale reply from an earlier request
+// (overtaken by a subsequent ctrl-f) can be detected and dropped.
 type extractReloadMsg struct {
 	items []menu.Item
 	err   error
+	seq   int
 }
 
 // extractCycleCmd advances the active category and re-captures+extracts
 // asynchronously, updating the current level in place (no new stack level,
-// filter query preserved).
+// filter query preserved). Bumps m.extractSeq and stamps the request with it
+// so handleExtractReloadMsg can ignore out-of-order replies from a rapid
+// double ctrl-f (see internal/ui/preview.go for the same seq pattern).
 func (m *Model) extractCycleCmd() tea.Cmd {
 	m.extractCategory = m.extractCategory.Next()
+	m.extractSeq++
+	seq := m.extractSeq
 	ctx := m.menuContext() // now carries the advanced ExtractCategory
 	loader := m.extractLoader()
 	return func() tea.Msg {
 		items, err := loader(ctx)
-		return extractReloadMsg{items: items, err: err}
+		return extractReloadMsg{items: items, err: err, seq: seq}
 	}
 }
 
@@ -50,6 +57,10 @@ func (m *Model) handleExtractReloadMsg(msg tea.Msg) tea.Cmd {
 	}
 	current := m.currentLevel()
 	if current == nil || current.ID != extractLevelID {
+		return nil
+	}
+	if reload.seq != m.extractSeq {
+		// Stale reply from an earlier ctrl-f, overtaken by a later one.
 		return nil
 	}
 	if reload.err != nil {

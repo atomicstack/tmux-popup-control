@@ -56,6 +56,139 @@ func TestExtractCycleAdvancesCategoryAndReloads(t *testing.T) {
 	}
 }
 
+// TestExtractReentryResetsToWord reproduces the reported bug: cycling to a
+// non-default category, escaping back to root, then re-entering extract must
+// reset both the header (extractCategory) and the actual items back to Word
+// — not just the header, with items staying on the stale category until
+// another ctrl-f.
+func TestExtractReentryResetsToWord(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello https://example.com world", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	// Root level; "extract" is the first RootItems entry. The level's
+	// initial cursor defaults to the last item (see Level.applyFilter), so
+	// position the cursor on "extract" explicitly before pressing Enter.
+	root := h.Model().currentLevel()
+	if root == nil || root.ID != "root" {
+		t.Fatalf("expected root level, got %+v", root)
+	}
+	idx := root.IndexOf("extract")
+	if idx != 0 {
+		t.Fatalf("expected extract item at index 0, got %d", idx)
+	}
+	root.Cursor = idx
+
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	current := h.Model().currentLevel()
+	if current == nil || current.ID != extractLevelID {
+		t.Fatalf("expected extract level to be current after Enter, got %+v", current)
+	}
+	if got := h.Model().extractCategory; got != extract.Word {
+		t.Fatalf("initial category = %v, want word", got)
+	}
+
+	// Cycle to a non-default category.
+	h.Send(ctrlF())
+	if got := h.Model().extractCategory; got != extract.Path {
+		t.Fatalf("after ctrl+f category = %v, want path", got)
+	}
+
+	// Escape back to root.
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if root := h.Model().currentLevel(); root == nil || root.ID != "root" {
+		t.Fatalf("expected root level after escape, got %+v", root)
+	}
+
+	// Re-enter extract.
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if got := h.Model().extractCategory; got != extract.Word {
+		t.Fatalf("re-entry category = %v, want word (header regression)", got)
+	}
+	current = h.Model().currentLevel()
+	if current == nil || current.ID != extractLevelID {
+		t.Fatalf("expected extract level to be current after re-entry, got %+v", current)
+	}
+	foundWord, foundURLOnly := false, true
+	for _, item := range current.Items {
+		if item.ID == "hello" {
+			foundWord = true
+		}
+		if item.ID != "https://example.com" {
+			foundURLOnly = false
+		}
+	}
+	if !foundWord {
+		ids := make([]string, 0, len(current.Items))
+		for _, item := range current.Items {
+			ids = append(ids, item.ID)
+		}
+		t.Fatalf("re-entry items missing word token %q: %v (items desynced from reset header)", "hello", ids)
+	}
+	if foundURLOnly {
+		t.Fatalf("re-entry items still URL-only, category reset did not propagate to loader")
+	}
+}
+
+// TestExtractCycleKeepsSingleLevel verifies ctrl-f updates the current
+// extract level in place rather than pushing a new stack level.
+func TestExtractCycleKeepsSingleLevel(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello https://example.com world", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	before := len(h.Model().stack)
+	h.Send(ctrlF())
+	after := len(h.Model().stack)
+	if before != after {
+		t.Fatalf("stack depth changed on ctrl-f: before=%d after=%d, want unchanged (in-place reload)", before, after)
+	}
+}
+
+// TestExtractStaleReloadIgnored verifies that an extractReloadMsg carrying an
+// older seq than the model's current extractSeq is dropped, so an
+// out-of-order async reply from an earlier ctrl-f cannot clobber the items
+// belonging to a later one (see internal/ui/preview.go's seq guard for the
+// established pattern).
+func TestExtractStaleReloadIgnored(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello world", nil
+	})
+	defer restore()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	current := h.Model().currentLevel()
+	wantItems := make([]menu.Item, len(current.Items))
+	copy(wantItems, current.Items)
+
+	h.Model().extractSeq = 5
+
+	bogus := []menu.Item{{ID: "bogus", Label: "bogus"}}
+	h.Send(extractReloadMsg{items: bogus, seq: 3})
+
+	current = h.Model().currentLevel()
+	if len(current.Items) != len(wantItems) {
+		t.Fatalf("stale reload changed item count: got %d, want %d (bogus items applied)", len(current.Items), len(wantItems))
+	}
+	for _, item := range current.Items {
+		if item.ID == "bogus" {
+			t.Fatalf("stale reload (seq 3 < current 5) was applied: found bogus item")
+		}
+	}
+}
+
 func TestExtractCyclePreservesFilterQuery(t *testing.T) {
 	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
 		return "alpha https://alpha.dev/x beta internal/beta.go", nil
