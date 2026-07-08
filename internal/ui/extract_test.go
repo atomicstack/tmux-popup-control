@@ -701,9 +701,9 @@ func TestExtractMultiSelectUsesVerticalBarNotCheckbox(t *testing.T) {
 	// Mark the row under the cursor.
 	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
 	after := ansi.Strip(h.View())
-	// ▕ (U+2595 right one-eighth block): a thin, right-aligned selection bar.
-	if !strings.Contains(after, "▕") {
-		t.Fatalf("expected a thin right-aligned bar marker for the selected extract row, got:\n%s", after)
+	// ┃ (U+2503 box drawings heavy vertical): the fzf-style selection bar.
+	if !strings.Contains(after, "┃") {
+		t.Fatalf("expected a heavy vertical bar marker for the selected extract row, got:\n%s", after)
 	}
 	if strings.ContainsAny(after, "■□") {
 		t.Fatalf("extract selection must not use checkboxes, got:\n%s", after)
