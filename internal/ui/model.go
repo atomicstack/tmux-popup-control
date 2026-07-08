@@ -116,6 +116,9 @@ type Model struct {
 	commandOutputOffset        int
 	extractCategory            extract.Category
 	extractSeq                 int
+	extractModePopup           *completionState
+	extractModePrePopup        extract.Category
+	extractModeSeq             int
 
 	handlers map[reflect.Type]msgHandler
 
@@ -344,6 +347,7 @@ func (m *Model) registerHandlers() {
 		reflect.TypeFor[deleteSavedReloadedMsg]():     m.handleDeleteSavedReloadedMsg,
 		reflect.TypeFor[extractReloadMsg]():           m.handleExtractReloadMsg,
 		reflect.TypeFor[extractDoneMsg]():             m.handleExtractDoneMsg,
+		reflect.TypeFor[extractModeTimeoutMsg]():      m.handleExtractModeTimeoutMsg,
 	}
 }
 

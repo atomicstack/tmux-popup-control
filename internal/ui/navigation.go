@@ -293,6 +293,14 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	if m.confirmState != nil {
 		return m.handleDeleteConfirmKey(keyMsg)
 	}
+	// Extract level owns its own key routing (mode popup, shift+tab multi-select,
+	// tab/ctrl-y copy, enter insert, ctrl-f mode selector). Unhandled keys fall
+	// through to the normal handling below.
+	if current := m.currentLevel(); current != nil && current.ID == extractLevelID {
+		if cmd, handled := m.handleExtractKey(keyMsg); handled {
+			return cmd
+		}
+	}
 	if m.completionVisible() {
 		switch keyMsg.String() {
 		case "up":
@@ -369,16 +377,6 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 			case "right":
 				return m.treeExpand(current, ts)
 			}
-		}
-	}
-	// Extract level: ctrl-f cycles the token category in place, ctrl-y copies
-	// the selected token(s) to the tmux paste buffer.
-	if current := m.currentLevel(); current != nil && current.ID == extractLevelID {
-		switch keyMsg.String() {
-		case "ctrl+f":
-			return m.extractCycleCmd()
-		case "ctrl+y":
-			return m.extractCopy()
 		}
 	}
 	var previewCmd tea.Cmd

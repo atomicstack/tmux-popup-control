@@ -281,7 +281,11 @@ func (m *Model) viewVertical(header string) (string, int) {
 	lines = append(lines, m.renderBottomBarLines()...)
 	// The fuzzy input is the last line of the bottom bar.
 	promptRow := len(lines) - 1
-	return m.overlayCompletion(renderLines(lines)), promptRow
+	rendered := m.overlayCompletion(renderLines(lines))
+	if m.extractModePopupVisible() {
+		rendered = m.overlayDropdownWidget(rendered, m.extractModePopup, m.extractModePopup.anchorCol)
+	}
+	return rendered, promptRow
 }
 
 // viewSideBySide renders the menu on the left and a preview panel on the right.
@@ -986,7 +990,17 @@ func (m *Model) overlayCompletion(rendered string) string {
 	if !m.completionVisible() {
 		return rendered
 	}
+	return m.overlayDropdownWidget(rendered, m.completion, m.completion.anchorCol)
+}
 
+// overlayDropdownWidget places a completionState's rendered dropdown over the
+// content, anchored at anchorCol, preferring the space above the bottom bar
+// and falling back to below when there is not enough room. Shared by the
+// command-completion dropdown and the extract mode-selector popup.
+func (m *Model) overlayDropdownWidget(rendered string, cs *completionState, anchorCol int) string {
+	if cs == nil {
+		return rendered
+	}
 	lines := strings.Split(rendered, "\n")
 	barStart := len(lines) - m.bottomBarRows()
 	barStart = max(barStart, 0)
@@ -996,12 +1010,12 @@ func (m *Model) overlayCompletion(rendered string) string {
 		spaceBelow = m.height - len(lines)
 	}
 
-	maxW := m.width - m.completion.anchorCol
+	maxW := m.width - anchorCol
 	maxW = max(maxW, 20)
 
 	maxH := m.height - 4
 	maxH = max(maxH, 3)
-	naturalDropdown := m.completion.view(maxW, maxH)
+	naturalDropdown := cs.view(maxW, maxH)
 	if naturalDropdown == "" {
 		return rendered
 	}
@@ -1010,7 +1024,7 @@ func (m *Model) overlayCompletion(rendered string) string {
 	placeBelow := spaceBelow > 0 && len(dropLines) > spaceAbove
 
 	if placeBelow {
-		dropdown := m.completion.view(maxW, spaceBelow)
+		dropdown := cs.view(maxW, spaceBelow)
 		if dropdown == "" {
 			return rendered
 		}
@@ -1024,13 +1038,13 @@ func (m *Model) overlayCompletion(rendered string) string {
 			if lineIdx >= len(lines) {
 				break
 			}
-			lines[lineIdx] = overlayAt(lines[lineIdx], line, m.completion.anchorCol, m.width)
+			lines[lineIdx] = overlayAt(lines[lineIdx], line, anchorCol, m.width)
 		}
 		return strings.Join(lines, "\n")
 	}
 
 	if spaceAbove > 0 {
-		dropdown := m.completion.view(maxW, spaceAbove)
+		dropdown := cs.view(maxW, spaceAbove)
 		if dropdown == "" {
 			return rendered
 		}
@@ -1045,7 +1059,7 @@ func (m *Model) overlayCompletion(rendered string) string {
 		if lineIdx < 0 || lineIdx >= len(lines) {
 			continue
 		}
-		lines[lineIdx] = overlayAt(lines[lineIdx], line, m.completion.anchorCol, m.width)
+		lines[lineIdx] = overlayAt(lines[lineIdx], line, anchorCol, m.width)
 	}
 
 	return strings.Join(lines, "\n")

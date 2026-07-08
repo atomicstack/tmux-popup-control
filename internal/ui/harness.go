@@ -46,6 +46,14 @@ func (h *Harness) processCmd(cmd tea.Cmd) {
 		if msg == nil {
 			return
 		}
+		// Unpack tea.Batch results so batched commands (e.g. a live reload
+		// plus a timer tick) are each processed, mirroring the real program.
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, c := range batch {
+				h.processCmd(c)
+			}
+			return
+		}
 		mdl, next := h.model.Update(msg)
 		if updated, ok := mdl.(*Model); ok {
 			h.model = updated

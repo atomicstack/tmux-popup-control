@@ -18,6 +18,26 @@ func ctrlF() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}
 }
 
+// extractMark toggles multi-select on the current extract row (shift+tab).
+func extractMark(h *Harness) {
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+}
+
+// extractSelectCategory opens the mode popup (first ctrl-f) and cycles to
+// target (subsequent ctrl-f presses), then confirms with enter — leaving the
+// extract level on that category with the popup closed.
+func extractSelectCategory(t *testing.T, h *Harness, target extract.Category) {
+	t.Helper()
+	h.Send(ctrlF()) // open popup at current category (no change)
+	for guard := 0; h.Model().extractCategory != target; guard++ {
+		if guard > 20 {
+			t.Fatalf("could not reach category %v via ctrl-f", target)
+		}
+		h.Send(ctrlF()) // advance to next mode
+	}
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm + close popup
+}
+
 func TestExtractCycleAdvancesCategoryAndReloads(t *testing.T) {
 	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
 		return "open https://example.com file internal/x.go", nil
@@ -35,10 +55,19 @@ func TestExtractCycleAdvancesCategoryAndReloads(t *testing.T) {
 		t.Fatalf("expected extract level to be current, got %+v", current)
 	}
 
+	// First ctrl-f opens the mode popup without changing the category.
+	h.Send(ctrlF())
+	if got := h.Model().extractCategory; got != extract.Word {
+		t.Fatalf("opening the mode popup should not change the category, got %v", got)
+	}
+	if !h.Model().extractModePopupVisible() {
+		t.Fatalf("first ctrl-f should open the mode popup")
+	}
+	// Subsequent ctrl-f advances to the next mode (path) and re-extracts live.
 	h.Send(ctrlF())
 
 	if got := h.Model().extractCategory; got != extract.Path {
-		t.Fatalf("after ctrl+f category = %v, want path", got)
+		t.Fatalf("after second ctrl+f category = %v, want path", got)
 	}
 
 	current = h.Model().currentLevel()
@@ -95,10 +124,10 @@ func TestExtractReentryResetsToWord(t *testing.T) {
 		t.Fatalf("initial category = %v, want word", got)
 	}
 
-	// Cycle to a non-default category.
-	h.Send(ctrlF())
+	// Cycle to a non-default category via the mode popup.
+	extractSelectCategory(t, h, extract.Path)
 	if got := h.Model().extractCategory; got != extract.Path {
-		t.Fatalf("after ctrl+f category = %v, want path", got)
+		t.Fatalf("after selecting path category = %v, want path", got)
 	}
 
 	// Escape back to root.
@@ -224,7 +253,7 @@ func TestExtractEntryInvalidatesStaleReload(t *testing.T) {
 	if current == nil || current.ID != extractLevelID {
 		t.Fatalf("expected extract level to be current after Enter, got %+v", current)
 	}
-	h.Send(ctrlF())
+	extractSelectCategory(t, h, extract.Path)
 	staleSeq := h.Model().extractSeq
 
 	// Escape back to root, then re-enter extract.
@@ -275,11 +304,11 @@ func TestExtractEnterInsertsSelectedToken(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
 	h := NewHarness(m)
 
-	// Cycle from the default word category to path so the cursor can land on
+	// Select the path category (via the mode popup) so the cursor can land on
 	// a path token.
-	h.Send(ctrlF())
+	extractSelectCategory(t, h, extract.Path)
 	if got := h.Model().extractCategory; got != extract.Path {
-		t.Fatalf("category after ctrl+f = %v, want path", got)
+		t.Fatalf("category after selecting path = %v, want path", got)
 	}
 
 	current := h.Model().currentLevel()
@@ -419,10 +448,10 @@ func TestExtractMultiSelectJoinsWithSpace(t *testing.T) {
 	}
 
 	current.Cursor = idxAlpha
-	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	extractMark(h)
 	current = h.Model().currentLevel()
 	current.Cursor = idxBravo
-	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	extractMark(h)
 
 	origCopy := extractCopyFn
 	var copied string
@@ -562,10 +591,8 @@ func TestExtractMultiSelectAllJoinsWithNewline(t *testing.T) {
 		t.Fatalf("initial category = %v, want word", got)
 	}
 
-	// Cycle to All category via ctrl+f.
-	for h.Model().extractCategory != extract.All {
-		h.Send(ctrlF())
-	}
+	// Select the All category via the mode popup.
+	extractSelectCategory(t, h, extract.All)
 
 	if got := h.Model().extractCategory; got != extract.All {
 		t.Fatalf("after cycling, category = %v, want all", got)
@@ -588,13 +615,13 @@ func TestExtractMultiSelectAllJoinsWithNewline(t *testing.T) {
 		t.Fatalf("All category missing URL/path items: %v", ids)
 	}
 
-	// Select two items using tab.
+	// Select two items using shift+tab.
 	current.Cursor = urlIdx
-	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	extractMark(h)
 
 	current = h.Model().currentLevel()
 	current.Cursor = pathIdx
-	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	extractMark(h)
 
 	// Stub extractCopyFn to capture the text.
 	origCopy := extractCopyFn
@@ -644,7 +671,7 @@ func TestExtractModeMenuRendersBelowListAboveInput(t *testing.T) {
 
 	view := h.View()
 	tokenIdx := strings.Index(view, "please")          // an extracted token in the list
-	headerIdx := strings.Index(view, "ctrl-f")         // the mode header (category cycle hint)
+	headerIdx := strings.Index(view, "mode:")          // the mode line (mode: <current> (^f))
 	promptIdx := strings.Index(view, "type to search") // the fuzzy input placeholder
 	if tokenIdx < 0 || headerIdx < 0 || promptIdx < 0 {
 		t.Fatalf("missing markers: token=%d header=%d prompt=%d\nview:\n%s", tokenIdx, headerIdx, promptIdx, view)
@@ -677,8 +704,8 @@ func TestExtractModeLabelsAboveSeparatorAboveInput(t *testing.T) {
 	if !strings.Contains(lines[last-1], "─") {
 		t.Fatalf("expected separator directly above input, got %q", lines[last-1])
 	}
-	if !strings.Contains(lines[last-2], "ctrl-f") {
-		t.Fatalf("expected mode labels immediately above the separator, got %q", lines[last-2])
+	if !strings.Contains(lines[last-2], "mode:") {
+		t.Fatalf("expected mode line immediately above the separator, got %q", lines[last-2])
 	}
 }
 
@@ -699,7 +726,7 @@ func TestExtractMultiSelectUsesVerticalBarNotCheckbox(t *testing.T) {
 		t.Fatalf("extract list should not render checkboxes, got:\n%s", before)
 	}
 	// Mark the row under the cursor.
-	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	extractMark(h)
 	after := ansi.Strip(h.View())
 	// ┃ (U+2503 box drawings heavy vertical): the fzf-style selection bar.
 	if !strings.Contains(after, "┃") {
@@ -720,5 +747,167 @@ func TestNonExtractMultiSelectStillUsesCheckbox(t *testing.T) {
 	stripped := ansi.Strip(line.text)
 	if !strings.Contains(stripped, "□") {
 		t.Fatalf("non-extract multiselect should still use a checkbox, got %q", stripped)
+	}
+}
+
+// --- mode selector popup ---
+
+func TestExtractModeLineRendersCurrentMode(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	view := ansi.Strip(h.View())
+	if !strings.Contains(view, "mode: word (^f)") {
+		t.Fatalf("expected mode line 'mode: word (^f)', got:\n%s", view)
+	}
+	if strings.Contains(view, "s-quote  line  all") {
+		t.Fatalf("mode line should not list every category anymore")
+	}
+}
+
+func TestExtractModePopupEscRevertsToPrePopupMode(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello https://example.com world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	h.Send(ctrlF()) // open at word
+	h.Send(ctrlF()) // advance to path
+	if h.Model().extractCategory != extract.Path {
+		t.Fatalf("want path after advance, got %v", h.Model().extractCategory)
+	}
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape}) // revert
+	if h.Model().extractCategory != extract.Word {
+		t.Fatalf("esc should revert to word, got %v", h.Model().extractCategory)
+	}
+	if h.Model().extractModePopupVisible() {
+		t.Fatalf("esc should close the popup")
+	}
+	if h.Model().currentLevel().ID != extractLevelID {
+		t.Fatalf("esc in the popup must not leave the extract level")
+	}
+}
+
+func TestExtractModePopupEnterKeepsMode(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello https://example.com world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	h.Send(ctrlF())
+	h.Send(ctrlF()) // advance to path
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if h.Model().extractModePopupVisible() {
+		t.Fatalf("enter should close the popup")
+	}
+	if h.Model().extractCategory != extract.Path {
+		t.Fatalf("enter should keep the selected mode (path), got %v", h.Model().extractCategory)
+	}
+	if h.Model().currentLevel().ID != extractLevelID {
+		t.Fatalf("enter in the popup must not leave the extract level")
+	}
+}
+
+func TestExtractModePopupUpWrapsToPreviousMode(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	h.Send(ctrlF())                          // open at word (index 0)
+	h.Send(tea.KeyPressMsg{Code: tea.KeyUp}) // up wraps to the last mode (all)
+	if h.Model().extractCategory != extract.All {
+		t.Fatalf("up from word should wrap to all, got %v", h.Model().extractCategory)
+	}
+}
+
+func TestExtractModePopupTimeoutClosesAndStaleIgnored(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	h.Send(ctrlF()) // open, arms the inactivity timer
+	seq := h.Model().extractModeSeq
+	if !h.Model().extractModePopupVisible() {
+		t.Fatal("popup should be open after ctrl-f")
+	}
+	// A stale timeout (superseded by later activity) must not close it.
+	h.Send(extractModeTimeoutMsg{seq: seq - 1})
+	if !h.Model().extractModePopupVisible() {
+		t.Fatal("stale timeout should be ignored")
+	}
+	// The current timeout closes it, keeping the current mode.
+	h.Send(extractModeTimeoutMsg{seq: seq})
+	if h.Model().extractModePopupVisible() {
+		t.Fatal("matching timeout should close the popup")
+	}
+}
+
+func TestExtractTabCopiesShiftTabMarks(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	origCopy := extractCopyFn
+	var copied string
+	extractCopyFn = func(sock, text string) error { copied = text; return nil }
+	defer func() { extractCopyFn = origCopy }()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	cur := h.Model().currentLevel()
+	cur.Cursor = cur.IndexOf("please")
+
+	// tab copies the cursor token and does NOT toggle selection.
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if cmd == nil {
+		t.Fatal("tab should return a copy command")
+	}
+	msg := cmd()
+	if done, ok := msg.(extractDoneMsg); !ok || done.err != nil {
+		t.Fatalf("tab should produce a successful copy, got %T", msg)
+	}
+	if copied != "please" {
+		t.Fatalf("tab copied %q, want please", copied)
+	}
+	if n := len(h.Model().currentLevel().SelectedItems()); n != 0 {
+		t.Fatalf("tab must not toggle selection, got %d marked", n)
+	}
+
+	// shift+tab marks the row.
+	extractMark(h)
+	if n := len(h.Model().currentLevel().SelectedItems()); n != 1 {
+		t.Fatalf("shift+tab should mark the row, got %d marked", n)
+	}
+}
+
+func TestNonExtractTabStillToggles(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
+	lvl := newLevel("pane:kill", "pane:kill", []menu.Item{{ID: "%1", Label: "p1"}, {ID: "%2", Label: "p2"}}, nil)
+	lvl.MultiSelect = true
+	m.stack = []*level{lvl}
+	h := NewHarness(m)
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	if n := len(h.Model().currentLevel().SelectedItems()); n != 1 {
+		t.Fatalf("tab should still mark on a non-extract multi-select level, got %d", n)
 	}
 }
