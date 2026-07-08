@@ -91,22 +91,30 @@ func (m *Model) handleExtractReloadMsg(msg tea.Msg) tea.Cmd {
 	}
 	m.errMsg = ""
 	current.UpdateItems(reload.items)
-	current.Subtitle = extractSubtitle(m.extractCategory)
+	current.Subtitle = extractSubtitle(m.extractCategory, m.extractGrabArea)
 	m.syncViewport(current)
 	return nil
 }
 
-// extractSubtitle renders the extract mode line: "mode: <current> (^f)" with
-// the active category name coloured (FilterPrompt) and the "mode:" prefix and
-// "(^f)" hotkey suffix dimmed (FilterPlaceholder). Pressing ctrl-f opens the
-// mode selector popup. The returned string embeds ANSI escapes from lipgloss
-// Style.Render calls, so callers placing it in a styledLine must mark that
-// line raw (see viewVertical/renderBottomBarLines Subtitle handling).
-func extractSubtitle(active extract.Category) string {
-	prefix := styles.FilterPlaceholder.Render("mode: ")
-	current := styles.FilterPrompt.Render(active.String())
-	suffix := styles.FilterPlaceholder.Render(" (^f)")
-	return prefix + current + suffix
+// extractSubtitle renders the combined extract bottom-bar line:
+// "mode: <cat> (^f)   area: <area> (^g)". The active category/area names are
+// coloured (FilterPrompt); the "mode:"/"area:" prefixes, "(^f)"/"(^g)" hotkey
+// suffixes, and the gap between the two segments are dimmed
+// (FilterPlaceholder). Pressing ctrl-f/ctrl-g opens the respective selector
+// popup. Built from the same chrome constants extractAreaAnchorCol uses, so
+// the popup's anchor column can never drift from this rendering. The
+// returned string embeds ANSI escapes from lipgloss Style.Render calls, so
+// callers placing it in a styledLine must mark that line raw (see
+// viewVertical/renderBottomBarLines Subtitle handling).
+func extractSubtitle(cat extract.Category, area extract.GrabArea) string {
+	modePrefix := styles.FilterPlaceholder.Render(extractModePrefix)
+	modeValue := styles.FilterPrompt.Render(cat.String())
+	modeSuffix := styles.FilterPlaceholder.Render(extractModeHotkey)
+	gap := styles.FilterPlaceholder.Render(extractSelectorGap)
+	areaPrefix := styles.FilterPlaceholder.Render(extractAreaPrefix)
+	areaValue := styles.FilterPrompt.Render(area.String())
+	areaSuffix := styles.FilterPlaceholder.Render(extractAreaHotkey)
+	return modePrefix + modeValue + modeSuffix + gap + areaPrefix + areaValue + areaSuffix
 }
 
 // extractSelectedText returns the text to act on for an insert/copy action:

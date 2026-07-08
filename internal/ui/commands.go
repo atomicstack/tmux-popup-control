@@ -242,6 +242,7 @@ func (m *Model) menuContext() menu.Context {
 		CurrentPaneLabel:     m.panes.CurrentLabel(),
 		PaneIncludeCurrent:   m.panes.IncludeCurrent(),
 		ExtractCategory:      m.extractCategory,
+		ExtractGrabArea:      m.extractGrabArea,
 	}
 	for _, w := range ctx.Windows {
 		if w.Current {

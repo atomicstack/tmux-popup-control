@@ -181,6 +181,7 @@ func (m *Model) handleEnterKey() tea.Cmd {
 					// extractSeq so any ctrl-f reload still in flight from a
 					// prior visit is invalidated (see handleExtractReloadMsg).
 					m.extractCategory = extract.DefaultCategory
+					m.extractGrabArea = extract.DefaultGrabArea
 					m.extractSeq++
 				}
 				m.loading = true
@@ -505,7 +506,7 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 		// Category was already reset to DefaultCategory when navigation into
 		// extract was initiated (handleEnterKey / applyRootMenuOverride),
 		// before this loader ran. Only the header needs (re)rendering here.
-		level.Subtitle = extractSubtitle(m.extractCategory)
+		level.Subtitle = extractSubtitle(m.extractCategory, m.extractGrabArea)
 	}
 	m.applyNodeSettings(level)
 	m.syncViewport(level)
@@ -605,6 +606,7 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		// still in flight from a prior visit is invalidated (see
 		// handleExtractReloadMsg).
 		m.extractCategory = extract.DefaultCategory
+		m.extractGrabArea = extract.DefaultGrabArea
 		m.extractSeq++
 	}
 
@@ -652,7 +654,7 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	if node.ID == extractLevelID {
 		// Category was already reset above, before the loader ran. Only the
 		// header needs (re)rendering here.
-		root.Subtitle = extractSubtitle(m.extractCategory)
+		root.Subtitle = extractSubtitle(m.extractCategory, m.extractGrabArea)
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)

@@ -282,8 +282,11 @@ func (m *Model) viewVertical(header string) (string, int) {
 	// The fuzzy input is the last line of the bottom bar.
 	promptRow := len(lines) - 1
 	rendered := m.overlayCompletion(renderLines(lines))
-	if m.extractModePopupVisible() {
+	switch {
+	case m.extractModePopupVisible():
 		rendered = m.overlayDropdownWidget(rendered, m.extractModePopup, m.extractModePopup.anchorCol)
+	case m.extractAreaPopupVisible():
+		rendered = m.overlayDropdownWidget(rendered, m.extractAreaPopup, m.extractAreaPopup.anchorCol)
 	}
 	return rendered, promptRow
 }

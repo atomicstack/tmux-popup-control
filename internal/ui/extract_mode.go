@@ -30,25 +30,19 @@ func (m *Model) armExtractModeTimer() tea.Cmd {
 	})
 }
 
-// extractModeAnchorCol is the column at which the popup is anchored — under the
-// current mode name in the "mode: " line (indicator column + len("mode: ")).
+// extractModeAnchorCol is the column at which the mode popup is anchored —
+// under the current mode name in the "mode: " line (indicator column +
+// len("mode: ")). Uses the same chrome constant extractSubtitle renders with
+// (see extract_selector.go), so the two cannot drift apart.
 func (m *Model) extractModeAnchorCol() int {
-	return len("mode: ")
+	return len(extractModePrefix)
 }
 
 // openExtractModePopup opens the mode selector at the current category without
 // changing it, recording the pre-popup category for esc-revert.
 func (m *Model) openExtractModePopup() tea.Cmd {
 	m.extractModePrePopup = m.extractCategory
-	cats := extract.Categories()
-	items := make([]string, len(cats))
-	cursor := 0
-	for i, c := range cats {
-		items[i] = c.String()
-		if c == m.extractCategory {
-			cursor = i
-		}
-	}
+	items, cursor := buildExtractSelectorItems(extract.Categories(), m.extractCategory)
 	cs := newCompletionState(CompletionOptions{
 		Items:     items,
 		AnchorCol: m.extractModeAnchorCol(),
@@ -66,82 +60,39 @@ func (m *Model) closeExtractModePopup() {
 // applyExtractModeCursor syncs m.extractCategory to the popup's highlighted row
 // and triggers a live re-extract.
 func (m *Model) applyExtractModeCursor() tea.Cmd {
-	if m.extractModePopup == nil {
+	return applyExtractSelectorCursor(m, m.extractModePopup, extract.Categories(), &m.extractCategory)
+}
+
+// revertExtractMode reverts extractCategory to the value active before the
+// mode popup opened, re-extracting live if it changed. Used by esc.
+func (m *Model) revertExtractMode() tea.Cmd {
+	if m.extractCategory == m.extractModePrePopup {
 		return nil
 	}
-	cats := extract.Categories()
-	idx := m.extractModePopup.cursor
-	if idx < 0 || idx >= len(cats) {
-		return nil
-	}
-	if cats[idx] == m.extractCategory {
-		return nil
-	}
-	m.extractCategory = cats[idx]
+	m.extractCategory = m.extractModePrePopup
 	return m.extractReloadCmd()
 }
 
-// handleExtractKey routes key presses for the extract level, including the mode
-// selector popup. It returns (cmd, handled); handled=false lets the key fall
-// through to the normal menu key handling.
-func (m *Model) handleExtractKey(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
-	key := keyMsg.String()
-
-	if m.extractModePopupVisible() {
-		switch key {
-		case "ctrl+f", "down":
-			m.extractModePopup.moveDown()
-			return tea.Batch(m.applyExtractModeCursor(), m.armExtractModeTimer()), true
-		case "up":
-			m.extractModePopup.moveUp()
-			return tea.Batch(m.applyExtractModeCursor(), m.armExtractModeTimer()), true
-		case "enter":
-			// Confirm the current mode and close.
-			m.closeExtractModePopup()
-			return nil, true
-		case "esc":
-			// Revert to the mode active before the popup opened.
-			m.closeExtractModePopup()
-			if m.extractCategory != m.extractModePrePopup {
-				m.extractCategory = m.extractModePrePopup
-				return m.extractReloadCmd(), true
-			}
-			return nil, true
-		}
-		// Other keys (typing to filter, etc.) pass through to normal handling.
-		return nil, false
-	}
-
-	// Popup closed.
-	switch key {
-	case "ctrl+f":
-		return m.openExtractModePopup(), true
-	case "tab", "ctrl+y":
-		return m.extractCopy(), true
-	case "shift+tab":
-		if current := m.currentLevel(); current != nil {
-			current.ToggleCurrentSelection()
-		}
-		return nil, true
-	case "enter":
-		return m.extractInsert(), true
-	}
-	return nil, false
-}
-
-// handleExtractModeTimeoutMsg closes the mode popup when its inactivity timer
-// fires and no newer activity has rescheduled it.
+// handleExtractModeTimeoutMsg closes whichever selector popup (mode or area)
+// is open when its inactivity timer fires and no newer activity has
+// rescheduled it. Only one selector popup is ever open at a time, and both
+// share the same timer/seq (m.extractModeSeq), so a single seq comparison
+// covers either popup.
 func (m *Model) handleExtractModeTimeoutMsg(msg tea.Msg) tea.Cmd {
 	timeout, ok := msg.(extractModeTimeoutMsg)
 	if !ok {
 		return nil
 	}
-	if !m.extractModePopupVisible() {
+	if !m.extractModePopupVisible() && !m.extractAreaPopupVisible() {
 		return nil
 	}
 	if timeout.seq != m.extractModeSeq {
 		return nil // superseded by later activity
 	}
-	m.closeExtractModePopup()
+	if m.extractModePopupVisible() {
+		m.closeExtractModePopup()
+	} else {
+		m.closeExtractAreaPopup()
+	}
 	return nil
 }

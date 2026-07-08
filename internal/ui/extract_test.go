@@ -19,6 +19,12 @@ func ctrlF() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}
 }
 
+// ctrlG constructs the ctrl+g key press message, the hotkey for the area
+// selector popup (see ctrlF for the verification this construction relies on).
+func ctrlG() tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl}
+}
+
 // extractMark toggles multi-select on the current extract row (shift+tab).
 func extractMark(h *Harness) {
 	h.Send(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
@@ -35,6 +41,21 @@ func extractSelectCategory(t *testing.T, h *Harness, target extract.Category) {
 			t.Fatalf("could not reach category %v via ctrl-f", target)
 		}
 		h.Send(ctrlF()) // advance to next mode
+	}
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm + close popup
+}
+
+// extractSelectArea opens the area popup (first ctrl-g) and cycles to target
+// (subsequent ctrl-g presses), then confirms with enter — leaving the extract
+// level on that area with the popup closed.
+func extractSelectArea(t *testing.T, h *Harness, target extract.GrabArea) {
+	t.Helper()
+	h.Send(ctrlG()) // open popup at current area (no change)
+	for guard := 0; h.Model().extractGrabArea != target; guard++ {
+		if guard > 20 {
+			t.Fatalf("could not reach area %v via ctrl-g", target)
+		}
+		h.Send(ctrlG()) // advance to next area
 	}
 	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm + close popup
 }
@@ -1082,5 +1103,310 @@ func TestExtractBufferErrorDoesNotQuit(t *testing.T) {
 	}
 	if h.Model().errMsg == "" {
 		t.Fatalf("expected errMsg to be set after a failed copy")
+	}
+}
+
+// --- area selector popup ---
+
+// TestExtractAreaCtrlGOpensPopupAtCurrentArea verifies the first ctrl-g opens
+// the area popup without changing the active area, mirroring the mode
+// popup's opening behaviour.
+func TestExtractAreaCtrlGOpensPopupAtCurrentArea(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+
+	if got := h.Model().extractGrabArea; got != extract.Viewport {
+		t.Fatalf("initial area = %v, want viewport", got)
+	}
+	if h.Model().extractAreaPopupVisible() {
+		t.Fatalf("area popup should not be open before ctrl-g")
+	}
+	h.Send(ctrlG())
+	if got := h.Model().extractGrabArea; got != extract.Viewport {
+		t.Fatalf("opening the area popup should not change the area, got %v", got)
+	}
+	if !h.Model().extractAreaPopupVisible() {
+		t.Fatalf("first ctrl-g should open the area popup")
+	}
+}
+
+// TestExtractAreaCtrlGAdvancesWithWrap verifies repeated ctrl-g presses cycle
+// through the grab-area order and wrap from the last back to the first.
+func TestExtractAreaCtrlGAdvancesWithWrap(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+
+	h.Send(ctrlG()) // open at viewport
+	h.Send(ctrlG()) // advance to pane-history
+	if got := h.Model().extractGrabArea; got != extract.PaneHistory {
+		t.Fatalf("after second ctrl-g area = %v, want pane-history", got)
+	}
+	h.Send(ctrlG()) // advance to window
+	if got := h.Model().extractGrabArea; got != extract.Window {
+		t.Fatalf("after third ctrl-g area = %v, want window", got)
+	}
+	h.Send(ctrlG()) // advance to window-history
+	if got := h.Model().extractGrabArea; got != extract.WindowHistory {
+		t.Fatalf("after fourth ctrl-g area = %v, want window-history", got)
+	}
+	h.Send(ctrlG()) // wraps back to viewport
+	if got := h.Model().extractGrabArea; got != extract.Viewport {
+		t.Fatalf("ctrl-g should wrap from window-history back to viewport, got %v", got)
+	}
+}
+
+// TestExtractAreaPopupUpWrapsToPreviousArea verifies up from the first area
+// (viewport) wraps to the last (window-history), mirroring the mode popup.
+func TestExtractAreaPopupUpWrapsToPreviousArea(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+
+	h.Send(ctrlG())                          // open at viewport (index 0)
+	h.Send(tea.KeyPressMsg{Code: tea.KeyUp}) // up wraps to the last area (window-history)
+	if h.Model().extractGrabArea != extract.WindowHistory {
+		t.Fatalf("up from viewport should wrap to window-history, got %v", h.Model().extractGrabArea)
+	}
+}
+
+// TestExtractAreaPopupEnterKeepsArea verifies enter confirms the highlighted
+// area and closes the popup without leaving the extract level.
+func TestExtractAreaPopupEnterKeepsArea(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+
+	h.Send(ctrlG())
+	h.Send(ctrlG()) // advance to pane-history
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if h.Model().extractAreaPopupVisible() {
+		t.Fatalf("enter should close the area popup")
+	}
+	if h.Model().extractGrabArea != extract.PaneHistory {
+		t.Fatalf("enter should keep the selected area (pane-history), got %v", h.Model().extractGrabArea)
+	}
+	if h.Model().currentLevel().ID != extractLevelID {
+		t.Fatalf("enter in the area popup must not leave the extract level")
+	}
+}
+
+// TestExtractAreaPopupEscRevertsToPrePopupArea verifies esc reverts to the
+// area active before the popup opened and closes the popup, mirroring the
+// mode popup's esc-revert behaviour.
+func TestExtractAreaPopupEscRevertsToPrePopupArea(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+
+	h.Send(ctrlG()) // open at viewport
+	h.Send(ctrlG()) // advance to pane-history
+	if h.Model().extractGrabArea != extract.PaneHistory {
+		t.Fatalf("want pane-history after advance, got %v", h.Model().extractGrabArea)
+	}
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape}) // revert
+	if h.Model().extractGrabArea != extract.Viewport {
+		t.Fatalf("esc should revert to viewport, got %v", h.Model().extractGrabArea)
+	}
+	if h.Model().extractAreaPopupVisible() {
+		t.Fatalf("esc should close the area popup")
+	}
+	if h.Model().currentLevel().ID != extractLevelID {
+		t.Fatalf("esc in the area popup must not leave the extract level")
+	}
+}
+
+// TestExtractAreaPopupTimeoutClosesAndStaleIgnored mirrors
+// TestExtractModePopupTimeoutClosesAndStaleIgnored for the area popup: both
+// selectors share the same inactivity timer/seq (extractModeSeq /
+// extractModeTimeoutMsg), so a stale timeout must be ignored and a matching
+// one must close whichever popup is open.
+func TestExtractAreaPopupTimeoutClosesAndStaleIgnored(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "hello world", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	h.Send(ctrlG()) // open, arms the shared inactivity timer
+	seq := h.Model().extractModeSeq
+	if !h.Model().extractAreaPopupVisible() {
+		t.Fatal("area popup should be open after ctrl-g")
+	}
+	// A stale timeout (superseded by later activity) must not close it.
+	h.Send(extractModeTimeoutMsg{seq: seq - 1})
+	if !h.Model().extractAreaPopupVisible() {
+		t.Fatal("stale timeout should be ignored")
+	}
+	// The current timeout closes it, keeping the current area.
+	h.Send(extractModeTimeoutMsg{seq: seq})
+	if h.Model().extractAreaPopupVisible() {
+		t.Fatal("matching timeout should close the area popup")
+	}
+}
+
+// TestExtractAreaChangeUpdatesMenuContextAndReloadsItems verifies that
+// selecting a new area is wired into menuContext().ExtractGrabArea (so the
+// loader's captureForArea picks it up) and that the change triggers a live
+// re-extract (extractSeq bump), not just a header update.
+func TestExtractAreaChangeUpdatesMenuContextAndReloadsItems(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	if got := h.Model().menuContext().ExtractGrabArea; got != extract.Viewport {
+		t.Fatalf("initial menuContext ExtractGrabArea = %v, want viewport", got)
+	}
+	seqBefore := h.Model().extractSeq
+
+	extractSelectArea(t, h, extract.PaneHistory)
+
+	if got := h.Model().menuContext().ExtractGrabArea; got != extract.PaneHistory {
+		t.Fatalf("menuContext ExtractGrabArea after selecting pane-history = %v, want pane-history", got)
+	}
+	if got := h.Model().extractSeq; got <= seqBefore {
+		t.Fatalf("selecting a new area did not trigger a reload: extractSeq = %d, want > %d", got, seqBefore)
+	}
+}
+
+// TestExtractCtrlGInertWhileModePopupOpen and
+// TestExtractCtrlFInertWhileAreaPopupOpen guard the one-popup-at-a-time rule:
+// only the currently open selector's own hotkey (or down/up/enter/esc) does
+// anything; the other selector's hotkey is a handled no-op. This test must
+// go red if ctrl-g were wired to the mode selector instead of area, or if it
+// were wired to open the area popup on top of an already-open mode popup.
+func TestExtractCtrlGInertWhileModePopupOpen(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+
+	h.Send(ctrlF()) // open the mode popup
+	if !h.Model().extractModePopupVisible() {
+		t.Fatalf("expected mode popup open after ctrl-f")
+	}
+	beforeCategory := h.Model().extractCategory
+	beforeArea := h.Model().extractGrabArea
+
+	h.Send(ctrlG()) // must be inert while the mode popup is open
+
+	if !h.Model().extractModePopupVisible() {
+		t.Fatalf("ctrl-g while the mode popup is open must not close the mode popup")
+	}
+	if h.Model().extractAreaPopupVisible() {
+		t.Fatalf("ctrl-g while the mode popup is open must not open the area popup")
+	}
+	if h.Model().extractGrabArea != beforeArea {
+		t.Fatalf("ctrl-g while the mode popup is open must not change the area")
+	}
+	if h.Model().extractCategory != beforeCategory {
+		t.Fatalf("ctrl-g while the mode popup is open must not change the category")
+	}
+}
+
+func TestExtractCtrlFInertWhileAreaPopupOpen(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+
+	h.Send(ctrlG()) // open the area popup
+	if !h.Model().extractAreaPopupVisible() {
+		t.Fatalf("expected area popup open after ctrl-g")
+	}
+	beforeCategory := h.Model().extractCategory
+	beforeArea := h.Model().extractGrabArea
+
+	h.Send(ctrlF()) // must be inert while the area popup is open
+
+	if !h.Model().extractAreaPopupVisible() {
+		t.Fatalf("ctrl-f while the area popup is open must not close the area popup")
+	}
+	if h.Model().extractModePopupVisible() {
+		t.Fatalf("ctrl-f while the area popup is open must not open the mode popup")
+	}
+	if h.Model().extractCategory != beforeCategory {
+		t.Fatalf("ctrl-f while the area popup is open must not change the category")
+	}
+	if h.Model().extractGrabArea != beforeArea {
+		t.Fatalf("ctrl-f while the area popup is open must not change the area")
+	}
+}
+
+// TestExtractCombinedBottomBarShowsModeAndArea verifies the single bottom-bar
+// line renders both the mode and area segments with current values.
+func TestExtractCombinedBottomBarShowsModeAndArea(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	view := ansi.Strip(h.View())
+	if !strings.Contains(view, "mode: word (^f)") {
+		t.Fatalf("expected mode segment 'mode: word (^f)', got:\n%s", view)
+	}
+	if !strings.Contains(view, "area: viewport (^g)") {
+		t.Fatalf("expected area segment 'area: viewport (^g)', got:\n%s", view)
+	}
+}
+
+// TestExtractAreaAnchorColMatchesAreaValueColumn verifies
+// extractAreaAnchorCol() points at the exact column where the area value
+// begins on the rendered subtitle line, so the area popup overlays directly
+// under it (mirroring how the mode popup anchors under "mode: ").
+func TestExtractAreaAnchorColMatchesAreaValueColumn(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	lines := strings.Split(ansi.Strip(h.View()), "\n")
+	var subtitleLine string
+	for _, ln := range lines {
+		if strings.Contains(ln, "mode:") {
+			subtitleLine = ln
+			break
+		}
+	}
+	if subtitleLine == "" {
+		t.Fatalf("could not find the extract subtitle line in the view")
+	}
+	idx := strings.Index(subtitleLine, "viewport")
+	if idx < 0 {
+		t.Fatalf("expected %q to contain the area value %q", subtitleLine, "viewport")
+	}
+	if got := h.Model().extractAreaAnchorCol(); got != idx {
+		t.Fatalf("extractAreaAnchorCol() = %d, want %d (column of %q on the subtitle line %q)", got, idx, "viewport", subtitleLine)
 	}
 }

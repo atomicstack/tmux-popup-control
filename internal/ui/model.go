@@ -115,10 +115,13 @@ type Model struct {
 	commandOutputLines         []string
 	commandOutputOffset        int
 	extractCategory            extract.Category
+	extractGrabArea            extract.GrabArea
 	extractSeq                 int
 	extractModePopup           *completionState
 	extractModePrePopup        extract.Category
 	extractModeSeq             int
+	extractAreaPopup           *completionState
+	extractAreaPrePopup        extract.GrabArea
 
 	handlers map[reflect.Type]msgHandler
 
