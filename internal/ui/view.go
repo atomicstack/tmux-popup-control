@@ -216,17 +216,12 @@ func (m *Model) viewVertical(header string) (string, int) {
 	if header != "" {
 		lines = append(lines, styledLine{text: header, style: styles.Header})
 	}
-	if current := m.currentLevel(); current != nil && current.Subtitle != "" {
-		if current.ID == extractLevelID {
-			// extractSubtitle already renders each category segment with its
-			// own lipgloss style; wrapping the whole line in another style
-			// would nest ANSI escapes and corrupt ANSI-unaware truncation, so
-			// render it raw (see buildMultiSelectLine for the same pattern).
-			lines = append(lines, styledLine{text: current.Subtitle, raw: true})
-		} else {
-			dimStyle := lipgloss.NewStyle().Faint(true)
-			lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
-		}
+	// The extract level renders its category (mode) header in the bottom bar,
+	// directly above the fuzzy input (see renderBottomBarLines); every other
+	// level with a Subtitle renders it dimmed above the list.
+	if current := m.currentLevel(); current != nil && current.Subtitle != "" && current.ID != extractLevelID {
+		dimStyle := lipgloss.NewStyle().Faint(true)
+		lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
 	}
 	if current := m.currentLevel(); current != nil {
 		lines = append(lines, m.renderMenuLines(current, m.width)...)
@@ -273,8 +268,12 @@ func (m *Model) viewVertical(header string) (string, int) {
 	lines = applyWidth(lines, m.width)
 
 	// Bottom bar: error/status line + filter prompt. The prompt is the
-	// second line of the bottom bar (statusLine, prompt, [summary]).
+	// second line of the bottom bar (statusLine, prompt, [summary]), pushed
+	// down one row when the extract mode header sits above the prompt.
 	promptRow := len(lines) + 1
+	if m.extractHeaderVisible() {
+		promptRow++
+	}
 	lines = append(lines, m.renderBottomBarLines()...)
 	return m.overlayCompletion(renderLines(lines)), promptRow
 }
@@ -411,10 +410,20 @@ func (m *Model) viewCommandOutput(header string) string {
 
 func (m *Model) bottomBarRows() int {
 	rows := 2
+	if m.extractHeaderVisible() {
+		rows++
+	}
 	if m.currentCommandSummary() != "" {
 		rows++
 	}
 	return rows
+}
+
+// extractHeaderVisible reports whether the current level renders the extract
+// category (mode) header in the bottom bar, directly above the fuzzy input.
+func (m *Model) extractHeaderVisible() bool {
+	current := m.currentLevel()
+	return current != nil && current.ID == extractLevelID && current.Subtitle != ""
 }
 
 func (m *Model) renderBottomBarLines() []styledLine {
@@ -424,10 +433,14 @@ func (m *Model) renderBottomBarLines() []styledLine {
 	}
 
 	promptText, _ := m.filterPrompt()
-	lines := []styledLine{
-		statusLine,
-		{text: promptText},
+	lines := []styledLine{statusLine}
+	if m.extractHeaderVisible() {
+		// The extract category (mode) header sits directly above the fuzzy
+		// input. extractSubtitle pre-styles each segment, so render it raw to
+		// avoid nesting ANSI escapes (see buildMultiSelectLine).
+		lines = append(lines, styledLine{text: m.currentLevel().Subtitle, raw: true})
 	}
+	lines = append(lines, styledLine{text: promptText})
 	if summary := m.currentCommandSummary(); summary != "" {
 		summaryStyle := styles.FilterPlaceholder
 		if summaryStyle == nil {
@@ -968,7 +981,9 @@ func (m *Model) maxVisibleItems() int {
 	if header := m.menuHeader(); header != "" {
 		used++
 	}
-	if current := m.currentLevel(); current != nil && current.Subtitle != "" {
+	// The extract mode header lives in the bottom bar, so it is already
+	// counted by bottomBarRows(); only non-extract subtitles add a top row.
+	if current := m.currentLevel(); current != nil && current.Subtitle != "" && current.ID != extractLevelID {
 		used++
 	}
 	if info := m.currentInfo(); info != "" {

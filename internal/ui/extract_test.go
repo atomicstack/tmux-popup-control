@@ -628,3 +628,30 @@ func TestExtractMultiSelectAllJoinsWithNewline(t *testing.T) {
 		t.Fatalf("copied text missing one or both items: %q", copied)
 	}
 }
+
+// TestExtractModeMenuRendersBelowListAboveInput asserts the category (mode)
+// header is rendered BELOW the token list and ABOVE the fuzzy filter input,
+// per the requested layout.
+func TestExtractModeMenuRendersBelowListAboveInput(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	view := h.View()
+	tokenIdx := strings.Index(view, "please")          // an extracted token in the list
+	headerIdx := strings.Index(view, "ctrl-f")         // the mode header (category cycle hint)
+	promptIdx := strings.Index(view, "type to search") // the fuzzy input placeholder
+	if tokenIdx < 0 || headerIdx < 0 || promptIdx < 0 {
+		t.Fatalf("missing markers: token=%d header=%d prompt=%d\nview:\n%s", tokenIdx, headerIdx, promptIdx, view)
+	}
+	if tokenIdx >= headerIdx {
+		t.Fatalf("expected token list ABOVE mode menu; token=%d header=%d", tokenIdx, headerIdx)
+	}
+	if headerIdx >= promptIdx {
+		t.Fatalf("expected mode menu ABOVE fuzzy input; header=%d prompt=%d", headerIdx, promptIdx)
+	}
+}
