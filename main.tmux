@@ -70,6 +70,11 @@ opt() { echo "${TMUX_OPTS["tmux-popup-control-$1"]}"; }
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME="$(opt key-window-rename)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" ]] && TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME=','
 
+# extract (extrakto-style token extractor) hotkey. Defaults to prefix+Tab to
+# match extrakto; override with @tmux-popup-control-key-extract or the env var.
+[[ -z "$TMUX_POPUP_CONTROL_KEY_EXTRACT" ]] && TMUX_POPUP_CONTROL_KEY_EXTRACT="$(opt key-extract)"
+[[ -z "$TMUX_POPUP_CONTROL_KEY_EXTRACT" ]] && TMUX_POPUP_CONTROL_KEY_EXTRACT='Tab'
+
 BINDINGS_FILE="$(mktemp "${TMPDIR:-/tmp}/tmux-popup-control-bindings.XXXXXX")"
 cleanup() {
   rm -f "$BINDINGS_FILE"
@@ -88,6 +93,7 @@ bind-key -T prefix -N "Saves sessions via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY
 bind-key -T prefix -N "Restores sessions from a snapshot via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_RESURRECT_RESTORE_FROM" run-shell -b "$LAUNCH_SCRIPT --root-menu resurrect:restore-from"
 bind-key -T prefix -N "Renames session via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_SESSION_RENAME" run-shell -b "$LAUNCH_SCRIPT --root-menu session:rename --menu-args '#{q:session_name}'"
 bind-key -T prefix -N "Renames window via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME" run-shell -b "$LAUNCH_SCRIPT --root-menu window:rename --menu-args '#{q:session_name}:#{window_index}'"
+bind-key -T prefix -N "Extracts tokens from the current pane via $BINARY_NAME" "$TMUX_POPUP_CONTROL_KEY_EXTRACT" run-shell -b "$LAUNCH_SCRIPT --root-menu extract"
 EOF
 
 tmux source-file "$BINDINGS_FILE"

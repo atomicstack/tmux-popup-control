@@ -86,6 +86,25 @@ control-mode connection via
   pane / user), colour values render inline rather than as swatch blocks,
   and a live user-option loader exposes user-defined `@…` options
 
+### Extract (extrakto-style)
+- Captures the originating pane's visible screen and extracts tokens to
+  fuzzy-find, then insert or copy — retype paths, URLs, git hashes, and
+  command output without reaching for the mouse (works over SSH, since it
+  operates on captured text)
+- Token categories: **word**, **path**, **url**, **quote**, **s-quote**,
+  **line**, and **all** (path ∪ url ∪ quote ∪ s-quote). Patterns ported from
+  extrakto's filter definitions
+- `Ctrl-F` cycles the category in place (header shows the active one),
+  preserving your current filter query
+- `Enter` inserts the selection into the originating pane; `Ctrl-Y` copies it
+  to a tmux buffer; `Tab` marks multiple tokens (joined with spaces, or
+  newlines for the line/all categories)
+- Reachable from the root menu or directly via `--root-menu extract` (see the
+  keybinding below); quits on `Esc` when invoked directly
+- Copy is tmux-buffer-only for now; system-clipboard / OSC-52, grab-area
+  cycling (recent/full/window), edit/open actions, and `@extrakto-*` config
+  compatibility are planned follow-ups
+
 ### UI
 - Fuzzy-search filtering on every menu level
 - Breadcrumb navigation with push/pop menu stack
@@ -187,6 +206,7 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 | `TMUX_POPUP_CONTROL_KEY_RESURRECT_RESTORE_FROM` | `@tmux-popup-control-key-resurrect-restore-from` | `C-r` | restore sessions from a snapshot (legacy `key-session-restore-from` honoured as fallback) |
 | `TMUX_POPUP_CONTROL_KEY_SESSION_RENAME` | `@tmux-popup-control-key-session-rename` | `$` | rename the current session via inline form |
 | `TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME` | `@tmux-popup-control-key-window-rename` | `,` | rename the current window via inline form |
+| `TMUX_POPUP_CONTROL_KEY_EXTRACT` | `@tmux-popup-control-key-extract` | `Tab` | extract tokens from the current pane (extrakto-style) |
 
 ### CLI subcommands
 
