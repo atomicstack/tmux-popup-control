@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/extract"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ctrlF constructs the ctrl+f key press message. Verified against the
@@ -678,5 +679,46 @@ func TestExtractModeLabelsAboveSeparatorAboveInput(t *testing.T) {
 	}
 	if !strings.Contains(lines[last-2], "ctrl-f") {
 		t.Fatalf("expected mode labels immediately above the separator, got %q", lines[last-2])
+	}
+}
+
+// TestExtractMultiSelectUsesVerticalBarNotCheckbox asserts the extract list
+// uses an extrakto/fzf-style coloured vertical bar for selected rows instead
+// of the ■/□ checkboxes used elsewhere.
+func TestExtractMultiSelectUsesVerticalBarNotCheckbox(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	before := ansi.Strip(h.View())
+	if strings.ContainsAny(before, "■□") {
+		t.Fatalf("extract list should not render checkboxes, got:\n%s", before)
+	}
+	// Mark the row under the cursor.
+	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
+	after := ansi.Strip(h.View())
+	// ▕ (U+2595 right one-eighth block): a thin, right-aligned selection bar.
+	if !strings.Contains(after, "▕") {
+		t.Fatalf("expected a thin right-aligned bar marker for the selected extract row, got:\n%s", after)
+	}
+	if strings.ContainsAny(after, "■□") {
+		t.Fatalf("extract selection must not use checkboxes, got:\n%s", after)
+	}
+}
+
+// TestNonExtractMultiSelectStillUsesCheckbox guards that the checkbox marker is
+// unchanged for other multi-select menus (e.g. pane:kill).
+func TestNonExtractMultiSelectStillUsesCheckbox(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
+	lvl := newLevel("pane:kill", "pane:kill", []menu.Item{{ID: "%1", Label: "pane one"}}, nil)
+	lvl.MultiSelect = true
+	line := m.buildItemLine(lvl.Items[0], 0, lvl, 80)
+	stripped := ansi.Strip(line.text)
+	if !strings.Contains(stripped, "□") {
+		t.Fatalf("non-extract multiselect should still use a checkbox, got %q", stripped)
 	}
 }

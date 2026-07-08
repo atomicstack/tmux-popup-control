@@ -514,6 +514,9 @@ func (m *Model) buildItemLine(item menu.Item, idx int, current *level, width int
 		Width:          width,
 	}
 	if current.MultiSelect {
+		if current.ID == extractLevelID {
+			return m.buildExtractSelectLine(item, opts)
+		}
 		return m.buildMultiSelectLine(item, opts)
 	}
 	if item.StyledLabel != "" {
@@ -564,6 +567,67 @@ func buildStyledNormalLine(item menu.Item, opts itemLineOptions) styledLine {
 
 	return styledLine{
 		text: styledIndicator + styledBody,
+		raw:  true,
+	}
+}
+
+// buildExtractSelectLine renders a multi-select item for the extract menu in
+// an extrakto/fzf style: no checkbox, just a thin coloured vertical bar (▕,
+// right-aligned in its cell so it hugs the item text) shown for selected rows.
+// Unselected rows look like a normal item line. The result is raw so segment
+// styles do not nest their ANSI resets.
+func (m *Model) buildExtractSelectLine(item menu.Item, opts itemLineOptions) styledLine {
+	selected := opts.Current != nil && opts.Current.IsSelected(item.ID)
+
+	// Gutter cell between the ▌ active indicator and the item text.
+	gutter := " "
+	var gutterStyle *lipgloss.Style
+	if selected {
+		gutter = "▕" // U+2595 RIGHT ONE EIGHTH BLOCK: thin, right-aligned bar.
+		gutterStyle = styles.CheckboxChecked
+	}
+
+	displayLabel := item.Label
+	if item.StyledLabel != "" {
+		displayLabel = item.StyledLabel
+	}
+	bodyContent := displayLabel
+	if opts.Width > 0 {
+		// Indicator + one gutter cell + label, matching a normal item line.
+		visWidth := lipgloss.Width(opts.Indicator + " " + item.Label)
+		if pad := opts.Width - visWidth; pad > 0 {
+			bodyContent += strings.Repeat(" ", pad)
+		}
+	}
+
+	styledIndicator := opts.Indicator
+	if opts.IndicatorStyle != nil {
+		styledIndicator = opts.IndicatorStyle.Render(opts.Indicator)
+	}
+
+	// Composite the bar colour over the line background so it survives on the
+	// highlighted cursor row.
+	var styledGutter string
+	switch {
+	case gutterStyle != nil:
+		gs := *gutterStyle
+		if opts.LineStyle != nil {
+			gs = gs.Inherit(*opts.LineStyle)
+		}
+		styledGutter = gs.Render(gutter)
+	case opts.LineStyle != nil:
+		styledGutter = opts.LineStyle.Render(gutter)
+	default:
+		styledGutter = gutter
+	}
+
+	styledBody := bodyContent
+	if opts.LineStyle != nil {
+		styledBody = opts.LineStyle.Render(bodyContent)
+	}
+
+	return styledLine{
+		text: styledIndicator + styledGutter + styledBody,
 		raw:  true,
 	}
 }
