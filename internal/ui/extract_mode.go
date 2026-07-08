@@ -9,7 +9,7 @@ import (
 
 // extractModeTimeout is how long the mode selector popup stays open without
 // activity before it auto-dismisses.
-const extractModeTimeout = 2 * time.Second
+const extractModeTimeout = time.Second
 
 // extractModeTimeoutMsg fires when the mode popup inactivity timer elapses.
 // seq guards against stale timers: only a timeout whose seq still matches
