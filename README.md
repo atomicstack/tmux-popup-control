@@ -92,18 +92,23 @@ control-mode connection via
   command output without reaching for the mouse (works over SSH, since it
   operates on captured text)
 - Token categories: **word**, **path**, **url**, **quote**, **s-quote**,
-  **line**, and **all** (path ∪ url ∪ quote ∪ s-quote). Patterns ported from
-  extrakto's filter definitions
-- `Ctrl-F` cycles the category in place (header shows the active one),
-  preserving your current filter query
-- `Enter` inserts the selection into the originating pane; `Ctrl-Y` copies it
-  to a tmux buffer; `Tab` marks multiple tokens (joined with spaces, or
-  newlines for the line/all categories)
+  **line**, **host** (hostname from urls — `scheme://`, `user@host:` scp, etc.),
+  **quoted** (inner text of `"…"`/`'…'`), and **all** (path ∪ url ∪ quote ∪
+  s-quote). Patterns ported from extrakto's filter definitions
+- `Ctrl-F` opens the mode selector popup (the bottom bar shows `mode: <current>`);
+  each `Ctrl-F` or the arrow keys cycle it, and it re-extracts in place while
+  preserving your current filter query. The popup auto-dismisses after 1s or on
+  `Enter`; `Esc` reverts to the previous mode
+- `Enter` inserts the selection into the originating pane; `Tab` / `Ctrl-Y`
+  copies it to a tmux buffer **and the system clipboard**; `Shift-Tab` marks
+  multiple tokens (joined with spaces, or newlines for the line/all categories)
+- System-clipboard copy detects the host OS and shells out to the native tool
+  (`pbcopy` on macOS; `wl-copy`/`xclip`/`xsel` on Linux; `clip` on Windows). The
+  tmux buffer stays the source of truth — a clipboard failure never blocks the copy
 - Reachable from the root menu or directly via `--root-menu extract` (see the
   keybinding below); quits on `Esc` when invoked directly
-- Copy is tmux-buffer-only for now; system-clipboard / OSC-52, grab-area
-  cycling (recent/full/window), edit/open actions, and `@extrakto-*` config
-  compatibility are planned follow-ups
+- OSC-52 (for remote copy), grab-area cycling (recent/full/window), edit/open
+  actions, and `@extrakto-*` config compatibility are planned follow-ups
 
 ### UI
 - Fuzzy-search filtering on every menu level
