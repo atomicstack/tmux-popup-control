@@ -5,7 +5,7 @@ import "testing"
 func TestCategoryString(t *testing.T) {
 	cases := map[Category]string{
 		Word: "word", Path: "path", URL: "url", Quote: "quote",
-		SQuote: "s-quote", Line: "line", All: "all",
+		SQuote: "s-quote", Line: "line", Host: "host", Quoted: "quoted", All: "all",
 	}
 	for c, want := range cases {
 		if got := c.String(); got != want {
@@ -15,7 +15,7 @@ func TestCategoryString(t *testing.T) {
 }
 
 func TestCategoryNextWraps(t *testing.T) {
-	order := []Category{Word, Path, URL, Quote, SQuote, Line, All, Word}
+	order := []Category{Word, Path, URL, Quote, SQuote, Line, Host, Quoted, All, Word}
 	got := Word
 	for i := 1; i < len(order); i++ {
 		got = got.Next()
@@ -36,7 +36,7 @@ func TestDefaultCategory(t *testing.T) {
 // header rendering), and that callers cannot mutate package state through
 // the returned slice.
 func TestCategoriesMatchesCycle(t *testing.T) {
-	want := []Category{Word, Path, URL, Quote, SQuote, Line, All}
+	want := []Category{Word, Path, URL, Quote, SQuote, Line, Host, Quoted, All}
 	got := Categories()
 	if len(got) != len(want) {
 		t.Fatalf("Categories() = %v, want %v", got, want)

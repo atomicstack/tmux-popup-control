@@ -12,6 +12,8 @@ const (
 	Quote
 	SQuote
 	Line
+	Host
+	Quoted
 	All
 )
 
@@ -19,9 +21,10 @@ const (
 const DefaultCategory = Word
 
 // order is the ctrl-f cycle order.
-var order = []Category{Word, Path, URL, Quote, SQuote, Line, All}
+var order = []Category{Word, Path, URL, Quote, SQuote, Line, Host, Quoted, All}
 
-// Categories returns the category cycle order (word→path→url→quote→s-quote→line→all).
+// Categories returns the category cycle order
+// (word→path→url→quote→s-quote→line→host→quoted→all).
 // Callers get a copy, so mutating the returned slice cannot corrupt the
 // package-level cycle order used by Next().
 func Categories() []Category { return append([]Category(nil), order...) }
@@ -40,6 +43,10 @@ func (c Category) String() string {
 		return "s-quote"
 	case Line:
 		return "line"
+	case Host:
+		return "host"
+	case Quoted:
+		return "quoted"
 	case All:
 		return "all"
 	default:

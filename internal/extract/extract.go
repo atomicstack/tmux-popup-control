@@ -1,6 +1,9 @@
 package extract
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // Token is one extracted candidate.
 type Token struct {
@@ -14,6 +17,10 @@ func Extract(text string, cat Category) []Token {
 	switch cat {
 	case Line:
 		return finalize(extractLines(text))
+	case Host:
+		return finalize(extractHosts(text))
+	case Quoted:
+		return finalize(extractQuoted(text))
 	case All:
 		return extractAll(text)
 	default:
@@ -58,6 +65,43 @@ func extractLines(text string) []Token {
 		}
 		out = append(out, Token{Text: ln, Category: Line})
 	}
+	return out
+}
+
+// extractHosts derives bare hostnames from both scheme-form (scheme://host)
+// and scp-form (user@host:path) URLs, combined in true source order so
+// finalize's reverse yields most-recent-on-screen first regardless of which
+// form each host came from.
+func extractHosts(text string) []Token {
+	src := "\n" + text
+	type hit struct {
+		pos  int
+		host string
+	}
+	var hits []hit
+	for _, m := range reHostScheme.FindAllStringSubmatchIndex(src, -1) {
+		hits = append(hits, hit{pos: m[0], host: src[m[2]:m[3]]}) // group 1
+	}
+	for _, m := range reHostSCP.FindAllStringSubmatchIndex(src, -1) {
+		hits = append(hits, hit{pos: m[0], host: src[m[4]:m[5]]}) // group 2
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].pos < hits[j].pos })
+	var out []Token
+	for _, h := range hits {
+		if len([]rune(h.host)) < defaultMinLength {
+			continue
+		}
+		out = append(out, Token{Text: h.host, Category: Host})
+	}
+	return out
+}
+
+// extractQuoted returns the inner text (quotes stripped) of both double- and
+// single-quoted spans, combined into a single category.
+func extractQuoted(text string) []Token {
+	var out []Token
+	out = append(out, runFilter(text, filterDef{re: reQuoteInner, minLen: defaultMinLength}, Quoted)...)
+	out = append(out, runFilter(text, filterDef{re: reSQuoteInner, minLen: defaultMinLength}, Quoted)...)
 	return out
 }
 

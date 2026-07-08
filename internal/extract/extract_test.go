@@ -105,3 +105,115 @@ func assertContains(t *testing.T, hay []string, needle string) {
 	}
 	t.Fatalf("expected %q in %v", needle, hay)
 }
+
+func assertNotContains(t *testing.T, hay []string, needle string) {
+	t.Helper()
+	for _, h := range hay {
+		if h == needle {
+			t.Fatalf("expected %q NOT in %v", needle, hay)
+		}
+	}
+}
+
+func TestExtractHostSchemeStripsPath(t *testing.T) {
+	got := texts(Extract("clone https://github.com/a/b now", Host))
+	want := []string{"github.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("host = %v, want %v", got, want)
+	}
+}
+
+func TestExtractHostSchemeStripsPort(t *testing.T) {
+	got := texts(Extract("open http://example.com:8080/p", Host))
+	want := []string{"example.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("host = %v, want %v", got, want)
+	}
+}
+
+func TestExtractHostSCPForm(t *testing.T) {
+	got := texts(Extract("remote git@github.com:a/b.git", Host))
+	want := []string{"github.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("host = %v, want %v", got, want)
+	}
+}
+
+func TestExtractHostGitScheme(t *testing.T) {
+	got := texts(Extract("run git://git.example.org/repo", Host))
+	want := []string{"git.example.org"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("host = %v, want %v", got, want)
+	}
+}
+
+func TestExtractHostFTPScheme(t *testing.T) {
+	got := texts(Extract("get ftp://files.example.org/", Host))
+	want := []string{"files.example.org"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("host = %v, want %v", got, want)
+	}
+}
+
+func TestExtractHostDropsShortHost(t *testing.T) {
+	// derived host "host" is 4 runes, below defaultMinLength, so it's dropped.
+	got := texts(Extract("connect ssh://user@host:22/x", Host))
+	if len(got) != 0 {
+		t.Fatalf("host = %v, want empty (dropped, <5 runes)", got)
+	}
+}
+
+func TestExtractHostProseEmpty(t *testing.T) {
+	got := texts(Extract("just some plain prose here", Host))
+	if len(got) != 0 {
+		t.Fatalf("host = %v, want empty", got)
+	}
+}
+
+func TestExtractHostDedupAcrossForms(t *testing.T) {
+	got := texts(Extract("a https://github.com/a and git@github.com:x.git", Host))
+	want := []string{"github.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("host = %v, want %v", got, want)
+	}
+}
+
+func TestExtractHostReverseOrder(t *testing.T) {
+	got := texts(Extract("see https://alpha.example.com then https://beta.example.com", Host))
+	want := []string{"beta.example.com", "alpha.example.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("host = %v, want %v", got, want)
+	}
+}
+
+func TestExtractQuotedDouble(t *testing.T) {
+	got := texts(Extract(`say "hello world" now`, Quoted))
+	want := []string{"hello world"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("quoted = %v, want %v", got, want)
+	}
+}
+
+func TestExtractQuotedSingle(t *testing.T) {
+	got := texts(Extract(`path '/etc/hosts' here`, Quoted))
+	want := []string{"/etc/hosts"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("quoted = %v, want %v", got, want)
+	}
+}
+
+func TestExtractQuotedDropsShortInner(t *testing.T) {
+	// inner "hi" is 2 runes, below defaultMinLength, so it's dropped.
+	got := texts(Extract(`a "hi" b`, Quoted))
+	if len(got) != 0 {
+		t.Fatalf("quoted = %v, want empty (dropped, <5 runes)", got)
+	}
+}
+
+func TestExtractAllExcludesHostAndQuoted(t *testing.T) {
+	got := texts(Extract(`open https://github.com/x path a/b.go "quoted value"`, All))
+	assertContains(t, got, "https://github.com/x")
+	assertContains(t, got, `"quoted value"`)
+	assertNotContains(t, got, "github.com")
+	assertNotContains(t, got, "quoted value")
+}

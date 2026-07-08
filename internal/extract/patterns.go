@@ -26,6 +26,13 @@ var (
 	// quote / s-quote: the quoted span including the surrounding quotes.
 	reQuote  = regexp.MustCompile(`("[^"\n\r]+")`)
 	reSQuote = regexp.MustCompile(`('[^'\n\r]+')`)
+	// host (scheme form): scheme://[userinfo@]host[:port]... — capture group 1 is the bare host.
+	reHostScheme = regexp.MustCompile(`(?:https?|sftp|ftp|ssh|git|file)://(?:[^@/\s]*@)?([^:/\s]+)`)
+	// host (scp form): user@host:path — capture group 2 is the host.
+	reHostSCP = regexp.MustCompile(`([a-zA-Z0-9._-]+)@([a-zA-Z0-9._-]+):`)
+	// quoted inner content (quotes stripped), for both quote styles.
+	reQuoteInner  = regexp.MustCompile(`"([^"\n\r]+)"`)
+	reSQuoteInner = regexp.MustCompile(`'([^'\n\r]+)'`)
 )
 
 func filters() map[Category]filterDef {
