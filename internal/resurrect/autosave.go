@@ -163,20 +163,15 @@ func runAutoSaveCommandLocked(cfg StatusConfig, output io.Writer) error {
 		return err
 	}
 
-	lastSuccess, err = LastAutoSaveSuccess(cfg.SaveDir)
-	if err != nil {
-		return err
+	if cfg.IconSeconds > 0 {
+		icon := resolveAutoSaveStatusIcon(cfg.Icon)
+		if err := writeAutoSaveLine(output, icon); err != nil {
+			return err
+		}
+		autosaveSleepFn(time.Duration(cfg.IconSeconds) * time.Second)
+		return writeAutoSaveLine(output, "")
 	}
-	now = autosaveNowFn()
-	iconAfterSave := currentAutoSaveIcon(lastSuccess, now, cfg.IconSeconds, cfg.Icon)
-	if iconAfterSave == "" {
-		return nil
-	}
-	if err := writeAutoSaveLine(output, iconAfterSave); err != nil {
-		return err
-	}
-	autosaveSleepFn(iconRemaining(lastSuccess, now, cfg.IconSeconds))
-	return writeAutoSaveLine(output, "")
+	return nil
 }
 
 func resolveAutoSaveStatusIcon(icon string) string {

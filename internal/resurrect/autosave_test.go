@@ -518,6 +518,55 @@ func TestRunAutoSaveCommandExitsQuietlyWhenLockBusy(t *testing.T) {
 	}
 }
 
+func TestRunAutoSaveCommandFlashesIconEvenWhenSaveExceedsIconSeconds(t *testing.T) {
+	dir := t.TempDir()
+	// last autosave well in the past so a save is due and the entry-path
+	// icon window has already elapsed.
+	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("WriteAutoSaveState: %v", err)
+	}
+
+	now := time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
+	restoreNow := withAutosaveNowFn(func() time.Time { return now })
+	defer restoreNow()
+
+	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
+	defer restoreFetchSessions()
+	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
+	defer restoreFetchWindows()
+	// simulate a slow save that outlasts IconSeconds by advancing the mock
+	// clock during the save (fetch panes runs inside Save()).
+	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) {
+		now = now.Add(8 * time.Second)
+		return makePanes("main", 0), nil
+	})
+	defer restoreFetchPanes()
+	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil })
+	defer restoreWindowOpts()
+	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
+	defer restoreClientInfo()
+	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error { return critical() })
+	defer restoreLock()
+	restoreSleep := withAutosaveSleepFn(func(d time.Duration) { now = now.Add(d) })
+	defer restoreSleep()
+
+	var out bytes.Buffer
+	err := RunAutoSaveCommand(StatusConfig{
+		SocketPath:      "/tmp/tmux.sock",
+		SaveDir:         dir,
+		IntervalMinutes: 5,
+		Max:             5,
+		IconSeconds:     3,
+	}, &out)
+	if err != nil {
+		t.Fatalf("RunAutoSaveCommand: %v", err)
+	}
+	// entry-path blank line, then the post-save icon flash, then clear.
+	if got := out.String(); got != "\n💾\n\n" {
+		t.Fatalf("expected icon to flash after a slow save, got %q", got)
+	}
+}
+
 func writeSaveFixture(t *testing.T, dir, name string, kind SaveKind, ts time.Time, withArchive bool) string {
 	t.Helper()
 
