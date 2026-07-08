@@ -40,6 +40,7 @@ type Context struct {
 	CurrentPaneLabel     string
 	PaneIncludeCurrent   bool
 	ExtractCategory      extract.Category
+	ExtractGrabArea      extract.GrabArea
 }
 
 // WindowEntry represents a tmux window reference for menu loaders.

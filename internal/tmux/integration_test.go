@@ -714,3 +714,66 @@ func TestExtractCaptureExtractInsertIntegration(t *testing.T) {
 	after := testutil.WaitForContent(t, ctx2, socket, paneID, "PASTE_MARKER_XYZ")
 	t.Logf("pane content after InsertText confirms paste landed:\n%s", after)
 }
+
+// TestWindowPaneIDsIntegration proves WindowPaneIDs returns every pane in a
+// window, ordered by pane index, against a live tmux server.
+func TestWindowPaneIDsIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+
+	// Force a fresh control-mode connection: the shared package tmux server
+	// means a prior test's cached client may be attached to a session that
+	// has since been killed during that test's cleanup.
+	Shutdown()
+
+	sessionName := "window-pane-ids-integration"
+	if err := exec.Command("tmux", "-S", socket, "new-session", "-d", "-s", sessionName).Run(); err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+	waitForSession(t, socket, sessionName)
+
+	// split twice to get 3 panes total in the same window.
+	for i := range 2 {
+		if err := exec.Command("tmux", "-S", socket, "split-window", "-t", sessionName).Run(); err != nil {
+			t.Fatalf("split-window %d: %v", i, err)
+		}
+	}
+	time.Sleep(200 * time.Millisecond)
+
+	out, err := exec.Command("tmux", "-S", socket, "list-panes", "-t", sessionName, "-F", "#{pane_index}\t#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("list-panes: %v", err)
+	}
+	wantByIndex := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) != 2 {
+			continue
+		}
+		wantByIndex[fields[0]] = fields[1]
+	}
+	if len(wantByIndex) != 3 {
+		t.Fatalf("expected 3 panes from list-panes, got %d (%v)", len(wantByIndex), wantByIndex)
+	}
+	want := []string{wantByIndex["0"], wantByIndex["1"], wantByIndex["2"]}
+	for i, id := range want {
+		if id == "" {
+			t.Fatalf("missing pane id at index %d in %v", i, wantByIndex)
+		}
+	}
+
+	anyPaneID := want[1] // request via a non-first pane to confirm window scoping works.
+	got, err := WindowPaneIDs(socket, anyPaneID)
+	if err != nil {
+		t.Fatalf("WindowPaneIDs: %v", err)
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("WindowPaneIDs(%q) = %v, want %v", anyPaneID, got, want)
+	}
+
+	Shutdown()
+}
