@@ -655,3 +655,28 @@ func TestExtractModeMenuRendersBelowListAboveInput(t *testing.T) {
 		t.Fatalf("expected mode menu ABOVE fuzzy input; header=%d prompt=%d", headerIdx, promptIdx)
 	}
 }
+
+// TestExtractModeLabelsAboveSeparatorAboveInput asserts the extract mode
+// labels sit immediately above the separator, which sits directly above the
+// fuzzy input on the last row.
+func TestExtractModeLabelsAboveSeparatorAboveInput(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	lines := strings.Split(h.View(), "\n")
+	last := len(lines) - 1
+	if !strings.Contains(lines[last], "type to search") {
+		t.Fatalf("expected fuzzy input on the last row, got %q", lines[last])
+	}
+	if !strings.Contains(lines[last-1], "─") {
+		t.Fatalf("expected separator directly above input, got %q", lines[last-1])
+	}
+	if !strings.Contains(lines[last-2], "ctrl-f") {
+		t.Fatalf("expected mode labels immediately above the separator, got %q", lines[last-2])
+	}
+}

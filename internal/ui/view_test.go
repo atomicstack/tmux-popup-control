@@ -56,7 +56,7 @@ func TestViewOverlaysCompletionAbovePrompt(t *testing.T) {
 	}
 }
 
-func TestViewOverlaysCompletionBelowPromptWhenInsufficientRoomAbove(t *testing.T) {
+func TestViewOverlaysCompletionAboveBottomPinnedPrompt(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 60, Height: 12})
 	node, ok := m.registry.Find("command")
 	if !ok {
@@ -87,9 +87,8 @@ func TestViewOverlaysCompletionBelowPromptWhenInsufficientRoomAbove(t *testing.T
 		if strings.Contains(line, "» move-window -t ") {
 			promptIdx = i
 		}
-		if strings.Contains(line, "main:0") {
+		if dropdownIdx == -1 && strings.Contains(line, "main:0") {
 			dropdownIdx = i
-			break
 		}
 	}
 	if promptIdx == -1 {
@@ -98,12 +97,12 @@ func TestViewOverlaysCompletionBelowPromptWhenInsufficientRoomAbove(t *testing.T
 	if dropdownIdx == -1 {
 		t.Fatalf("expected dropdown line in view, got:\n%s", strings.Join(lines, "\n"))
 	}
-	if dropdownIdx <= promptIdx {
-		t.Fatalf("expected dropdown below prompt when space above is insufficient, got:\n%s", strings.Join(lines, "\n"))
+	if dropdownIdx >= promptIdx {
+		t.Fatalf("expected dropdown above the bottom-pinned prompt, got:\n%s", strings.Join(lines, "\n"))
 	}
 }
 
-func TestViewShowsCommandSummaryBelowPrompt(t *testing.T) {
+func TestViewShowsCommandSummaryAbovePrompt(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 16})
 	node, ok := m.registry.Find("command")
 	if !ok {
@@ -132,8 +131,8 @@ func TestViewShowsCommandSummaryBelowPrompt(t *testing.T) {
 	if summaryIdx == -1 {
 		t.Fatalf("expected summary line in view, got:\n%s", strings.Join(lines, "\n"))
 	}
-	if summaryIdx <= promptIdx {
-		t.Fatalf("expected summary below prompt, got:\n%s", strings.Join(lines, "\n"))
+	if summaryIdx >= promptIdx {
+		t.Fatalf("expected summary above the bottom-pinned prompt, got:\n%s", strings.Join(lines, "\n"))
 	}
 }
 
@@ -355,5 +354,31 @@ func TestViewSetsFilterCursorAtPromptColumn(t *testing.T) {
 	}
 	if !v.Cursor.Blink {
 		t.Fatalf("cursor should blink")
+	}
+}
+
+// TestPromptPinnedToBottomWithSeparator asserts the fuzzy input is the last
+// line of the viewport on every screen (pinned to the bottom regardless of
+// content height), with a separator line directly above it.
+func TestPromptPinnedToBottomWithSeparator(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 80, Height: 24})
+	h := NewHarness(m)
+	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	lines := strings.Split(h.View(), "\n")
+	if len(lines) != 24 {
+		t.Fatalf("expected 24 rendered rows (full popup height), got %d", len(lines))
+	}
+	last := len(lines) - 1
+	if !strings.Contains(lines[last], "type to search") {
+		t.Fatalf("expected fuzzy input on the last row %d, got %q", last, lines[last])
+	}
+	if !strings.Contains(lines[last-1], "─") {
+		t.Fatalf("expected a separator line directly above the input, got %q", lines[last-1])
+	}
+	// The root menu is short, so there must be blank padding between the menu
+	// items and the separator (the input did not float up with the content).
+	if strings.TrimSpace(lines[last-2]) != "" {
+		t.Fatalf("expected blank padding above the separator, got %q", lines[last-2])
 	}
 }

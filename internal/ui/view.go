@@ -264,17 +264,23 @@ func (m *Model) viewVertical(header string) (string, int) {
 		lines = append(lines, styledLine{})
 		lines = append(lines, styledLine{text: "↑/↓ move  enter select  tab mark  backspace clear  esc back  ctrl+c quit", style: styles.Footer})
 	}
-	lines = limitHeight(lines, m.height-m.bottomBarRows(), m.width)
-	lines = applyWidth(lines, m.width)
-
-	// Bottom bar: error/status line + filter prompt. The prompt is the
-	// second line of the bottom bar (statusLine, prompt, [summary]), pushed
-	// down one row when the extract mode header sits above the prompt.
-	promptRow := len(lines) + 1
-	if m.extractHeaderVisible() {
-		promptRow++
+	// Pad the content so the bottom bar (separator + fuzzy input) is pinned to
+	// the very bottom of the popup on every screen, rather than floating up
+	// with short content.
+	if m.height > 0 {
+		panelH := max(m.height-m.bottomBarRows(), 1)
+		lines = limitHeight(lines, panelH, m.width)
+		lines = applyWidth(lines, m.width)
+		for len(lines) < panelH {
+			lines = append(lines, styledLine{})
+		}
+	} else {
+		lines = applyWidth(lines, m.width)
 	}
+
 	lines = append(lines, m.renderBottomBarLines()...)
+	// The fuzzy input is the last line of the bottom bar.
+	promptRow := len(lines) - 1
 	return m.overlayCompletion(renderLines(lines)), promptRow
 }
 
@@ -346,8 +352,8 @@ func (m *Model) viewSideBySide(header string) (string, int) {
 	bottomStr := renderLines(m.renderBottomBarLines())
 
 	// topSection has panelH lines; bottom bar starts immediately after.
-	// The prompt is the second line of the bottom bar (statusLine, prompt).
-	promptRow := panelH + 1
+	// The fuzzy input is the last line of the bottom bar.
+	promptRow := panelH + bottomBarRows - 1
 	return m.overlayCompletion(topSection + "\n" + bottomStr), promptRow
 }
 
@@ -409,11 +415,14 @@ func (m *Model) viewCommandOutput(header string) string {
 }
 
 func (m *Model) bottomBarRows() int {
-	rows := 2
-	if m.extractHeaderVisible() {
+	rows := 2 // separator + fuzzy input, always present
+	if m.errMsg != "" {
 		rows++
 	}
 	if m.currentCommandSummary() != "" {
+		rows++
+	}
+	if m.extractHeaderVisible() {
 		rows++
 	}
 	return rows
@@ -426,21 +435,15 @@ func (m *Model) extractHeaderVisible() bool {
 	return current != nil && current.ID == extractLevelID && current.Subtitle != ""
 }
 
+// renderBottomBarLines builds the pinned bottom region. Order, top to bottom:
+// optional error line, optional command summary, optional extract mode labels,
+// a full-width separator, and finally the fuzzy input — which is always the
+// last line of the viewport.
 func (m *Model) renderBottomBarLines() []styledLine {
-	var statusLine styledLine
+	lines := make([]styledLine, 0, 5)
 	if m.errMsg != "" {
-		statusLine = styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error}
+		lines = append(lines, styledLine{text: fmt.Sprintf("Error: %s", m.errMsg), style: styles.Error})
 	}
-
-	promptText, _ := m.filterPrompt()
-	lines := []styledLine{statusLine}
-	if m.extractHeaderVisible() {
-		// The extract category (mode) header sits directly above the fuzzy
-		// input. extractSubtitle pre-styles each segment, so render it raw to
-		// avoid nesting ANSI escapes (see buildMultiSelectLine).
-		lines = append(lines, styledLine{text: m.currentLevel().Subtitle, raw: true})
-	}
-	lines = append(lines, styledLine{text: promptText})
 	if summary := m.currentCommandSummary(); summary != "" {
 		summaryStyle := styles.FilterPlaceholder
 		if summaryStyle == nil {
@@ -453,7 +456,31 @@ func (m *Model) renderBottomBarLines() []styledLine {
 			lines = append(lines, styledLine{text: summary, style: summaryStyle})
 		}
 	}
+	if m.extractHeaderVisible() {
+		// The extract category (mode) labels sit immediately above the
+		// separator. extractSubtitle pre-styles each segment, so render it raw
+		// to avoid nesting ANSI escapes (see buildMultiSelectLine).
+		lines = append(lines, styledLine{text: m.currentLevel().Subtitle, raw: true})
+	}
+	lines = append(lines, m.bottomSeparatorLine())
+	promptText, _ := m.filterPrompt()
+	lines = append(lines, styledLine{text: promptText})
 	return applyWidth(lines, m.width)
+}
+
+// bottomSeparatorLine renders the full-width divider shown directly above the
+// fuzzy input on every screen.
+func (m *Model) bottomSeparatorLine() styledLine {
+	w := m.width
+	if w <= 0 {
+		w = 1
+	}
+	sepStyle := styles.FilterPlaceholder
+	if sepStyle == nil {
+		fallback := lipgloss.NewStyle().Faint(true)
+		sepStyle = &fallback
+	}
+	return styledLine{text: strings.Repeat("─", w), style: sepStyle}
 }
 
 // buildItemLine constructs a single styledLine for a menu item.
