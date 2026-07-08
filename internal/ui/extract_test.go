@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -909,5 +910,177 @@ func TestNonExtractTabStillToggles(t *testing.T) {
 	h.Send(tea.KeyPressMsg{Code: tea.KeyTab})
 	if n := len(h.Model().currentLevel().SelectedItems()); n != 1 {
 		t.Fatalf("tab should still mark on a non-extract multi-select level, got %d", n)
+	}
+}
+
+// TestExtractCopyAlsoCopiesToSystemClipboard verifies that a successful copy
+// writes the selected token to both the tmux paste buffer (extractCopyFn) and
+// the system clipboard (extractClipboardFn), then quits.
+func TestExtractCopyAlsoCopiesToSystemClipboard(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+
+	origCopy := extractCopyFn
+	var bufferCopied string
+	extractCopyFn = func(sock, text string) error {
+		bufferCopied = text
+		return nil
+	}
+	defer func() { extractCopyFn = origCopy }()
+
+	origClipboard := extractClipboardFn
+	var clipboardCopied string
+	extractClipboardFn = func(text string) error {
+		clipboardCopied = text
+		return nil
+	}
+	defer func() { extractClipboardFn = origClipboard }()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	current := h.Model().currentLevel()
+	idx := current.IndexOf("please")
+	if idx < 0 {
+		t.Fatalf("word items missing please")
+	}
+	current.Cursor = idx
+
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if cmd == nil {
+		t.Fatalf("expected a command from tab")
+	}
+	msg := cmd()
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		t.Fatalf("expected extractDoneMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("unexpected error: %v", done.err)
+	}
+	if bufferCopied != "please" {
+		t.Fatalf("buffer copied = %q, want please", bufferCopied)
+	}
+	if clipboardCopied != "please" {
+		t.Fatalf("clipboard copied = %q, want please", clipboardCopied)
+	}
+
+	_, cmd2 := h.Model().Update(msg)
+	if cmd2 == nil {
+		t.Fatalf("expected a quit command after successful copy")
+	}
+	qmsg := cmd2()
+	if _, ok := qmsg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", qmsg)
+	}
+}
+
+// TestExtractClipboardErrorStillQuits verifies that a system-clipboard
+// failure is swallowed: the tmux buffer is the source of truth, so the copy
+// still reports success and quits.
+func TestExtractClipboardErrorStillQuits(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+
+	origCopy := extractCopyFn
+	extractCopyFn = func(sock, text string) error { return nil }
+	defer func() { extractCopyFn = origCopy }()
+
+	origClipboard := extractClipboardFn
+	extractClipboardFn = func(text string) error { return errors.New("no clipboard tool") }
+	defer func() { extractClipboardFn = origClipboard }()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	current := h.Model().currentLevel()
+	idx := current.IndexOf("please")
+	if idx < 0 {
+		t.Fatalf("word items missing please")
+	}
+	current.Cursor = idx
+
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if cmd == nil {
+		t.Fatalf("expected a command from tab")
+	}
+	msg := cmd()
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		t.Fatalf("expected extractDoneMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("clipboard failure must not surface as an error, got %v", done.err)
+	}
+
+	_, cmd2 := h.Model().Update(msg)
+	if cmd2 == nil {
+		t.Fatalf("expected a quit command despite the clipboard failure")
+	}
+	qmsg := cmd2()
+	if _, ok := qmsg.(tea.QuitMsg); !ok {
+		t.Fatalf("expected tea.QuitMsg, got %T", qmsg)
+	}
+	if h.Model().errMsg != "" {
+		t.Fatalf("errMsg = %q, want empty (clipboard errors must not surface)", h.Model().errMsg)
+	}
+}
+
+// TestExtractBufferErrorDoesNotQuit verifies that a tmux buffer failure keeps
+// today's behaviour: no quit, m.errMsg set, and the system clipboard is never
+// attempted.
+func TestExtractBufferErrorDoesNotQuit(t *testing.T) {
+	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
+		return "please make build", nil
+	})
+	defer restore()
+
+	origCopy := extractCopyFn
+	extractCopyFn = func(sock, text string) error { return errors.New("set-buffer failed") }
+	defer func() { extractCopyFn = origCopy }()
+
+	origClipboard := extractClipboardFn
+	clipboardCalled := false
+	extractClipboardFn = func(text string) error {
+		clipboardCalled = true
+		return nil
+	}
+	defer func() { extractClipboardFn = origClipboard }()
+
+	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "test.sock"})
+	h := NewHarness(m)
+
+	current := h.Model().currentLevel()
+	idx := current.IndexOf("please")
+	if idx < 0 {
+		t.Fatalf("word items missing please")
+	}
+	current.Cursor = idx
+
+	_, cmd := h.Model().Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if cmd == nil {
+		t.Fatalf("expected a command from tab")
+	}
+	msg := cmd()
+	done, ok := msg.(extractDoneMsg)
+	if !ok {
+		t.Fatalf("expected extractDoneMsg, got %T", msg)
+	}
+	if done.err == nil {
+		t.Fatalf("expected a buffer error")
+	}
+	if clipboardCalled {
+		t.Fatalf("system clipboard must not be attempted when the tmux buffer write fails")
+	}
+
+	if _, cmd2 := h.Model().Update(msg); cmd2 != nil {
+		t.Fatalf("expected no command (no quit) after a failed copy")
+	}
+	if h.Model().errMsg == "" {
+		t.Fatalf("expected errMsg to be set after a failed copy")
 	}
 }

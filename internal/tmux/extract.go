@@ -31,8 +31,8 @@ func InsertText(socketPath, target, text string) error {
 	return err
 }
 
-// CopyText stores text in a tmux paste buffer (mvp: buffer only, no system
-// clipboard / OSC-52).
+// CopyText stores text in a tmux paste buffer only; the system clipboard is
+// handled separately by the caller (see internal/clipboard), not here.
 func CopyText(socketPath, text string) error {
 	client, err := newTmux(socketPath)
 	if err != nil {

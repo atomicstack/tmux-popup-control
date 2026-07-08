@@ -4,7 +4,9 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/atomicstack/tmux-popup-control/internal/clipboard"
 	"github.com/atomicstack/tmux-popup-control/internal/extract"
+	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
@@ -17,6 +19,10 @@ const extractLevelID = "extract"
 var (
 	extractInsertFn = tmux.InsertText
 	extractCopyFn   = tmux.CopyText
+	// extractClipboardFn copies to the host's native system clipboard. a
+	// failure here is logged but never blocks the copy (the tmux buffer is
+	// the source of truth).
+	extractClipboardFn = clipboard.Copy
 )
 
 // extractDoneMsg carries the result of an extractInsert/extractCopy action.
@@ -144,15 +150,26 @@ func (m *Model) extractInsert() tea.Cmd {
 	return func() tea.Msg { return extractDoneMsg{err: extractInsertFn(sock, target, text)} }
 }
 
-// extractCopy stores the selected token(s) in the tmux paste buffer, then
-// quits on success.
+// extractCopy stores the selected token(s) in the tmux paste buffer and the
+// system clipboard, then quits on success. The tmux buffer is the source of
+// truth: a system-clipboard failure is logged but never blocks the copy.
 func (m *Model) extractCopy() tea.Cmd {
 	text, ok := m.extractSelectedText()
 	if !ok {
 		return nil
 	}
 	sock := m.socketPath
-	return func() tea.Msg { return extractDoneMsg{err: extractCopyFn(sock, text)} }
+	return func() tea.Msg {
+		// the tmux buffer is the source of truth; a system-clipboard failure
+		// must not block the copy.
+		if err := extractCopyFn(sock, text); err != nil {
+			return extractDoneMsg{err: err}
+		}
+		if err := extractClipboardFn(text); err != nil {
+			logging.Error(err)
+		}
+		return extractDoneMsg{err: nil}
+	}
 }
 
 // handleExtractDoneMsg reports a failed insert/copy via m.errMsg (no quit) or
