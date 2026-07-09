@@ -17,6 +17,8 @@ type Styles struct {
 	Filter                *lipgloss.Style
 	FilterPrompt          *lipgloss.Style
 	FilterPlaceholder     *lipgloss.Style
+	SelectorValue         *lipgloss.Style
+	SelectorHintKey       *lipgloss.Style
 	Cursor                *lipgloss.Style
 	PreviewTitle          *lipgloss.Style
 	PreviewBody           *lipgloss.Style
@@ -78,6 +80,19 @@ var defaultStyles = Styles{
 	),
 	FilterPlaceholder: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
+	),
+	// SelectorValue styles the active value in the extract selector bar
+	// ("mode: <value>", "area: <value>") with the same accent blue (33) as
+	// the active item indicator.
+	SelectorValue: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true),
+	),
+	// SelectorHintKey styles the key names inside the angle brackets on the
+	// extract bar — the selector hotkeys ("<^f>", "<^g>") and the action hints
+	// ("insert: <Enter>", "copy: <Tab>") — a slightly lighter grey (245) than
+	// the surrounding labels/brackets (FilterPlaceholder, 241).
+	SelectorHintKey: ptr(
+		lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 	),
 	Cursor: ptr(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("33")).Blink(true),

@@ -693,7 +693,7 @@ func TestExtractModeMenuRendersBelowListAboveInput(t *testing.T) {
 
 	view := h.View()
 	tokenIdx := strings.Index(view, "please")          // an extracted token in the list
-	headerIdx := strings.Index(view, "mode:")          // the mode line (mode: <current> (^f))
+	headerIdx := strings.Index(view, "mode:")          // the mode line (mode: <current> <^f>)
 	promptIdx := strings.Index(view, "type to search") // the fuzzy input placeholder
 	if tokenIdx < 0 || headerIdx < 0 || promptIdx < 0 {
 		t.Fatalf("missing markers: token=%d header=%d prompt=%d\nview:\n%s", tokenIdx, headerIdx, promptIdx, view)
@@ -784,8 +784,8 @@ func TestExtractModeLineRendersCurrentMode(t *testing.T) {
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	view := ansi.Strip(h.View())
-	if !strings.Contains(view, "mode: word (^f)") {
-		t.Fatalf("expected mode line 'mode: word (^f)', got:\n%s", view)
+	if !strings.Contains(view, "mode: word <^f>") {
+		t.Fatalf("expected mode line 'mode: word <^f>', got:\n%s", view)
 	}
 	if strings.Contains(view, "s-quote  line  all") {
 		t.Fatalf("mode line should not list every category anymore")
@@ -1370,11 +1370,17 @@ func TestExtractCombinedBottomBarShowsModeAndArea(t *testing.T) {
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	view := ansi.Strip(h.View())
-	if !strings.Contains(view, "mode: word (^f)") {
-		t.Fatalf("expected mode segment 'mode: word (^f)', got:\n%s", view)
+	if !strings.Contains(view, "mode: word <^f>") {
+		t.Fatalf("expected mode segment 'mode: word <^f>', got:\n%s", view)
 	}
-	if !strings.Contains(view, "area: viewport (^g)") {
-		t.Fatalf("expected area segment 'area: viewport (^g)', got:\n%s", view)
+	if !strings.Contains(view, "area: viewport <^g>") {
+		t.Fatalf("expected area segment 'area: viewport <^g>', got:\n%s", view)
+	}
+	if !strings.Contains(view, "insert: <Enter>") {
+		t.Fatalf("expected insert action hint 'insert: <Enter>', got:\n%s", view)
+	}
+	if !strings.Contains(view, "copy: <Tab>") {
+		t.Fatalf("expected copy action hint 'copy: <Tab>', got:\n%s", view)
 	}
 }
 

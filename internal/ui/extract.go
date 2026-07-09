@@ -97,24 +97,34 @@ func (m *Model) handleExtractReloadMsg(msg tea.Msg) tea.Cmd {
 }
 
 // extractSubtitle renders the combined extract bottom-bar line:
-// "mode: <cat> (^f)   area: <area> (^g)". The active category/area names are
-// coloured (FilterPrompt); the "mode:"/"area:" prefixes, "(^f)"/"(^g)" hotkey
-// suffixes, and the gap between the two segments are dimmed
+// "mode: <cat> <^f>   area: <area> <^g>   insert: <Enter>   copy: <Tab>". The
+// active category/area names are coloured with the accent blue
+// (SelectorValue); the angle-bracketed key names (^f, ^g, Enter, Tab) render a
+// slightly lighter grey (SelectorHintKey) than the "mode:"/"area:"/hint labels,
+// the "<"/">" brackets, and the gaps between segments, which are all dimmed
 // (FilterPlaceholder). Pressing ctrl-f/ctrl-g opens the respective selector
-// popup. Built from the same chrome constants extractAreaAnchorCol uses, so
-// the popup's anchor column can never drift from this rendering. The
-// returned string embeds ANSI escapes from lipgloss Style.Render calls, so
-// callers placing it in a styledLine must mark that line raw (see
+// popup. Built from the same chrome constants extractAreaAnchorCol uses, so the
+// popup's anchor column can never drift from this rendering. The returned
+// string embeds ANSI escapes from lipgloss Style.Render calls, so callers
+// placing it in a styledLine must mark that line raw (see
 // viewVertical/renderBottomBarLines Subtitle handling).
 func extractSubtitle(cat extract.Category, area extract.GrabArea) string {
-	modePrefix := styles.FilterPlaceholder.Render(extractModePrefix)
-	modeValue := styles.FilterPrompt.Render(cat.String())
-	modeSuffix := styles.FilterPlaceholder.Render(extractModeHotkey)
-	gap := styles.FilterPlaceholder.Render(extractSelectorGap)
-	areaPrefix := styles.FilterPlaceholder.Render(extractAreaPrefix)
-	areaValue := styles.FilterPrompt.Render(area.String())
-	areaSuffix := styles.FilterPlaceholder.Render(extractAreaHotkey)
-	return modePrefix + modeValue + modeSuffix + gap + areaPrefix + areaValue + areaSuffix
+	dim := styles.FilterPlaceholder
+	// hotkey renders " <key>" (the ^f/^g selector hotkeys); hint renders
+	// "label<key>" (the insert/copy action hints). In both, only the key name
+	// takes the lighter SelectorHintKey grey; the brackets/labels stay dimmed.
+	hotkey := func(key string) string {
+		return dim.Render(extractHotkeyOpen) + styles.SelectorHintKey.Render(key) + dim.Render(extractAngleClose)
+	}
+	hint := func(label, key string) string {
+		return dim.Render(label+extractAngleOpen) + styles.SelectorHintKey.Render(key) + dim.Render(extractAngleClose)
+	}
+	gap := dim.Render(extractSelectorGap)
+	mode := dim.Render(extractModePrefix) + styles.SelectorValue.Render(cat.String()) + hotkey(extractModeKey)
+	areaSeg := dim.Render(extractAreaPrefix) + styles.SelectorValue.Render(area.String()) + hotkey(extractAreaKey)
+	insert := hint(extractInsertLabel, extractInsertKey)
+	copyHint := hint(extractCopyLabel, extractCopyKey)
+	return mode + gap + areaSeg + gap + insert + gap + copyHint
 }
 
 // extractSelectedText returns the text to act on for an insert/copy action:

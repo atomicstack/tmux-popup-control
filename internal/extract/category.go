@@ -20,11 +20,12 @@ const (
 // DefaultCategory is the category shown when the extract view first opens.
 const DefaultCategory = Word
 
-// order is the ctrl-f cycle order.
-var order = []Category{Word, Path, URL, Quote, SQuote, Line, Host, Quoted, All}
+// order is the ctrl-f cycle order. Quote-family modes (quote, s-quote, quoted)
+// are grouped together, url/host near the end before all.
+var order = []Category{Word, Path, Line, Quote, SQuote, Quoted, URL, Host, All}
 
 // Categories returns the category cycle order
-// (word→path→url→quote→s-quote→line→host→quoted→all).
+// (word→path→line→quote→s-quote→quoted→url→host→all).
 // Callers get a copy, so mutating the returned slice cannot corrupt the
 // package-level cycle order used by Next().
 func Categories() []Category { return append([]Category(nil), order...) }

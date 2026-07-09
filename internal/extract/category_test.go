@@ -15,7 +15,7 @@ func TestCategoryString(t *testing.T) {
 }
 
 func TestCategoryNextWraps(t *testing.T) {
-	order := []Category{Word, Path, URL, Quote, SQuote, Line, Host, Quoted, All, Word}
+	order := []Category{Word, Path, Line, Quote, SQuote, Quoted, URL, Host, All, Word}
 	got := Word
 	for i := 1; i < len(order); i++ {
 		got = got.Next()
@@ -36,7 +36,7 @@ func TestDefaultCategory(t *testing.T) {
 // header rendering), and that callers cannot mutate package state through
 // the returned slice.
 func TestCategoriesMatchesCycle(t *testing.T) {
-	want := []Category{Word, Path, URL, Quote, SQuote, Line, Host, Quoted, All}
+	want := []Category{Word, Path, Line, Quote, SQuote, Quoted, URL, Host, All}
 	got := Categories()
 	if len(got) != len(want) {
 		t.Fatalf("Categories() = %v, want %v", got, want)

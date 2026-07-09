@@ -5,18 +5,26 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/extract"
 )
 
-// extractModePrefix, extractModeHotkey, extractSelectorGap, extractAreaPrefix,
-// and extractAreaHotkey are the literal chrome segments of the combined
-// bottom-bar line ("mode: <cat> (^f)   area: <area> (^g)"). extractSubtitle
-// (internal/ui/extract.go, the line's renderer), extractModeAnchorCol, and
-// extractAreaAnchorCol all build off these same constants so the popups'
-// anchor columns can never drift from the rendered line.
+// Chrome segments of the combined bottom-bar line
+// ("mode: <cat> <^f>   area: <area> <^g>   insert: <Enter>   copy: <Tab>").
+// Each angle-bracketed key name is a separate segment from its surrounding
+// "<"/">" brackets so the key can render a slightly lighter grey
+// (SelectorHintKey) than the brackets/labels (FilterPlaceholder). The trailing
+// insert/copy hints append after the area selector and so do not affect the
+// mode/area popup anchor columns.
 const (
 	extractModePrefix  = "mode: "
-	extractModeHotkey  = " (^f)"
-	extractSelectorGap = "   "
 	extractAreaPrefix  = "area: "
-	extractAreaHotkey  = " (^g)"
+	extractHotkeyOpen  = " <" // leading gap + open bracket for the ^f/^g hotkeys
+	extractAngleOpen   = "<"  // open bracket for the insert/copy hints
+	extractAngleClose  = ">"
+	extractSelectorGap = "   "
+	extractModeKey     = "^f"
+	extractAreaKey     = "^g"
+	extractInsertLabel = "insert: "
+	extractInsertKey   = "Enter"
+	extractCopyLabel   = "copy: "
+	extractCopyKey     = "Tab"
 )
 
 // extractSelectorValue constrains the value types a selector popup can cycle
@@ -64,7 +72,9 @@ func applyExtractSelectorCursor[T extractSelectorValue](m *Model, popup *complet
 // extractAreaAnchorCol is the column at which the area popup is anchored —
 // under the current area name on the combined "mode: ... area: ..." line.
 func (m *Model) extractAreaAnchorCol() int {
-	return len(extractModePrefix) + len(m.extractCategory.String()) + len(extractModeHotkey) + len(extractSelectorGap) + len(extractAreaPrefix)
+	return len(extractModePrefix) + len(m.extractCategory.String()) +
+		len(extractHotkeyOpen) + len(extractModeKey) + len(extractAngleClose) +
+		len(extractSelectorGap) + len(extractAreaPrefix)
 }
 
 // extractAreaPopupVisible reports whether the area selector popup is open.
