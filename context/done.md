@@ -2,6 +2,11 @@
 
 Here’s what’s happened so far:
 
+- Flaky completion Enter harness test fixed (2026-07-11):
+  - added `Harness.Update` for tests that need to inspect synchronous model state without executing the returned `tea.Cmd`
+  - changed `TestCompletionEnterExecutesInsteadOfAccepting` to verify Enter returns a command while asserting the synchronously-set loading and pending state before the command result is drained
+  - added direct coverage that `Harness.Update` returns commands without executing them, removing the test's dependency on the harness's 10 ms timer-command timeout
+
 - Test-overhaul follow-up (uncommitted on `codex-test-overhaul-2026-04-12`):
   - strengthened weak assertions in `internal/cmdhelp` and `internal/tmuxopts`
   - added direct unit coverage for `internal/app`, `internal/backend`, `internal/data/dispatcher`, `internal/format/table`, `internal/shquote`, `internal/state`, `internal/ui/command`, and extra `main.go` startup paths

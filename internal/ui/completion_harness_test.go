@@ -345,7 +345,10 @@ func TestCompletionEnterExecutesInsteadOfAccepting(t *testing.T) {
 		t.Fatal("expected exact-match flag completion to be visible")
 	}
 
-	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
+	cmd := h.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected enter to return a command")
+	}
 
 	current := h.model.currentLevel()
 	if current == nil {

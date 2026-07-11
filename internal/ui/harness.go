@@ -18,14 +18,19 @@ func NewHarness(model *Model) *Harness {
 
 // Send routes a message through the model and executes any returned commands.
 func (h *Harness) Send(msg tea.Msg) {
+	h.processCmd(h.Update(msg))
+}
+
+// Update routes a message through the model without executing the returned command.
+func (h *Harness) Update(msg tea.Msg) tea.Cmd {
 	if h.model == nil {
-		return
+		return nil
 	}
 	mdl, cmd := h.model.Update(msg)
 	if updated, ok := mdl.(*Model); ok {
 		h.model = updated
 	}
-	h.processCmd(cmd)
+	return cmd
 }
 
 func (h *Harness) processCmd(cmd tea.Cmd) {
