@@ -14,6 +14,11 @@ import (
 
 const defaultAutosaveStatusIcon = "💾"
 
+// postSaveIconLinger is how long the autosave icon stays on the status line
+// after a save finishes. The icon appears when the save starts and clears one
+// second after it completes, so a brief save still shows a visible flash.
+const postSaveIconLinger = time.Second
+
 var ErrAutoSaveLocked = errors.New("autosave lock busy")
 
 type StatusConfig struct {
@@ -134,14 +139,24 @@ func runAutoSaveCommandLocked(cfg StatusConfig, output io.Writer) error {
 		return err
 	}
 
-	currentIcon := currentAutoSaveIcon(lastSuccess, now, cfg.IconSeconds, cfg.Icon)
-	if err := writeAutoSaveLine(output, currentIcon); err != nil {
-		return err
+	iconEnabled := cfg.IconSeconds > 0
+
+	// Resume path: if this process (re)started within the post-save linger
+	// window of a recent save, keep the icon up for the remainder then clear
+	// it, so a restart mid-linger doesn't drop the icon early.
+	if iconEnabled && !lastSuccess.IsZero() && now.Sub(lastSuccess) < postSaveIconLinger {
+		if err := writeAutoSaveLine(output, resolveAutoSaveStatusIcon(cfg.Icon)); err != nil {
+			return err
+		}
+		if remaining := lastSuccess.Add(postSaveIconLinger).Sub(now); remaining > 0 {
+			autosaveSleepFn(remaining)
+		}
+		return writeAutoSaveLine(output, "")
 	}
 
-	if currentIcon != "" {
-		autosaveSleepFn(iconRemaining(lastSuccess, now, cfg.IconSeconds))
-		return writeAutoSaveLine(output, "")
+	// Clear any stale icon a previous invocation may have left on the line.
+	if err := writeAutoSaveLine(output, ""); err != nil {
+		return err
 	}
 
 	sleepFor := timeUntilNextAutoSave(lastSuccess, now, cfg.IntervalMinutes)
@@ -154,6 +169,13 @@ func runAutoSaveCommandLocked(cfg StatusConfig, output io.Writer) error {
 		autosaveSleepFn(sleepFor)
 	}
 
+	// Show the icon as soon as the save starts so it covers the whole save.
+	if iconEnabled {
+		if err := writeAutoSaveLine(output, resolveAutoSaveStatusIcon(cfg.Icon)); err != nil {
+			return err
+		}
+	}
+
 	if err := RunAutoSave(Config{
 		SocketPath:          cfg.SocketPath,
 		SaveDir:             cfg.SaveDir,
@@ -163,12 +185,9 @@ func runAutoSaveCommandLocked(cfg StatusConfig, output io.Writer) error {
 		return err
 	}
 
-	if cfg.IconSeconds > 0 {
-		icon := resolveAutoSaveStatusIcon(cfg.Icon)
-		if err := writeAutoSaveLine(output, icon); err != nil {
-			return err
-		}
-		autosaveSleepFn(time.Duration(cfg.IconSeconds) * time.Second)
+	// Keep it up for a brief linger after the save finishes, then clear.
+	if iconEnabled {
+		autosaveSleepFn(postSaveIconLinger)
 		return writeAutoSaveLine(output, "")
 	}
 	return nil
@@ -243,32 +262,11 @@ func autoSaveDue(lastSuccess, now time.Time, intervalMinutes int) bool {
 	return !now.Before(lastSuccess.Add(time.Duration(intervalMinutes) * time.Minute))
 }
 
-func currentAutoSaveIcon(lastSuccess, now time.Time, iconSeconds int, icon string) string {
-	if iconSeconds <= 0 || lastSuccess.IsZero() {
-		return ""
-	}
-	if now.Sub(lastSuccess) <= time.Duration(iconSeconds)*time.Second {
-		return resolveAutoSaveStatusIcon(icon)
-	}
-	return ""
-}
-
 func timeUntilNextAutoSave(lastSuccess, now time.Time, intervalMinutes int) time.Duration {
 	if autoSaveDue(lastSuccess, now, intervalMinutes) {
 		return 0
 	}
 	return lastSuccess.Add(time.Duration(intervalMinutes) * time.Minute).Sub(now)
-}
-
-func iconRemaining(lastSuccess, now time.Time, iconSeconds int) time.Duration {
-	if iconSeconds <= 0 || lastSuccess.IsZero() {
-		return 0
-	}
-	remaining := lastSuccess.Add(time.Duration(iconSeconds) * time.Second).Sub(now)
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
 }
 
 func writeAutoSaveLine(output io.Writer, line string) error {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -337,8 +338,9 @@ func TestRunAutoSaveCommandSleepsUntilDueThenPrintsIconAndClears(t *testing.T) {
 	if got := out.String(); got != "\nX \n\n" {
 		t.Fatalf("expected autosave output sequence %q, got %q", "\nX \n\n", got)
 	}
-	if len(sleeps) != 2 || sleeps[0] != 1*time.Minute || sleeps[1] != 10*time.Second {
-		t.Fatalf("expected sleep sequence [1m,10s], got %#v", sleeps)
+	// schedule sleep until due, then the fixed 1s post-save icon linger.
+	if len(sleeps) != 2 || sleeps[0] != 1*time.Minute || sleeps[1] != time.Second {
+		t.Fatalf("expected sleep sequence [1m,1s], got %#v", sleeps)
 	}
 }
 
@@ -407,7 +409,9 @@ func TestRunAutoSaveCommandFallsBackToDefaultIcon(t *testing.T) {
 	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)); err != nil {
 		t.Fatalf("WriteAutoSaveState: %v", err)
 	}
-	now := time.Date(2026, 4, 5, 16, 7, 9, 0, time.UTC)
+	// 0.5s after the last save — inside the post-save linger window, so the
+	// command resumes showing the leftover icon for the remaining 0.5s.
+	now := time.Date(2026, 4, 5, 16, 7, 8, int(500*time.Millisecond), time.UTC)
 	restoreNow := withAutosaveNowFn(func() time.Time { return now })
 	defer restoreNow()
 	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
@@ -434,8 +438,8 @@ func TestRunAutoSaveCommandFallsBackToDefaultIcon(t *testing.T) {
 	if got := out.String(); got != "💾\n\n" {
 		t.Fatalf("expected default autosave icon output, got %q", got)
 	}
-	if len(sleeps) != 1 || sleeps[0] != 9*time.Second {
-		t.Fatalf("expected single icon-clear sleep of 9s, got %#v", sleeps)
+	if len(sleeps) != 1 || sleeps[0] != 500*time.Millisecond {
+		t.Fatalf("expected single icon-clear sleep of 0.5s, got %#v", sleeps)
 	}
 }
 
@@ -518,10 +522,10 @@ func TestRunAutoSaveCommandExitsQuietlyWhenLockBusy(t *testing.T) {
 	}
 }
 
-func TestRunAutoSaveCommandFlashesIconEvenWhenSaveExceedsIconSeconds(t *testing.T) {
+func TestRunAutoSaveCommandKeepsIconUpAcrossSlowSave(t *testing.T) {
 	dir := t.TempDir()
-	// last autosave well in the past so a save is due and the entry-path
-	// icon window has already elapsed.
+	// last autosave well in the past so a save is due and the resume-path
+	// linger window has already elapsed.
 	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatalf("WriteAutoSaveState: %v", err)
 	}
@@ -534,8 +538,9 @@ func TestRunAutoSaveCommandFlashesIconEvenWhenSaveExceedsIconSeconds(t *testing.
 	defer restoreFetchSessions()
 	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
 	defer restoreFetchWindows()
-	// simulate a slow save that outlasts IconSeconds by advancing the mock
-	// clock during the save (fetch panes runs inside Save()).
+	// simulate a slow (8s) save by advancing the mock clock during the save
+	// (fetch panes runs inside Save()). The icon is shown before the save and
+	// stays up for the whole duration plus the linger.
 	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) {
 		now = now.Add(8 * time.Second)
 		return makePanes("main", 0), nil
@@ -561,9 +566,74 @@ func TestRunAutoSaveCommandFlashesIconEvenWhenSaveExceedsIconSeconds(t *testing.
 	if err != nil {
 		t.Fatalf("RunAutoSaveCommand: %v", err)
 	}
-	// entry-path blank line, then the post-save icon flash, then clear.
+	// resume-path blank line, then the icon shown across the save, then clear.
 	if got := out.String(); got != "\n💾\n\n" {
-		t.Fatalf("expected icon to flash after a slow save, got %q", got)
+		t.Fatalf("expected icon to stay up across a slow save, got %q", got)
+	}
+}
+
+func TestRunAutoSaveCommandShowsIconWhileSaving(t *testing.T) {
+	dir := t.TempDir()
+	// last autosave well in the past so a save is due and the resume window
+	// (a fresh restart mid-linger) has long elapsed.
+	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("WriteAutoSaveState: %v", err)
+	}
+
+	now := time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
+	restoreNow := withAutosaveNowFn(func() time.Time { return now })
+	defer restoreNow()
+
+	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
+	defer restoreFetchSessions()
+	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
+	defer restoreFetchWindows()
+	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil })
+	defer restoreWindowOpts()
+	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
+	defer restoreClientInfo()
+	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error { return critical() })
+	defer restoreLock()
+	var sleeps []time.Duration
+	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
+		sleeps = append(sleeps, d)
+		now = now.Add(d)
+	})
+	defer restoreSleep()
+
+	var out bytes.Buffer
+	// Save() fetches panes mid-save; by the time it runs, the icon must
+	// already be on the status line (it appears when the save *starts*, not
+	// only after it finishes).
+	var iconVisibleDuringSave bool
+	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) {
+		iconVisibleDuringSave = strings.Contains(out.String(), "💾")
+		return makePanes("main", 0), nil
+	})
+	defer restoreFetchPanes()
+
+	err := RunAutoSaveCommand(StatusConfig{
+		SocketPath:      "/tmp/tmux.sock",
+		SaveDir:         dir,
+		IntervalMinutes: 5,
+		Max:             5,
+		IconSeconds:     3,
+	}, &out)
+	if err != nil {
+		t.Fatalf("RunAutoSaveCommand: %v", err)
+	}
+
+	if !iconVisibleDuringSave {
+		t.Fatal("expected the autosave icon to be visible while the save runs, not only after it completes")
+	}
+	// entry-path clear, icon shown for the save, then cleared one second later.
+	if got := out.String(); got != "\n💾\n\n" {
+		t.Fatalf("expected icon sequence %q, got %q", "\n💾\n\n", got)
+	}
+	// only the fixed 1s post-save linger sleep (a save is already due, so no
+	// scheduling sleep precedes it).
+	if len(sleeps) != 1 || sleeps[0] != time.Second {
+		t.Fatalf("expected single 1s linger sleep, got %#v", sleeps)
 	}
 }
 

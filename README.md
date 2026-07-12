@@ -197,8 +197,8 @@ make release VERSION=0.7.0 # release a specific version tag
 | | `TMUX_POPUP_CONTROL_RESURRECT_FROM` | | snapshot name to restore from in CLI subcommand |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES` | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes; `0` or unset disables autosave |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` | `@tmux-popup-control-autosave-max` | maximum number of retained autosaves; manual saves are never pruned |
-| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | status-right icon to show briefly after a successful autosave |
-| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS` | `@tmux-popup-control-autosave-icon-seconds` | number of seconds to show the autosave icon; `0` or unset hides it |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | status-right icon shown while a save is in progress |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS` | `@tmux-popup-control-autosave-icon-seconds` | any value `> 0` enables the autosave icon; `0` or unset hides it. the icon appears when the save starts and clears one second after it finishes |
 
 ### Keybindings
 
@@ -250,7 +250,7 @@ A reusable `.tmux.conf` setup looks like this:
 set -g @tmux-popup-control-autosave-interval-minutes 5
 set -g @tmux-popup-control-autosave-max 5
 set -g @tmux-popup-control-autosave-icon "💾"
-set -g @tmux-popup-control-autosave-icon-seconds 5
+set -g @tmux-popup-control-autosave-icon-seconds 1  # any value > 0 enables the icon
 set -g @status-right-autosave "#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')"
 set -ag status-right "#{E:@status-right-autosave}"
 ```
