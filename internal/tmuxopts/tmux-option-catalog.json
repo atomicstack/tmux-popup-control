@@ -20,7 +20,8 @@
       "tty-term.c",
       "format.c",
       "cmd-*.c"
-    ]
+    ],
+    "tmux_git_commit": "8ac3fcedcaa61bc70a47aebdc50d503034ff54e5"
   },
   "manpage_differences": {
     "manpage_only_options": [],
@@ -231,6 +232,7 @@
       "pane-scrollbars",
       "pane-scrollbars-position",
       "pane-scrollbars-style",
+      "pane-scrollbars-timeout",
       "pane-set-clipboard",
       "pane-status-current-style",
       "pane-status-style",
@@ -3251,7 +3253,7 @@
       "colour_option": false,
       "default_source": {
         "kind": "expression",
-        "value": "0"
+        "value": "TMUX_MOUSE"
       },
       "description": "Whether the mouse is recognised and mouse key bindings are executed. Applications inside panes can use the mouse even when 'off'.",
       "documented_scope": "session",
@@ -5774,7 +5776,7 @@
       "colour_option": false,
       "default_source": {
         "kind": "string",
-        "value": "#{?pane_active,#[reverse],}#{pane_index}#[default] \"#{pane_title}\"#{?#{mouse},#[align=right]#[range=control|8][#{?#{window_zoomed_flag},u,z}]#[norange]#[range=control|9][x]#[norange],}"
+        "value": "#{?pane_active,#[reverse],}#{pane_index}#[default] \"#{pane_title}\"#{?#{mouse},#[align=right]#[range=control|7][#{?#{pane_floating_flag},t,f}]#[norange]#[range=control|8][#{?#{window_zoomed_flag},u,z}]#[norange]#[range=control|9][x]#[norange],}"
       },
       "description": "Format of text in the pane status lines.",
       "documented_scope": "window",
@@ -6031,14 +6033,15 @@
       "choices": [
         "off",
         "modal",
-        "on"
+        "on",
+        "auto-hide"
       ],
       "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "PANE_SCROLLBARS_OFF"
       },
-      "description": "Pane scrollbar state.",
+      "description": "Pane scrollbar state: off, on, modal, or auto-hide.",
       "documented_scope": "window",
       "kind": "option",
       "name": "pane-scrollbars",
@@ -6060,12 +6063,50 @@
           "values": [
             "off",
             "modal",
-            "on"
+            "on",
+            "auto-hide"
           ]
         },
         "set_time_validation": "strict_enum",
         "static_checkability": "static-exact",
         "toggle_without_value": true
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": false,
+      "default_source": {
+        "kind": "expression",
+        "value": "500"
+      },
+      "description": "Time before modal and auto-hide pane scrollbars disappear.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "pane-scrollbars-timeout",
+      "numeric_constraints": {
+        "maximum": "INT_MAX",
+        "minimum": "0",
+        "unit": "milliseconds"
+      },
+      "scope": {
+        "default_inferred_scope": "window",
+        "scopes": [
+          "window"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Time before modal and auto-hide pane scrollbars disappear.",
+      "syntax_name": "pane-scrollbars-timeout",
+      "type": "number",
+      "value": {
+        "domain": "integer",
+        "menu": {
+          "kind": "integer"
+        },
+        "set_time_validation": "strict_numeric_range",
+        "static_checkability": "static-range"
       }
     },
     {
@@ -10619,6 +10660,10 @@
           "value_type": "string"
         },
         {
+          "name": "pane_start_command_list",
+          "value_type": "string"
+        },
+        {
           "name": "pane_start_path",
           "value_type": "string"
         },
@@ -10904,6 +10949,14 @@
         },
         {
           "name": "window_linked_sessions_list",
+          "value_type": "string"
+        },
+        {
+          "name": "window_manual_height",
+          "value_type": "string"
+        },
+        {
+          "name": "window_manual_width",
           "value_type": "string"
         },
         {
