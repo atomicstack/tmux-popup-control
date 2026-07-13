@@ -1,7 +1,7 @@
 # tmux-popup-control
 
-Current version: **v0.14.0** — see the [release
-notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.14.0)
+Current version: **v0.14.1** — see the [release
+notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.14.1)
 for the latest changes.
 
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
