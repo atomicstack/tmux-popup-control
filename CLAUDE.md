@@ -37,6 +37,7 @@ make fmt             # gofmt -w .
 make tidy            # go mod tidy
 make clean-cache     # removes .gocache/ and .gomodcache/
 make update-gotmuxcc # fetches latest gotmuxcc + re-vendors (online)
+make update-deps     # updates all deps to latest (go get -u) + re-vendors (online)
 make release         # cross-compiles + creates GitHub release via gh
 ```
 
