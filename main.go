@@ -203,6 +203,13 @@ func runInstallAndInitPlugins(cfg config.Config) error {
 		return fmt.Errorf("sourcing plugins: %w", err)
 	}
 
+	// Source tmux-popup-control's own main.tmux (its keybindings) even when the
+	// user hasn't declared it with @plugin, so no self-declaration is required.
+	// No-op if a declared plugin already covers the binary's directory.
+	if err := plugin.SourceSelf(plugins); err != nil {
+		return fmt.Errorf("sourcing tmux-popup-control keybindings: %w", err)
+	}
+
 	// If any plugins need installing, schedule a deferred popup so the user
 	// sees the interactive install UI once tmux finishes starting.
 	for _, p := range plugins {
