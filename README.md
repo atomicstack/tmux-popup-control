@@ -11,8 +11,31 @@ Gloss](https://github.com/charmbracelet/lipgloss) (v2), using a persistent
 control-mode connection via
 [gotmuxcc](https://github.com/atomicstack/gotmuxcc). Inspired by
 [tmux-fzf](https://github.com/sainnhe/tmux-fzf),
-[tpm](https://github.com/tmux-plugins/tpm), and
-[tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect).
+[tpm](https://github.com/tmux-plugins/tpm),
+[tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect), and
+[extrakto](https://github.com/laktak/extrakto).
+
+## Usage
+
+Once the plugin is installed (see [Building and running](#building-and-running))
+and tmux is reloaded, open the main popup menu with **`prefix` + `Space`**
+(`prefix` is your tmux prefix — `Ctrl-b` by default). Navigate with the arrow
+keys, type to fuzzy-filter the current list, press `Enter` to select, and
+`Escape` to step back a level or close the popup.
+
+A handful of keys skip the main menu and jump straight to a specific tool:
+
+| Binding | Opens |
+|---|---|
+| `prefix` + `Space` | main popup menu |
+| `prefix` + `:` | command menu (tmux option / command browser) |
+| `prefix` + `s` | session tree |
+| `prefix` + `Tab` | extract mode (extrakto-style token grabber) |
+| `prefix` + `Ctrl-s` | save sessions (resurrect) |
+| `prefix` + `Ctrl-r` | restore sessions from a snapshot (resurrect) |
+
+Every binding is configurable — see [Keybindings](#keybindings) for the complete
+list plus the env vars and tmux options that override each default.
 
 ## Features
 
@@ -207,7 +230,7 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 
 | Env var | Tmux option | Default | Action |
 |---|---|---|---|
-| `TMUX_POPUP_CONTROL_LAUNCH_KEY` | `@tmux-popup-control-launch-key` | `F` | open the main popup menu |
+| `TMUX_POPUP_CONTROL_LAUNCH_KEY` | `@tmux-popup-control-launch-key` | `Space` | open the main popup menu |
 | `TMUX_POPUP_CONTROL_KEY_COMMAND_MENU` | `@tmux-popup-control-key-command-menu` | `:` | open the command browser |
 | `TMUX_POPUP_CONTROL_KEY_SESSION_TREE` | `@tmux-popup-control-key-session-tree` | `s` | open the session tree |
 | `TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER` | `@tmux-popup-control-key-pane-switcher` | `f` | open the pane switcher |
