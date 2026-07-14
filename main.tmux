@@ -35,7 +35,7 @@ done < <(tmux show-options -g 2>/dev/null | grep '^@tmux-popup-control-' | sed '
 opt() { echo "${TMUX_OPTS["tmux-popup-control-$1"]}"; }
 
 [[ -z "$TMUX_POPUP_CONTROL_LAUNCH_KEY" ]] && TMUX_POPUP_CONTROL_LAUNCH_KEY="$(opt launch-key)"
-[[ -z "$TMUX_POPUP_CONTROL_LAUNCH_KEY" ]] && TMUX_POPUP_CONTROL_LAUNCH_KEY="F"
+[[ -z "$TMUX_POPUP_CONTROL_LAUNCH_KEY" ]] && TMUX_POPUP_CONTROL_LAUNCH_KEY="Space"
 
 [[ -z "$TMUX_POPUP_CONTROL_KEY_COMMAND_MENU" ]] && TMUX_POPUP_CONTROL_KEY_COMMAND_MENU="$(opt key-command-menu)"
 [[ -z "$TMUX_POPUP_CONTROL_KEY_COMMAND_MENU" ]] && TMUX_POPUP_CONTROL_KEY_COMMAND_MENU=":"
