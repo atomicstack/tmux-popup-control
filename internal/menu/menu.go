@@ -111,8 +111,9 @@ type SessionRequest struct {
 func RootItems() []Item {
 	return []Item{
 		{ID: "extract", Label: "extract"},
-		{ID: "process", Label: "process"},
-		{ID: "clipboard", Label: "clipboard"},
+		// "process" and "clipboard" are temporarily hidden from the root menu
+		// while their submenus remain unimplemented. Their loaders stay wired
+		// in CategoryLoaders so re-enabling is just restoring these entries.
 		{ID: "customize-mode", Label: "customize-mode"},
 		{ID: "keybinding", Label: "keybinding"},
 		{ID: "command", Label: "command"},

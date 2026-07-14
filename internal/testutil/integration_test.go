@@ -21,7 +21,7 @@ func TestRootMenuRendering(t *testing.T) {
 	pane, _ := LaunchBinary(t, bin, socket, session, "")
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	output := WaitForContent(t, ctx, socket, pane, "process")
+	output := WaitForContent(t, ctx, socket, pane, "session")
 	assertGolden(t, filepath.Join("capture", "root_menu.txt"), output)
 }
 
