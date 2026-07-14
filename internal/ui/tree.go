@@ -59,7 +59,11 @@ func buildTree(
 		sid := menu.TreeSessionID(sess.Name)
 		indicator := treeExpandIndicator(state, sid)
 		wc := windowCounts[sess.Name]
-		label := fmt.Sprintf("%s%s (%d windows)", indicator, sess.Name, wc)
+		sessionSuffix := ""
+		if sess.Current {
+			sessionSuffix = " (current)"
+		}
+		label := fmt.Sprintf("%s%s (%d windows)%s", indicator, sess.Name, wc, sessionSuffix)
 
 		sessionNode := tree.Root(label)
 

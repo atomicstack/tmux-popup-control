@@ -704,6 +704,37 @@ func TestTreeMarksCurrentWindow(t *testing.T) {
 	}
 }
 
+func TestTreeMarksCurrentSession(t *testing.T) {
+	sessions := []menu.SessionEntry{
+		{Name: "alpha", Windows: 1},
+		{Name: "beta", Windows: 1, Current: true},
+	}
+	windows := []menu.WindowEntry{
+		{ID: "0", Label: "0:bash", Session: "alpha", Index: 0},
+		{ID: "0", Label: "0:zsh", Session: "beta", Index: 0},
+	}
+	panes := []menu.PaneEntry{
+		{ID: "%0", Label: "%0", Session: "alpha", WindowIdx: 0, Index: 0},
+		{ID: "%1", Label: "%1", Session: "beta", WindowIdx: 0, Index: 0},
+	}
+
+	m := testTreeModelWithSize(sessions, windows, panes, true, 160, 24)
+	view := m.View().Content
+
+	if !strings.Contains(view, "(current)") {
+		t.Fatalf("expected '(current)' marker on active session, got:\n%s", view)
+	}
+	if strings.Count(view, "(current)") != 1 {
+		t.Fatalf("expected exactly one '(current)' marker, got:\n%s", view)
+	}
+	// Ensure marker sits on the beta session, not alpha.
+	betaIdx := strings.Index(view, "beta")
+	currentIdx := strings.Index(view, "(current)")
+	if betaIdx < 0 || currentIdx < 0 || currentIdx < betaIdx {
+		t.Fatalf("expected '(current)' to follow the beta session label, got:\n%s", view)
+	}
+}
+
 func TestBuildTreeDFSOrder(t *testing.T) {
 	sessions := []menu.SessionEntry{
 		{Name: "a", Windows: 1},
