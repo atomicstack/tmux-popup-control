@@ -15,10 +15,36 @@ control-mode connection via
 [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect), and
 [extrakto](https://github.com/laktak/extrakto).
 
+## Quick start
+
+Install into `~/.tmux/plugins/tmux-popup-control` with **one** of these:
+
+```sh
+# A) prebuilt release — no Go needed. Grab the tarball for your OS/arch from
+#    https://github.com/atomicstack/tmux-popup-control/releases
+mkdir -p ~/.tmux/plugins/tmux-popup-control
+tar -xzf tmux-popup-control-<os>-<arch>.tar.gz -C ~/.tmux/plugins/tmux-popup-control
+
+# B) build from source — requires Go
+git clone https://github.com/atomicstack/tmux-popup-control \
+  ~/.tmux/plugins/tmux-popup-control
+cd ~/.tmux/plugins/tmux-popup-control && go mod vendor && make build
+```
+
+Then add the init line as the **last line** of `~/.tmux.conf`:
+
+```tmux
+run-shell "~/.tmux/plugins/tmux-popup-control/tmux-popup-control install-and-init-plugins"
+```
+
+Restart tmux (or run `tmux source-file ~/.tmux.conf`) and press
+**`prefix` + `Space`** to open the menu. See [Installation](#installation) for
+the full details and [Usage](#usage) for the rest of the keybindings.
+
 ## Usage
 
-Once the plugin is installed (see [Building and running](#building-and-running))
-and tmux is reloaded, open the main popup menu with **`prefix` + `Space`**
+Once the plugin is installed (see [Installation](#installation)) and tmux is
+reloaded, open the main popup menu with **`prefix` + `Space`**
 (`prefix` is your tmux prefix — `Ctrl-b` by default). Navigate with the arrow
 keys, type to fuzzy-filter the current list, press `Enter` to select, and
 `Escape` to step back a level or close the popup.
@@ -28,7 +54,7 @@ A handful of keys skip the main menu and jump straight to a specific tool:
 | Binding | Opens |
 |---|---|
 | `prefix` + `Space` | main popup menu |
-| `prefix` + `:` | command menu (tmux option / command browser) |
+| `prefix` + `:` | command menu (browse and run any tmux command, with argument completion) |
 | `prefix` + `s` | session tree |
 | `prefix` + `Tab` | extract mode (extrakto-style token grabber) |
 | `prefix` + `Ctrl-s` | save sessions (resurrect) |
@@ -170,13 +196,69 @@ list plus the env vars and tmux options that override each default.
 - Go 1.24+
 - `tmux` 3.2+ available in `$PATH`
 
+## Installation
+
+tmux-popup-control installs like a tpm plugin, and can also **replace** tpm as
+your plugin manager. Put it in `~/.tmux/plugins/tmux-popup-control` using either
+a prebuilt release or a source build, then wire it into `~/.tmux.conf`.
+
+### Option A — prebuilt release (no Go required)
+
+Download the tarball for your platform from the
+[releases page](https://github.com/atomicstack/tmux-popup-control/releases)
+(`tmux-popup-control-<os>-<arch>.tar.gz`, for `darwin`/`linux` ×
+`amd64`/`arm64`) and extract it into the plugin directory. Each tarball ships
+the `tmux-popup-control` binary alongside `main.sh` and `main.tmux`:
+
+```sh
+mkdir -p ~/.tmux/plugins/tmux-popup-control
+tar -xzf tmux-popup-control-<os>-<arch>.tar.gz \
+  -C ~/.tmux/plugins/tmux-popup-control
+```
+
+### Option B — build from source (requires Go — see [Prerequisites](#prerequisites))
+
+Clone into the plugin directory, then vendor dependencies and build. The
+repository does not commit `vendor/`, and `make build` runs offline, so you
+must vendor once first:
+
+```sh
+git clone https://github.com/atomicstack/tmux-popup-control \
+  ~/.tmux/plugins/tmux-popup-control
+cd ~/.tmux/plugins/tmux-popup-control
+go mod vendor   # fetch dependencies (online)
+make build      # compile ./tmux-popup-control (offline)
+```
+
+### Wire it into tmux.conf
+
+With either option in place, add the init line as the **last line** of
+`~/.tmux.conf`:
+
+```tmux
+# ...your `set -g @plugin '...'` declarations go here (if any)...
+
+# Must be the LAST line. Binds tmux-popup-control's own keys, sources every
+# installed plugin, and installs any that are missing on startup:
+run-shell "~/.tmux/plugins/tmux-popup-control/tmux-popup-control install-and-init-plugins"
+```
+
+You do **not** need to declare tmux-popup-control itself as a `@plugin` — the
+init line sources its own `main.tmux` (keybindings) automatically.
+
+Reload tmux (`tmux source-file ~/.tmux.conf`) or restart it, then open the menu
+with `prefix + Space` (see [Usage](#usage)).
+
 ## Building and running
 
 The repository keeps Go build artifacts inside the workspace (`.gocache/`,
-`.gomodcache/`) so it works cleanly in sandboxed environments. Use the Makefile:
+`.gomodcache/`) so it works cleanly in sandboxed environments. `vendor/` is not
+committed and `make build` runs offline (`GOPROXY=off`), so after a fresh clone
+run `go mod vendor` once (online) before your first `make build`. Use the
+Makefile:
 
 ```sh
-make build           # builds ./tmux-popup-control
+make build           # builds ./tmux-popup-control (offline; needs vendor/)
 make run             # runs the application
 make test            # runs all tests
 make cover           # runs tests with coverage report
@@ -184,6 +266,7 @@ make fmt             # gofmt -w .
 make tidy            # go mod tidy
 make clean-cache     # removes .gocache/ and .gomodcache/
 make update-gotmuxcc # fetches latest gotmuxcc + re-vendors (online)
+make update-deps     # updates all deps to latest + re-vendors (online)
 make release         # cross-compiles + creates GitHub release via gh
 make release VERSION=0.7.0 # release a specific version tag
 ```
@@ -299,11 +382,13 @@ Replace the tpm `run` line in `~/.tmux.conf`:
 run '~/.tmux/plugins/tpm/tpm'
 
 # after
-run '/path/to/tmux-popup-control install-and-init-plugins'
+run-shell "~/.tmux/plugins/tmux-popup-control/tmux-popup-control install-and-init-plugins"
 ```
 
 Keep all `set -g @plugin '...'` declarations unchanged — tmux-popup-control
-reads the same format.
+reads the same format. You don't need to add a declaration for
+tmux-popup-control itself; its keybindings are sourced automatically by the
+init line.
 
 ## Architecture
 
