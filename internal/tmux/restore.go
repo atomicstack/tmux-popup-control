@@ -255,6 +255,11 @@ func DefaultCommand(socketPath string) string {
 	if cmd := ShowOption(socketPath, "default-command"); cmd != "" {
 		return cmd
 	}
+	// tmux itself falls back from default-command to default-shell, so a
+	// configured shell must win over the process environment's $SHELL.
+	if sh := ShowOption(socketPath, "default-shell"); sh != "" {
+		return sh
+	}
 	if sh := os.Getenv("SHELL"); sh != "" {
 		return sh
 	}

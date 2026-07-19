@@ -387,6 +387,27 @@ func TestDefaultCommandFromTmux(t *testing.T) {
 	}
 }
 
+func TestDefaultCommandFallsBackToDefaultShell(t *testing.T) {
+	withStubCommander(t, func(name string, args ...string) commander {
+		joined := strings.Join(args, " ")
+		if strings.Contains(joined, "default-command") {
+			return stubCommander{output: nil}
+		}
+		if strings.Contains(joined, "default-shell") {
+			return stubCommander{output: []byte("/usr/bin/zsh\n")}
+		}
+		return stubCommander{output: nil}
+	})
+
+	// default-shell (a tmux option the user configured) must win over the
+	// process environment's $SHELL, mirroring tmux's own resolution order.
+	t.Setenv("SHELL", "/bin/bash")
+	got := DefaultCommand("")
+	if got != "/usr/bin/zsh" {
+		t.Errorf("expected /usr/bin/zsh, got %q", got)
+	}
+}
+
 func TestDefaultCommandFallsBackToShell(t *testing.T) {
 	withStubCommander(t, func(string, ...string) commander {
 		return stubCommander{output: nil}
