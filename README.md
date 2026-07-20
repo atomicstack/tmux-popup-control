@@ -21,7 +21,7 @@ A tour of the root menu and every submenu (`prefix + Space`) — see
 [DEMOS.md](DEMOS.md) for recordings of all the flows: command completion,
 session tree, pane switcher, save/resurrect, and extract.
 
-<img src="https://raw.githubusercontent.com/atomicstack/tmux-popup-control/demo-svg/overview.svg?v=47bcdac" width="100%" alt="root menu overview — animated demo">
+<img src="https://raw.githubusercontent.com/atomicstack/tmux-popup-control/demo-svg/overview.gif?v=6301471" width="100%" alt="root menu overview — animated demo">
 
 ## Quick start
 
