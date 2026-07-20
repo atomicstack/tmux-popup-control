@@ -15,6 +15,14 @@ control-mode connection via
 [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect), and
 [extrakto](https://github.com/laktak/extrakto).
 
+## Demo
+
+A tour of the root menu and every submenu (`prefix + Space`) — see
+[DEMOS.md](DEMOS.md) for recordings of all the flows: command completion,
+session tree, pane switcher, save/resurrect, and extract.
+
+<img src="https://raw.githubusercontent.com/atomicstack/tmux-popup-control/demo-svg/overview.svg?v=47bcdac" width="100%" alt="root menu overview — animated demo">
+
 ## Quick start
 
 Install into `~/.tmux/plugins/tmux-popup-control` with **one** of these:
