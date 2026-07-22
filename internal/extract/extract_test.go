@@ -14,9 +14,9 @@ func texts(toks []Token) []string {
 }
 
 func TestExtractWord(t *testing.T) {
-	// reverse order: last-on-screen first; min length 5 drops "make" and "cd".
+	// screen order: top-of-screen first; min length 5 drops "make" and "cd".
 	got := texts(Extract("please make build\ncd internal", Word))
-	want := []string{"internal", "build", "please"}
+	want := []string{"please", "build", "internal"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("word = %v, want %v", got, want)
 	}
@@ -39,7 +39,7 @@ func TestExtractWordStripsEdgeSpaces(t *testing.T) {
 	// non-breaking spaces (common in styled shell prompts) must not survive
 	// at word edges.
 	got := texts(Extract("\u00a0hello\u00a0 there", Word))
-	want := []string{"there", "hello"}
+	want := []string{"hello", "there"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("word = %v, want %v", got, want)
 	}
@@ -81,6 +81,16 @@ func TestExtractDedup(t *testing.T) {
 	}
 }
 
+func TestExtractDedupKeepsBottomMostOccurrence(t *testing.T) {
+	// a duplicate sits at the position of its bottom-most (most recent)
+	// occurrence, so it stays close to the bottom of the token list.
+	got := texts(Extract("alpha\nbravo\nalpha", Word))
+	want := []string{"bravo", "alpha"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("dedup = %v, want %v", got, want)
+	}
+}
+
 func TestExtractQuote(t *testing.T) {
 	got := texts(Extract(`run "hello world" now`, Quote))
 	want := []string{`"hello world"`}
@@ -99,8 +109,8 @@ func TestExtractSQuote(t *testing.T) {
 
 func TestExtractLine(t *testing.T) {
 	got := texts(Extract("  first line  \nx\nsecond line", Line))
-	// "x" dropped (len<5); reverse order.
-	want := []string{"second line", "first line"}
+	// "x" dropped (len<5); screen order.
+	want := []string{"first line", "second line"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("line = %v, want %v", got, want)
 	}
@@ -201,9 +211,9 @@ func TestExtractHostDedupAcrossForms(t *testing.T) {
 	}
 }
 
-func TestExtractHostReverseOrder(t *testing.T) {
+func TestExtractHostScreenOrder(t *testing.T) {
 	got := texts(Extract("see https://alpha.example.com then https://beta.example.com", Host))
-	want := []string{"beta.example.com", "alpha.example.com"}
+	want := []string{"alpha.example.com", "beta.example.com"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("host = %v, want %v", got, want)
 	}

@@ -11,8 +11,9 @@ type Token struct {
 	Category Category
 }
 
-// Extract returns deduped, reverse-ordered (most-recent-on-screen first)
-// tokens of the requested category from text.
+// Extract returns deduped tokens of the requested category from text, in
+// screen order: topmost-on-screen first, bottom-of-screen last, so the token
+// list mirrors the pane layout.
 func Extract(text string, cat Category) []Token {
 	switch cat {
 	case Line:
@@ -72,9 +73,9 @@ func extractLines(text string) []Token {
 }
 
 // extractHosts derives bare hostnames from both scheme-form (scheme://host)
-// and scp-form (user@host:path) URLs, combined in true source order so
-// finalize's reverse yields most-recent-on-screen first regardless of which
-// form each host came from.
+// and scp-form (user@host:path) URLs, combined in true source order so the
+// final list mirrors screen order regardless of which form each host came
+// from.
 func extractHosts(text string) []Token {
 	src := "\n" + text
 	type hit struct {
@@ -120,22 +121,24 @@ func extractAll(text string) []Token {
 	return finalize(out)
 }
 
-// finalize dedups (order-preserving) then reverses so the most-recent token
-// on screen sorts first, matching extrakto's res.reverse().
+// finalize dedups while preserving screen order, so the bottom of the token
+// list corresponds to the bottom of the screen. Duplicates keep their
+// bottom-most (most recent) occurrence. This intentionally diverges from
+// extrakto's res.reverse(), which targets fzf's bottom-up default layout.
 func finalize(in []Token) []Token {
 	seen := make(map[string]struct{}, len(in))
-	deduped := make([]Token, 0, len(in))
-	for _, t := range in {
-		if _, ok := seen[t.Text]; ok {
+	out := make([]Token, 0, len(in))
+	for i := len(in) - 1; i >= 0; i-- {
+		if _, ok := seen[in[i].Text]; ok {
 			continue
 		}
-		seen[t.Text] = struct{}{}
-		deduped = append(deduped, t)
+		seen[in[i].Text] = struct{}{}
+		out = append(out, in[i])
 	}
-	for i, j := 0, len(deduped)-1; i < j; i, j = i+1, j-1 {
-		deduped[i], deduped[j] = deduped[j], deduped[i]
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
 	}
-	return deduped
+	return out
 }
 
 func nonEmpty(in []string) []string {

@@ -22,14 +22,14 @@ func TestLoadExtractMenuWord(t *testing.T) {
 	for i, it := range items {
 		got[i] = it.Label
 	}
-	// reverse order, min length 5.
-	want := []string{"build", "please"}
+	// screen order, min length 5.
+	want := []string{"please", "build"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("labels = %v, want %v", got, want)
 	}
 	// item ID equals the token text (used verbatim by insert/copy).
-	if items[0].ID != "build" {
-		t.Fatalf("item[0].ID = %q, want %q", items[0].ID, "build")
+	if items[0].ID != "please" {
+		t.Fatalf("item[0].ID = %q, want %q", items[0].ID, "please")
 	}
 }
 
