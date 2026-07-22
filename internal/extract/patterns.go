@@ -16,8 +16,9 @@ type filterDef struct {
 
 var (
 	// word: anything except brackets, =, $, box-drawing/symbol ranges, editor
-	// glyphs and whitespace. Excluded from All (extrakto in_all:false).
-	reWord = regexp.MustCompile(`([^][(){}=$─-➿-⋅↴│ \t\n\r]+)`)
+	// glyphs and whitespace. Hyphens are allowed mid-word (UUIDs) but trimmed
+	// at the edges via lstrip/rstrip. Excluded from All (extrakto in_all:false).
+	reWord = regexp.MustCompile(`([^][(){}=$─-➿⋅↴│ \t\n\r]+)`)
 	// path: a token containing '/', optionally rooted at ~ or /.
 	rePath   = regexp.MustCompile(`(?:[ \t\n"([<':]|^)(~|/)?([-~a-zA-Z0-9_+-,.]+/[^ \t\n\r|:"'$%&)>\]]*)`)
 	rePathEx = regexp.MustCompile(`[kmgKMG]/s$|^\d+/\d+$`)
@@ -37,7 +38,7 @@ var (
 
 func filters() map[Category]filterDef {
 	return map[Category]filterDef{
-		Word:   {re: reWord, lstrip: `,:;()[]{}<>'"|`, rstrip: `,:;()[]{}<>'"|.`, minLen: defaultMinLength, inAll: false},
+		Word:   {re: reWord, lstrip: `,:;()[]{}<>'"|-`, rstrip: `,:;()[]{}<>'"|.-`, minLen: defaultMinLength, inAll: false},
 		Path:   {re: rePath, exclude: rePathEx, rstrip: `,):`, minLen: defaultMinLength, inAll: true},
 		URL:    {re: reURL, rstrip: `,):`, minLen: defaultMinLength, inAll: true},
 		Quote:  {re: reQuote, minLen: defaultMinLength, inAll: true},

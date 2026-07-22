@@ -39,6 +39,9 @@ func runFilter(text string, def filterDef, cat Category) []Token {
 	matches := def.re.FindAllStringSubmatch("\n"+text, -1)
 	for _, m := range matches {
 		item := strings.Join(nonEmpty(m[1:]), "")
+		// The regexes only exclude ASCII whitespace, so Unicode spaces (e.g.
+		// NBSP from styled prompts) can survive at the edges.
+		item = strings.TrimSpace(item)
 		if def.lstrip != "" {
 			item = strings.TrimLeft(item, def.lstrip)
 		}

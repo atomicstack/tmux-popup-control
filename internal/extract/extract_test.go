@@ -22,6 +22,29 @@ func TestExtractWord(t *testing.T) {
 	}
 }
 
+func TestExtractWordAllowsInnerHyphens(t *testing.T) {
+	// hyphens inside a word must not split it, so UUIDs survive intact.
+	got := texts(Extract("id 0aeb8492-8104-4d92-b76b-3c5b1c5e93a1 done", Word))
+	assertContains(t, got, "0aeb8492-8104-4d92-b76b-3c5b1c5e93a1")
+}
+
+func TestExtractWordStripsEdgeHyphens(t *testing.T) {
+	// leading/trailing hyphens are trimmed; inner ones are kept.
+	got := texts(Extract("run --dry-run now", Word))
+	assertContains(t, got, "dry-run")
+	assertNotContains(t, got, "--dry-run")
+}
+
+func TestExtractWordStripsEdgeSpaces(t *testing.T) {
+	// non-breaking spaces (common in styled shell prompts) must not survive
+	// at word edges.
+	got := texts(Extract("\u00a0hello\u00a0 there", Word))
+	want := []string{"there", "hello"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("word = %v, want %v", got, want)
+	}
+}
+
 func TestExtractURL(t *testing.T) {
 	got := texts(Extract("see https://example.com/download here", URL))
 	want := []string{"https://example.com/download"}
