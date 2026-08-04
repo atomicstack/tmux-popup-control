@@ -1,7 +1,7 @@
 # tmux-popup-control
 
 Current version: **v0.16.0** — see the [release
-notes](https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.16.0)
+notes](https://github.com/atomicstack/tmux-popup-control/releases/latest)
 for the latest changes.
 
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
@@ -29,9 +29,9 @@ Install into `~/.tmux/plugins/tmux-popup-control` with **one** of these:
 
 ```sh
 # A) prebuilt release — no Go needed. Grab the tarball for your OS/arch from
-#    https://github.com/atomicstack/tmux-popup-control/releases
+#    https://github.com/atomicstack/tmux-popup-control/releases/latest
 mkdir -p ~/.tmux/plugins/tmux-popup-control
-tar -xzf tmux-popup-control-<os>-<arch>.tar.gz -C ~/.tmux/plugins/tmux-popup-control
+OS=linux ARCH=amd64 tar -xzf tmux-popup-control-${OS}-${ARCH}.tar.gz -C ~/.tmux/plugins/tmux-popup-control
 
 # B) build from source — requires Go
 git clone https://github.com/atomicstack/tmux-popup-control \
