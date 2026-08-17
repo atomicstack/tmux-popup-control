@@ -139,8 +139,8 @@ type Option struct {
 	Status             Status              `json:"status,omitempty"`
 }
 
-// IsColour reports whether the option's value is a tmux colour. As of
-// catalog schema v1 (refreshed 2026-06-27) most colour options carry
+// IsColour reports whether the option's value is a tmux colour. Since the
+// 2026-06-27 catalog refresh most colour options carry
 // Type=="string" plus ColourOption==true; only a few (status-bg, status-fg,
 // pane-colours) retain the legacy Type=="colour". Consumers wanting colour
 // completion/decoration must check both rather than Type alone.
@@ -190,10 +190,45 @@ type TmuxCommandDomain struct {
 	Commands    []TmuxCommandEntry `json:"commands,omitempty"`
 }
 
-// TmuxCommandEntry is one tmux command and its short alias (if any).
+// TmuxCommandEntry is one tmux command: its short alias (if any), the
+// source-derived usage line, a concise description, and its flags in
+// parser-template order. Everything beyond Name and Alias arrived with
+// catalog schema v2.
 type TmuxCommandEntry struct {
-	Name  string `json:"name"`
-	Alias string `json:"alias,omitempty"`
+	Name                string               `json:"name"`
+	Alias               string               `json:"alias,omitempty"`
+	Usage               string               `json:"usage,omitempty"`
+	ArgumentTemplate    string               `json:"argument_template,omitempty"`
+	Description         string               `json:"description,omitempty"`
+	AfterHookName       string               `json:"after_hook_name,omitempty"`
+	PositionalArguments *PositionalArguments `json:"positional_arguments,omitempty"`
+	Flags               []TmuxCommandFlag    `json:"flags,omitempty"`
+}
+
+// PositionalArguments records how many positional arguments a command
+// accepts. Maximum == -1 means unlimited.
+type PositionalArguments struct {
+	Minimum int `json:"minimum"`
+	Maximum int `json:"maximum"`
+}
+
+// ValueMode says whether a command flag takes a value.
+type ValueMode string
+
+const (
+	ValueModeNone     ValueMode = "none"
+	ValueModeRequired ValueMode = "required"
+	ValueModeOptional ValueMode = "optional"
+)
+
+// TmuxCommandFlag is one flag accepted by a tmux command. Name is the
+// case-sensitive flag including its leading dash (e.g. "-F"); ValueName is
+// the label the source usage line gives the flag's value, if it takes one.
+type TmuxCommandFlag struct {
+	Name        string    `json:"name"`
+	ValueMode   ValueMode `json:"value_mode"`
+	ValueName   string    `json:"value_name,omitempty"`
+	Description string    `json:"description,omitempty"`
 }
 
 // FormatStringDomain describes the tmux format-string space, including the

@@ -203,7 +203,7 @@ func NewModel(cfg ModelConfig) *Model {
 		panes:        panes,
 		dispatcher:   dispatcher.New(sessions, windows, panes),
 		preview:      make(map[string]*previewData),
-		commandHelp:  cmdhelp.Commands,
+		commandHelp:  cmdhelp.Commands(),
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)

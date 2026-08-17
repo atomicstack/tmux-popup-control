@@ -2,6 +2,7 @@ package tmuxopts
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -282,6 +283,93 @@ func TestTmuxCommands(t *testing.T) {
 	}
 	if !hasAlias {
 		t.Error("expected at least one tmux command to have an alias")
+	}
+}
+
+func TestTmuxCommandDetails(t *testing.T) {
+	c := MustDefault()
+	var moveWindow *TmuxCommandEntry
+	for _, cmd := range c.TmuxCommands() {
+		if cmd.Name == "move-window" {
+			entry := cmd
+			moveWindow = &entry
+			break
+		}
+	}
+	if moveWindow == nil {
+		t.Fatal("expected move-window in tmux command list")
+	}
+	if moveWindow.Alias != "movew" {
+		t.Errorf("expected alias 'movew', got %q", moveWindow.Alias)
+	}
+	if moveWindow.Description == "" {
+		t.Error("expected move-window description")
+	}
+	if !strings.HasPrefix(moveWindow.Usage, "move-window ") {
+		t.Errorf("expected usage line to start with the command name, got %q", moveWindow.Usage)
+	}
+	if moveWindow.PositionalArguments == nil {
+		t.Fatal("expected positional argument bounds")
+	}
+	wantFlags := []string{"-a", "-b", "-d", "-k", "-r", "-s", "-t"}
+	if len(moveWindow.Flags) != len(wantFlags) {
+		t.Fatalf("expected %d flags, got %d", len(wantFlags), len(moveWindow.Flags))
+	}
+	for i, want := range wantFlags {
+		flag := moveWindow.Flags[i]
+		if flag.Name != want {
+			t.Errorf("flag %d: got %q want %q", i, flag.Name, want)
+		}
+		if flag.Description == "" {
+			t.Errorf("flag %q should have a description", flag.Name)
+		}
+	}
+	// -t takes a value, -a does not.
+	if got := moveWindow.Flags[6]; got.ValueMode != ValueModeRequired || got.ValueName == "" {
+		t.Errorf("expected -t to take a named value, got %+v", got)
+	}
+	if got := moveWindow.Flags[0]; got.ValueMode != ValueModeNone || got.ValueName != "" {
+		t.Errorf("expected -a to take no value, got %+v", got)
+	}
+}
+
+func TestTmuxCommandsCoverSchemaV2Additions(t *testing.T) {
+	c := MustDefault()
+	if v := c.SchemaVersion(); v < 2 {
+		t.Fatalf("expected catalog schema version >= 2, got %d", v)
+	}
+	found := make(map[string]bool)
+	for _, cmd := range c.TmuxCommands() {
+		found[cmd.Name] = true
+		if cmd.Description == "" {
+			t.Errorf("command %q has no description", cmd.Name)
+		}
+	}
+	// new-pane and switch-mode arrived with the floating-pane work in tmux
+	// next-3.7 and must be present alongside the long-standing commands.
+	for _, name := range []string{"new-pane", "switch-mode", "new-session"} {
+		if !found[name] {
+			t.Errorf("expected %q in tmux command list", name)
+		}
+	}
+}
+
+func TestLookupNewHooks(t *testing.T) {
+	c := MustDefault()
+	// The schema v2 refresh added pane/window/client lifecycle hooks and
+	// dropped after-queue.
+	for _, name := range []string{"pane-created", "window-zoomed", "client-created", "after-swap-window"} {
+		opt, _ := c.Lookup(name)
+		if opt == nil {
+			t.Errorf("expected hook %q to be present", name)
+			continue
+		}
+		if opt.Kind != KindHook {
+			t.Errorf("expected %q to be a hook, got kind %q", name, opt.Kind)
+		}
+	}
+	if opt, _ := c.Lookup("after-queue"); opt != nil {
+		t.Error("expected after-queue to be gone from the refreshed catalog")
 	}
 }
 
