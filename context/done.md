@@ -2,6 +2,13 @@
 
 Here’s what’s happened so far:
 
+- Option catalog refreshed to schema v2 and command help re-sourced from it (2026-08-17, `f9cc2d2`):
+  - embedded catalog refreshed from option-catalog `647a917` (tmux `851c5a933d`): 271 options — 21 new pane/window/client lifecycle hooks, `after-queue` removed, `display-panes-border-style` and `copy-mode-current-line-style` added
+  - schema v2 adds structured command data (`usage`, `argument_template`, `description`, `after_hook_name`, `positional_arguments`, per-flag `value_mode`/`value_name`/`description`) — modelled on `TmuxCommandEntry`/`TmuxCommandFlag`; the new top-level `events` block (91 events with payload/`hook_*` format metadata) is deliberately left unmodelled until a consumer needs it
+  - `cmd/gen_command_help` and the generated `internal/cmdhelp/data.go` deleted; `cmdhelp.Commands()` now builds from `tmuxopts.Default()` on first use, so a catalog refresh is the whole update
+  - command help gained `new-pane` and `switch-mode`, and the corrected `display-panes` flags (`-b` is gone in tmux next-3.8; `-k`/`-s`/`-Z` were missing from the old snapshot)
+  - eight description regressions found by diffing the old generated data against the catalog were fixed upstream in `tmux-command-metadata.json` rather than patched locally: scope words restored to the `set-option`/`show-options` summaries, and ACL/SIGHUP/LF/UTF-8/Enter un-lowercased
+
 - Flaky completion Enter harness test fixed (2026-07-11):
   - added `Harness.Update` for tests that need to inspect synchronous model state without executing the returned `tea.Cmd`
   - changed `TestCompletionEnterExecutesInsteadOfAccepting` to verify Enter returns a command while asserting the synchronously-set loading and pending state before the command result is drained

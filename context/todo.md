@@ -10,7 +10,7 @@ Recent follow-up fixes:
 - `c0ddb85` — render the completion dropdown below the prompt when there is not enough room above it.
 - `6877b8b` — preserve dropdown selection across backend refreshes and keep `Esc`-dismissed completion suppressed until the input text changes.
 - `d8942e2` — keep command-menu filtering scoped to the command token and make `Tab` replace the current command token under the cursor.
-- `c76301e` — add a repo-local generator plus checked-in native Go command help data from `~/git_tree/tmux/command-summary.md`.
+- `c76301e` — add a repo-local generator plus checked-in native Go command help data from `~/git_tree/tmux/command-summary.md`. (Superseded by `f9cc2d2`: the generator and generated data are gone; command help now comes from the catalog embedded in `internal/tmuxopts`.)
 - `9317f12` — show command summaries under the prompt and render aligned argument descriptions in the completion popup.
 - Uncommitted follow-up: suppress exact-match value dropdowns and treat `move-window -r -t` as a session target so direct execution keeps working in the real tmux flow.
 Full spec: `docs/superpowers/specs/2026-04-02-command-argument-completion-design.md`
