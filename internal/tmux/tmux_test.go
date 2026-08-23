@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/user"
@@ -41,13 +42,24 @@ func (s stubCommander) Output() ([]byte, error) { return s.output, s.err }
 // withStubCommander swaps runExecCommand so exec-based helpers (ShowOption,
 // ServerStartTime, the CLI fallbacks) can be driven without a live tmux. fn
 // receives the same (name, args...) the production code passes to tmux.
+//
+// It also swaps runExecCommandContext with an adapter that discards the
+// context and forwards to fn. ShowOptionContext (and anything else that now
+// goes through the cancellable exec path) must remain driveable by callers
+// that don't care about context propagation — see withStubCommanderContext
+// in waitfor_test.go for the seam that captures the context itself.
 func withStubCommander(t *testing.T, fn func(name string, args ...string) commander) {
 	t.Helper()
 	prev := runExecCommand
+	prevCtx := runExecCommandContext
 	runExecCommand = fn
+	runExecCommandContext = func(_ context.Context, name string, args ...string) commander {
+		return fn(name, args...)
+	}
 	resetCaches()
 	t.Cleanup(func() {
 		runExecCommand = prev
+		runExecCommandContext = prevCtx
 		resetCaches()
 	})
 }
@@ -678,7 +690,7 @@ func TestFetchWindowLinesParsesOutput(t *testing.T) {
 	}
 	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FILTER", "")
 	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FORMAT", "#{window_name}")
-	lines, err := fetchWindowLines("", fake)
+	lines, err := fetchWindowLines(context.Background(), "", fake)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -695,7 +707,7 @@ func TestFetchWindowLinesParsesOutput(t *testing.T) {
 
 func TestFetchWindowLinesFallsBackOnError(t *testing.T) {
 	fake := &fakeClient{listWindowsFormatErr: errors.New("boom")}
-	if _, err := fetchWindowLines("", fake); err == nil {
+	if _, err := fetchWindowLines(context.Background(), "", fake); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -724,7 +736,7 @@ func TestFetchPaneLinesParsesOutput(t *testing.T) {
 			"%1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
 		},
 	}
-	lines, err := fetchPaneLines("", fake)
+	lines, err := fetchPaneLines(context.Background(), "", fake)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -741,7 +753,7 @@ func TestFetchPaneLinesParsesOutput(t *testing.T) {
 
 func TestFetchPaneLinesError(t *testing.T) {
 	fake := &fakeClient{listPanesFormatErr: errors.New("boom")}
-	if _, err := fetchPaneLines("", fake); err == nil {
+	if _, err := fetchPaneLines(context.Background(), "", fake); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -1545,7 +1557,7 @@ func TestEnvOrOptionPrefersEnvVar(t *testing.T) {
 		return stubCommander{output: []byte("from-tmux\n")}
 	})
 	t.Setenv("TEST_ENV_OR_OPT", "from-env")
-	result := envOrOption("", "TEST_ENV_OR_OPT", "@test-option")
+	result := envOrOption(context.Background(), "", "TEST_ENV_OR_OPT", "@test-option")
 	if result != "from-env" {
 		t.Fatalf("expected env value, got %q", result)
 	}
@@ -1559,7 +1571,7 @@ func TestEnvOrOptionFallsBackToTmuxOption(t *testing.T) {
 		return stubCommander{output: nil}
 	})
 	t.Setenv("TEST_ENV_OR_OPT", "")
-	result := envOrOption("", "TEST_ENV_OR_OPT", "@test-option")
+	result := envOrOption(context.Background(), "", "TEST_ENV_OR_OPT", "@test-option")
 	if result != "from-tmux" {
 		t.Fatalf("expected tmux option value, got %q", result)
 	}
@@ -1570,7 +1582,7 @@ func TestEnvOrOptionReturnsEmptyWhenBothUnset(t *testing.T) {
 		return stubCommander{output: nil}
 	})
 	t.Setenv("TEST_ENV_OR_OPT", "")
-	result := envOrOption("", "TEST_ENV_OR_OPT", "@nonexistent")
+	result := envOrOption(context.Background(), "", "TEST_ENV_OR_OPT", "@nonexistent")
 	if result != "" {
 		t.Fatalf("expected empty, got %q", result)
 	}

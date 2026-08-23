@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -11,14 +12,23 @@ import (
 // envOrOption returns the value of an env var, falling back to a tmux server
 // option if the env var is empty. This lets users configure settings in
 // tmux.conf via `set -g @option-name "value"` as an alternative to env vars.
-func envOrOption(socketPath, envKey, optionName string) string {
+func envOrOption(ctx context.Context, socketPath, envKey, optionName string) string {
 	if v := os.Getenv(envKey); v != "" {
 		return v
 	}
-	return ShowOption(socketPath, optionName)
+	return ShowOptionContext(ctx, socketPath, optionName)
 }
 
 func FetchSessions(socketPath string) (SessionSnapshot, error) {
+	return FetchSessionsContext(context.Background(), socketPath)
+}
+
+// FetchSessionsContext is the cancellable counterpart of FetchSessions.
+func FetchSessionsContext(ctx context.Context, socketPath string) (SessionSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return SessionSnapshot{}, err
+	}
+
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return SessionSnapshot{}, err
@@ -29,23 +39,26 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 		return SessionSnapshot{}, err
 	}
 	if len(sessions) == 0 {
-		fallback, err := fetchSessionsFallback(socketPath)
+		fallback, err := fetchSessionsFallback(ctx, socketPath)
 		if err == nil {
 			sessions = fallback
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return SessionSnapshot{}, err
 	}
 	// Only run the per-session label format command when the user has
 	// configured a custom format — otherwise defaultLabelForSession produces
 	// the same output as the built-in defaultSessionFormat without paying
 	// for an extra control-mode round-trip on every poll cycle.
-	customFormat := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SESSION_FORMAT", "@tmux-popup-control-session-format")
+	customFormat := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SESSION_FORMAT", "@tmux-popup-control-session-format")
 	var labelMap map[string]string
 	if strings.TrimSpace(customFormat) != "" {
 		labelMap = fetchSessionLabels(client, customFormat)
 	}
 	currentName := currentSessionName(client)
 	realClients := realAttachedClients(client)
-	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
+	includeCurrent := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	out := make([]Session, 0, len(sessions))
 	for _, s := range sessions {
 		label := labelMap[s.Name]
@@ -68,6 +81,15 @@ func FetchSessions(socketPath string) (SessionSnapshot, error) {
 }
 
 func FetchWindows(socketPath string) (WindowSnapshot, error) {
+	return FetchWindowsContext(context.Background(), socketPath)
+}
+
+// FetchWindowsContext is the cancellable counterpart of FetchWindows.
+func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return WindowSnapshot{}, err
+	}
+
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return WindowSnapshot{}, err
@@ -77,7 +99,10 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 	if err != nil {
 		return WindowSnapshot{}, err
 	}
-	lines, err := fetchWindowLines(socketPath, client)
+	if err := ctx.Err(); err != nil {
+		return WindowSnapshot{}, err
+	}
+	lines, err := fetchWindowLines(ctx, socketPath, client)
 	if err != nil {
 		lines = fallbackWindowLines(allWindows)
 	}
@@ -86,7 +111,7 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 		windowMap[w.Id] = w
 	}
 	currentSession := currentSessionName(client)
-	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
+	includeCurrent := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	var snapshot WindowSnapshot
 	snapshot.IncludeCurrent = includeCurrent
 	snapshot.CurrentSession = currentSession
@@ -152,6 +177,15 @@ func FetchWindows(socketPath string) (WindowSnapshot, error) {
 }
 
 func FetchPanes(socketPath string) (PaneSnapshot, error) {
+	return FetchPanesContext(context.Background(), socketPath)
+}
+
+// FetchPanesContext is the cancellable counterpart of FetchPanes.
+func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return PaneSnapshot{}, err
+	}
+
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return PaneSnapshot{}, err
@@ -161,7 +195,10 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	if err != nil {
 		return PaneSnapshot{}, err
 	}
-	lines, err := fetchPaneLines(socketPath, client)
+	if err := ctx.Err(); err != nil {
+		return PaneSnapshot{}, err
+	}
+	lines, err := fetchPaneLines(ctx, socketPath, client)
 	if err != nil {
 		lines = fallbackPaneLines(allPanes)
 	}
@@ -169,7 +206,7 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 	for _, p := range allPanes {
 		paneMap[p.Id] = p
 	}
-	includeCurrent := envOrOption(socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
+	includeCurrent := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	hostSession := currentSessionName(client)
 	var snapshot PaneSnapshot
 	snapshot.IncludeCurrent = includeCurrent
@@ -238,14 +275,14 @@ func FetchPanes(socketPath string) (PaneSnapshot, error) {
 // control-mode ListSessions call returns no sessions (e.g. during a
 // race at startup). It is intentionally kept as a direct tmux invocation
 // so it still works if the control-mode transport is misbehaving.
-func fetchSessionsFallback(socketPath string) ([]*gotmux.Session, error) {
+func fetchSessionsFallback(ctx context.Context, socketPath string) ([]*gotmux.Session, error) {
 	format := "#{session_name}\t#{session_windows}\t#{session_attached}"
 	args := make([]string, 0, 6)
 	if socketPath != "" {
 		args = append(args, "-S", socketPath)
 	}
 	args = append(args, "list-sessions", "-F", format)
-	output, err := runExecCommand("tmux", args...).Output()
+	output, err := runExecCommandContext(ctx, "tmux", args...).Output()
 	if err != nil {
 		return nil, err
 	}
@@ -304,9 +341,9 @@ type paneLine struct {
 	current     bool
 }
 
-func fetchWindowLines(socketPath string, client tmuxClient) ([]windowLine, error) {
-	filter := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_WINDOW_FILTER", "@tmux-popup-control-window-filter"))
-	formatExpr := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_WINDOW_FORMAT", "@tmux-popup-control-window-format"))
+func fetchWindowLines(ctx context.Context, socketPath string, client tmuxClient) ([]windowLine, error) {
+	filter := strings.TrimSpace(envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_WINDOW_FILTER", "@tmux-popup-control-window-filter"))
+	formatExpr := strings.TrimSpace(envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_WINDOW_FORMAT", "@tmux-popup-control-window-format"))
 	if formatExpr == "" {
 		formatExpr = "#{window_name}"
 	}
@@ -342,9 +379,9 @@ func fallbackWindowLines(windows []*gotmux.Window) []windowLine {
 	return lines
 }
 
-func fetchPaneLines(socketPath string, client tmuxClient) ([]paneLine, error) {
-	filter := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_PANE_FILTER", "@tmux-popup-control-pane-filter"))
-	formatExpr := strings.TrimSpace(envOrOption(socketPath, "TMUX_POPUP_CONTROL_PANE_FORMAT", "@tmux-popup-control-pane-format"))
+func fetchPaneLines(ctx context.Context, socketPath string, client tmuxClient) ([]paneLine, error) {
+	filter := strings.TrimSpace(envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_PANE_FILTER", "@tmux-popup-control-pane-filter"))
+	formatExpr := strings.TrimSpace(envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_PANE_FORMAT", "@tmux-popup-control-pane-format"))
 	if formatExpr == "" {
 		formatExpr = "[#{window_name}:#{pane_title}] #{pane_current_command}  [#{pane_width}x#{pane_height}] [history #{history_size}/#{history_limit}, #{history_bytes} bytes] #{?pane_active,[active],[inactive]}"
 	}

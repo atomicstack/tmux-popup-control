@@ -229,6 +229,11 @@ func SetSessionOption(socketPath, session, option, value string) error {
 // server during a large restore. The per-process memoization below keeps the
 // exec cost to one invocation per (socket, option).
 func ShowOption(socketPath, option string) string {
+	return ShowOptionContext(context.Background(), socketPath, option)
+}
+
+// ShowOptionContext is the cancellable counterpart of ShowOption.
+func ShowOptionContext(ctx context.Context, socketPath, option string) string {
 	key := optionCacheKey(socketPath, option)
 	optionCacheMu.RLock()
 	if v, ok := optionCache[key]; ok {
@@ -238,7 +243,7 @@ func ShowOption(socketPath, option string) string {
 	optionCacheMu.RUnlock()
 
 	args := append(baseArgs(socketPath), "show-options", "-gqv", option)
-	output, err := runExecCommand("tmux", args...).Output()
+	output, err := runExecCommandContext(ctx, "tmux", args...).Output()
 	if err != nil {
 		return ""
 	}
