@@ -78,3 +78,17 @@ Fixed a shutdown hang: `internal/backend/watcher.go` threaded its context into t
 **Honest scope:** this does not cancel the underlying gotmuxcc call — that API takes no context — so it converts an unbounded hang into a ~250ms drain plus a transiently-detached goroutine. Deliberately not worked around with exec hacks; reported upstream instead.
 
 Tests: `TestWatcherStopDrainsPromptlyThroughWedgedFetch` (fails at its 2s deadline before the fix, passes in ~250ms after), `TestPollAwaitsInFlightFetchWithinGrace`, `TestAwaitFetchAbandonsWedgedFetchWithCancelledContext`, `TestStartForwardsWatcherContextToFetch`, plus `internal/tmux/snapshots_context_test.go`. `internal/backend` green under `-race`. Full `make test` green except the pre-existing `TestTreeFilterShowsOnlyMatchingItems` failure in `internal/testutil`, verified failing identically on unmodified `main`.
+
+### follow-up: adopted gotmuxcc v0.2.0 and rethreaded onto the real context api (2026-08-23)
+
+`chore(deps)` bumped gotmuxcc to v0.2.0, which fixed all three findings this branch reported upstream (unsynchronised `Tmux.Close()`, no per-command context api, unbounded constructor handshake) plus a router framing bug affecting our `CapturePane` preview path and a `send on closed channel` panic on a library-owned goroutine.
+
+- `internal/tmux/types.go` / `tracing.go` — `tmuxClient` and `tracedTmuxClient` gained the six context-aware list operations; traced wrappers reuse the existing span names so traces stay comparable.
+- `internal/tmux/{snapshots,labels,host}.go` — the fetchers now call `ListSessionsContext` / `ListAllWindowsContext` / `ListAllPanesContext` / `List*FormatContext`, with ctx carried through `fetchSessionLabels`, `currentSessionName`, `fetchWindowLines`, `fetchPaneLines`.
+- `fakeClient`'s context variants delegate to the existing stubs, so every existing fixture kept working.
+
+**The `awaitFetch` backstop survived, deliberately.** gotmuxcc has no `ListClientsContext` and no `DisplayMessageContext`, and both run near the end of every fetch (`realAttachedClients`, `currentSessionName` → `popupSessionName`). A wedge in either would pin a poller exactly as the uncancellable list calls once did, so removing `awaitFetch` reopens the hang through a narrower door — verified: `TestWatcherStopDrainsPromptlyThroughWedgedFetch` still fails at its 2s deadline without it. The **grace window's** original justification (closing the client under an in-flight fetch was unsafe) is obsolete now that `Close` is idempotent; it is kept on the narrower ground that the two remaining uncancellable calls are fast, so letting them land beats detaching a goroutine whose result is discarded.
+
+Cancellation is caller-side by design in v0.2.0: an already-written command stays in the router's pending queue and its reply is discarded on arrival. That is what makes abandoning safe rather than lossy.
+
+Verified: `internal/{backend,tmux,resurrect,ui,menu}` green under `-race`; full `make test` green except the pre-existing `TestTreeFilterShowsOnlyMatchingItems`; `make build` produced the binary.
