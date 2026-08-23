@@ -170,6 +170,16 @@ type tmuxClient interface {
 	ListAllWindows() ([]*gotmux.Window, error)
 	ListAllPanes() ([]*gotmux.Pane, error)
 	ListClients() ([]*gotmux.Client, error)
+	// Context-aware list operations (control-mode). Cancellation is
+	// caller-side: the command has already been written to tmux, so the
+	// request stays in the router's pending queue and its reply is discarded
+	// on arrival.
+	ListSessionsContext(ctx context.Context) ([]*gotmux.Session, error)
+	ListAllWindowsContext(ctx context.Context) ([]*gotmux.Window, error)
+	ListAllPanesContext(ctx context.Context) ([]*gotmux.Pane, error)
+	ListSessionsFormatContext(ctx context.Context, format string) ([]string, error)
+	ListWindowsFormatContext(ctx context.Context, target, filter, format string) ([]string, error)
+	ListPanesFormatContext(ctx context.Context, target, filter, format string) ([]string, error)
 	SwitchClient(*gotmux.SwitchClientOptions) error
 	GetSessionByName(string) (*gotmux.Session, error)
 	NewSession(*gotmux.SessionOptions) (*gotmux.Session, error)

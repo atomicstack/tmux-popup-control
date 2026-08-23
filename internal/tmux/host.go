@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"os"
 	"strings"
 )
@@ -37,10 +38,10 @@ func hostSessionID() string {
 	return ""
 }
 
-func currentSessionName(client tmuxClient) string {
+func currentSessionName(ctx context.Context, client tmuxClient) string {
 	// Prefer the session ID — stable across renames.
 	if id := hostSessionID(); id != "" {
-		if sessions, err := client.ListSessions(); err == nil {
+		if sessions, err := client.ListSessionsContext(ctx); err == nil {
 			for _, s := range sessions {
 				if s.Id == id {
 					return s.Name

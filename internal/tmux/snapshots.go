@@ -34,7 +34,7 @@ func FetchSessionsContext(ctx context.Context, socketPath string) (SessionSnapsh
 		return SessionSnapshot{}, err
 	}
 
-	sessions, err := client.ListSessions()
+	sessions, err := client.ListSessionsContext(ctx)
 	if err != nil {
 		return SessionSnapshot{}, err
 	}
@@ -54,9 +54,9 @@ func FetchSessionsContext(ctx context.Context, socketPath string) (SessionSnapsh
 	customFormat := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SESSION_FORMAT", "@tmux-popup-control-session-format")
 	var labelMap map[string]string
 	if strings.TrimSpace(customFormat) != "" {
-		labelMap = fetchSessionLabels(client, customFormat)
+		labelMap = fetchSessionLabels(ctx, client, customFormat)
 	}
-	currentName := currentSessionName(client)
+	currentName := currentSessionName(ctx, client)
 	realClients := realAttachedClients(client)
 	includeCurrent := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	out := make([]Session, 0, len(sessions))
@@ -95,7 +95,7 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 		return WindowSnapshot{}, err
 	}
 
-	allWindows, err := client.ListAllWindows()
+	allWindows, err := client.ListAllWindowsContext(ctx)
 	if err != nil {
 		return WindowSnapshot{}, err
 	}
@@ -110,7 +110,7 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 	for _, w := range allWindows {
 		windowMap[w.Id] = w
 	}
-	currentSession := currentSessionName(client)
+	currentSession := currentSessionName(ctx, client)
 	includeCurrent := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
 	var snapshot WindowSnapshot
 	snapshot.IncludeCurrent = includeCurrent
@@ -191,7 +191,7 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 		return PaneSnapshot{}, err
 	}
 
-	allPanes, err := client.ListAllPanes()
+	allPanes, err := client.ListAllPanesContext(ctx)
 	if err != nil {
 		return PaneSnapshot{}, err
 	}
@@ -207,7 +207,7 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 		paneMap[p.Id] = p
 	}
 	includeCurrent := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
-	hostSession := currentSessionName(client)
+	hostSession := currentSessionName(ctx, client)
 	var snapshot PaneSnapshot
 	snapshot.IncludeCurrent = includeCurrent
 	for _, line := range lines {
@@ -350,7 +350,7 @@ func fetchWindowLines(ctx context.Context, socketPath string, client tmuxClient)
 	labelFormat := fmt.Sprintf("#S:#{window_index}: %s", formatExpr)
 	format := fmt.Sprintf("#{window_id}\t#{session_name}:#{window_index}\t%s", labelFormat)
 	listFn := func(filter, format string) ([]string, error) {
-		return client.ListWindowsFormat("", filter, format)
+		return client.ListWindowsFormatContext(ctx, "", filter, format)
 	}
 	rows, err := fetchFormattedLines(listFn, filter, format, 3, 2)
 	if err != nil {
@@ -388,7 +388,7 @@ func fetchPaneLines(ctx context.Context, socketPath string, client tmuxClient) (
 	labelFormat := fmt.Sprintf("#S:#{window_index}.#{pane_index}: %s", formatExpr)
 	format := fmt.Sprintf("#{pane_id}\t#S:#{window_index}.#{pane_index}\t%s\t#{session_name}\t#{window_name}\t#{window_index}\t#{pane_index}\t#{?pane_active&&window_active&&session_attached,1,0}", labelFormat)
 	listFn := func(filter, format string) ([]string, error) {
-		return client.ListPanesFormat("", filter, format)
+		return client.ListPanesFormatContext(ctx, "", filter, format)
 	}
 	rows, err := fetchFormattedLines(listFn, filter, format, 8, 8)
 	if err != nil {

@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -68,6 +69,48 @@ func (c *tracedTmuxClient) ListAllPanes() ([]*gotmux.Pane, error) {
 
 func (c *tracedTmuxClient) ListClients() ([]*gotmux.Client, error) {
 	return traceValue("tmux.control", "list_clients", "clients", c.baseAttrs(), c.inner.ListClients)
+}
+
+func (c *tracedTmuxClient) ListSessionsContext(ctx context.Context) ([]*gotmux.Session, error) {
+	return traceValue("tmux.control", "list_sessions", "sessions", c.baseAttrs(), func() ([]*gotmux.Session, error) {
+		return c.inner.ListSessionsContext(ctx)
+	})
+}
+
+func (c *tracedTmuxClient) ListAllWindowsContext(ctx context.Context) ([]*gotmux.Window, error) {
+	return traceValue("tmux.control", "list_windows", "windows", c.baseAttrs(), func() ([]*gotmux.Window, error) {
+		return c.inner.ListAllWindowsContext(ctx)
+	})
+}
+
+func (c *tracedTmuxClient) ListAllPanesContext(ctx context.Context) ([]*gotmux.Pane, error) {
+	return traceValue("tmux.control", "list_panes", "panes", c.baseAttrs(), func() ([]*gotmux.Pane, error) {
+		return c.inner.ListAllPanesContext(ctx)
+	})
+}
+
+func (c *tracedTmuxClient) ListSessionsFormatContext(ctx context.Context, format string) ([]string, error) {
+	return traceValue("tmux.control", "list_sessions_format", format, c.baseAttrs(), func() ([]string, error) {
+		return c.inner.ListSessionsFormatContext(ctx, format)
+	})
+}
+
+func (c *tracedTmuxClient) ListWindowsFormatContext(ctx context.Context, target, filter, format string) ([]string, error) {
+	return traceValue("tmux.control", "list_windows_format", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{
+		"filter": filter,
+		"format": format,
+	}), func() ([]string, error) {
+		return c.inner.ListWindowsFormatContext(ctx, target, filter, format)
+	})
+}
+
+func (c *tracedTmuxClient) ListPanesFormatContext(ctx context.Context, target, filter, format string) ([]string, error) {
+	return traceValue("tmux.control", "list_panes_format", target, mergeTracingAttrs(c.baseAttrs(), map[string]any{
+		"filter": filter,
+		"format": format,
+	}), func() ([]string, error) {
+		return c.inner.ListPanesFormatContext(ctx, target, filter, format)
+	})
 }
 
 func (c *tracedTmuxClient) SwitchClient(options *gotmux.SwitchClientOptions) error {

@@ -1,13 +1,14 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
-func fetchSessionLabels(client tmuxClient, envFormat string) map[string]string {
+func fetchSessionLabels(ctx context.Context, client tmuxClient, envFormat string) map[string]string {
 	labelExpr := strings.TrimSpace(envFormat)
 	if labelExpr != "" {
 		labelExpr = fmt.Sprintf("#S: %s", labelExpr)
@@ -15,7 +16,7 @@ func fetchSessionLabels(client tmuxClient, envFormat string) map[string]string {
 		labelExpr = defaultSessionFormat
 	}
 	format := fmt.Sprintf("#{session_name}\t%s", labelExpr)
-	lines, err := client.ListSessionsFormat(format)
+	lines, err := client.ListSessionsFormatContext(ctx, format)
 	if err != nil {
 		return map[string]string{}
 	}

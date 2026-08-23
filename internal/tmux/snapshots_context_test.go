@@ -142,3 +142,106 @@ func TestFetchSessionsWrapperStillWorks(t *testing.T) {
 		t.Fatalf("expected custom label, got %q", snap.Sessions[0].Label)
 	}
 }
+
+// contextCapturingClient wraps fakeClient to record the context.Context
+// handed to each control-mode List*Context call, so tests can prove ctx
+// flows all the way into the control-mode client itself — not just into the
+// exec-based fallback/option-lookup helpers.
+type contextCapturingClient struct {
+	*fakeClient
+	sessionsCtx context.Context
+	windowsCtx  context.Context
+	panesCtx    context.Context
+}
+
+func (c *contextCapturingClient) ListSessionsContext(ctx context.Context) ([]*gotmux.Session, error) {
+	c.sessionsCtx = ctx
+	return c.fakeClient.ListSessionsContext(ctx)
+}
+
+func (c *contextCapturingClient) ListAllWindowsContext(ctx context.Context) ([]*gotmux.Window, error) {
+	c.windowsCtx = ctx
+	return c.fakeClient.ListAllWindowsContext(ctx)
+}
+
+func (c *contextCapturingClient) ListAllPanesContext(ctx context.Context) ([]*gotmux.Pane, error) {
+	c.panesCtx = ctx
+	return c.fakeClient.ListAllPanesContext(ctx)
+}
+
+// TestFetchContextReachesControlModeListCalls proves the context passed to
+// each Fetch*Context entrypoint now reaches the underlying control-mode
+// List*Context call, not just the exec-based fallback/option-lookup paths.
+// Before gotmuxcc v0.2.0 there was no per-command context API on the
+// control-mode client, so this leg of the plumbing was uncancellable.
+func TestFetchContextReachesControlModeListCalls(t *testing.T) {
+	type sentinelKey struct{}
+	sentinelCtx := context.WithValue(context.Background(), sentinelKey{}, "sentinel-value")
+
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_FORMAT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FILTER", "")
+	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FORMAT", "")
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_FILTER", "")
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_FORMAT", "")
+	t.Setenv("TMUX_PANE", "")
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", "")
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_ID", "")
+	t.Setenv("TMUX", "")
+
+	tests := []struct {
+		name   string
+		call   func(ctx context.Context, socketPath string) error
+		getCtx func(c *contextCapturingClient) context.Context
+	}{
+		{
+			name: "sessions",
+			call: func(ctx context.Context, socketPath string) error {
+				_, err := FetchSessionsContext(ctx, socketPath)
+				return err
+			},
+			getCtx: func(c *contextCapturingClient) context.Context { return c.sessionsCtx },
+		},
+		{
+			name: "windows",
+			call: func(ctx context.Context, socketPath string) error {
+				_, err := FetchWindowsContext(ctx, socketPath)
+				return err
+			},
+			getCtx: func(c *contextCapturingClient) context.Context { return c.windowsCtx },
+		},
+		{
+			name: "panes",
+			call: func(ctx context.Context, socketPath string) error {
+				_, err := FetchPanesContext(ctx, socketPath)
+				return err
+			},
+			getCtx: func(c *contextCapturingClient) context.Context { return c.panesCtx },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := &contextCapturingClient{fakeClient: &fakeClient{
+				sessions: []*gotmux.Session{{Name: "dev", Windows: 1}},
+				clients:  []*gotmux.Client{{Session: "dev"}},
+			}}
+			withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+			withStubCommander(t, func(name string, args ...string) commander {
+				return stubCommander{output: nil}
+			})
+
+			if err := tt.call(sentinelCtx, "sock"); err != nil {
+				t.Fatalf("unexpected error for %s: %v", tt.name, err)
+			}
+
+			got := tt.getCtx(fake)
+			if got == nil {
+				t.Fatalf("expected %s list call to receive a context", tt.name)
+			}
+			if v := got.Value(sentinelKey{}); v != "sentinel-value" {
+				t.Fatalf("expected ctx to carry sentinel value for %s, got %v", tt.name, v)
+			}
+		})
+	}
+}

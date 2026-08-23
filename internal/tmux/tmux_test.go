@@ -218,6 +218,30 @@ func (f *fakeClient) ListClients() ([]*gotmux.Client, error) {
 	return f.clients, nil
 }
 
+func (f *fakeClient) ListSessionsContext(context.Context) ([]*gotmux.Session, error) {
+	return f.ListSessions()
+}
+
+func (f *fakeClient) ListAllWindowsContext(context.Context) ([]*gotmux.Window, error) {
+	return f.ListAllWindows()
+}
+
+func (f *fakeClient) ListAllPanesContext(context.Context) ([]*gotmux.Pane, error) {
+	return f.ListAllPanes()
+}
+
+func (f *fakeClient) ListSessionsFormatContext(_ context.Context, format string) ([]string, error) {
+	return f.ListSessionsFormat(format)
+}
+
+func (f *fakeClient) ListWindowsFormatContext(_ context.Context, target, filter, format string) ([]string, error) {
+	return f.ListWindowsFormat(target, filter, format)
+}
+
+func (f *fakeClient) ListPanesFormatContext(_ context.Context, target, filter, format string) ([]string, error) {
+	return f.ListPanesFormat(target, filter, format)
+}
+
 func (f *fakeClient) SwitchClient(opts *gotmux.SwitchClientOptions) error {
 	f.switchCalls++
 	if opts != nil {
@@ -963,7 +987,7 @@ func TestLinkMoveSwapWindows(t *testing.T) {
 
 func TestFetchSessionLabelsFallback(t *testing.T) {
 	fake := &fakeClient{listSessionsFormatErr: errors.New("boom")}
-	labels := fetchSessionLabels(fake, "")
+	labels := fetchSessionLabels(context.Background(), fake, "")
 	if len(labels) != 0 {
 		t.Fatalf("expected empty map, got %#v", labels)
 	}
