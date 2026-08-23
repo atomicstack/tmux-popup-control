@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -145,6 +146,180 @@ func TestWatcherStopDrainsPromptlyThroughThrottle(t *testing.T) {
 	w.Wait()
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Fatalf("Stop+Wait should drain promptly, took %v", elapsed)
+	}
+}
+
+func TestWatcherStopDrainsPromptlyThroughWedgedFetch(t *testing.T) {
+	// A wedged fetch (e.g. a hung control-mode call) must not block Stop+Wait
+	// indefinitely. This reproduces the shutdown hang: poll's fetch call was
+	// not itself cancellable, only the throttle and the emit send were.
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &Watcher{
+		socketPath: "test.sock",
+		interval:   time.Hour,
+		ctx:        ctx,
+		cancel:     cancel,
+		events:     make(chan Event, 4),
+	}
+
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+
+	w.wg.Go(func() {
+		w.poll(KindSessions, func(context.Context) (any, error) {
+			<-release
+			return tmux.SessionSnapshot{}, nil
+		})
+	})
+
+	// The very first fetch is the wedged one, so there is no emit to drain
+	// here — draining would block forever waiting on w.events.
+
+	drained := make(chan struct{})
+	start := time.Now()
+	w.Stop()
+	go func() {
+		w.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("stop+wait did not drain within 2s: a wedged fetch blocks watcher shutdown")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("stop+wait should drain promptly, took %v", elapsed)
+	}
+}
+
+func TestPollAwaitsInFlightFetchWithinGrace(t *testing.T) {
+	// The grace window must not sacrifice the normal-shutdown invariant: a
+	// fetch that is about to land should still be allowed to finish, not be
+	// abandoned just because ctx was cancelled a moment earlier.
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &Watcher{
+		socketPath: "test.sock",
+		interval:   5 * time.Millisecond,
+		ctx:        ctx,
+		cancel:     cancel,
+		events:     make(chan Event, 4),
+	}
+
+	var calls atomic.Int32
+	var finished atomic.Bool
+	inFlight := make(chan struct{})
+
+	w.wg.Go(func() {
+		w.poll(KindSessions, func(context.Context) (any, error) {
+			// Only the second call is the slow one under test. Guard on the
+			// exact call number: the ticker can drive further polls if cancel
+			// races the emit, and closing inFlight twice would panic.
+			if calls.Add(1) == 2 {
+				close(inFlight)
+				time.Sleep(50 * time.Millisecond)
+				finished.Store(true)
+			}
+			return tmux.SessionSnapshot{}, nil
+		})
+	})
+
+	// Drain the immediate first emit so the ticker triggers the second fetch.
+	<-w.events
+
+	select {
+	case <-inFlight:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("second fetch never started")
+	}
+
+	// Cancel while the second fetch is mid-flight (well inside the 250ms
+	// grace window, since it only sleeps 50ms).
+	cancel()
+	w.Wait()
+
+	if !finished.Load() {
+		t.Fatalf("in-flight fetch should have been allowed to finish within the grace window")
+	}
+}
+
+func TestAwaitFetchAbandonsWedgedFetchWithCancelledContext(t *testing.T) {
+	// Direct unit test of awaitFetch: an already-cancelled context plus a
+	// fetch that never returns must still yield a bounded result.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+
+	start := time.Now()
+	data, err := awaitFetch(ctx, func(context.Context) (any, error) {
+		<-release
+		return tmux.SessionSnapshot{}, nil
+	})
+	elapsed := time.Since(start)
+
+	if elapsed > time.Second {
+		t.Fatalf("awaitFetch should abandon a wedged fetch promptly, took %v", elapsed)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	if data != nil {
+		t.Fatalf("expected nil data, got %v", data)
+	}
+}
+
+func TestStartForwardsWatcherContextToFetch(t *testing.T) {
+	// start must hand the watcher's context down to the fetch function rather
+	// than dropping it. Without this the fetchers cannot honour cancellation
+	// at all, which is what let a wedged tmux call hang Stop+Wait.
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &Watcher{
+		socketPath: "test.sock",
+		interval:   time.Hour,
+		ctx:        ctx,
+		cancel:     cancel,
+		events:     make(chan Event, 4),
+	}
+
+	type call struct {
+		ctx    context.Context
+		socket string
+	}
+	calls := make(chan call, 1)
+
+	w.start(KindSessions, func(fetchCtx context.Context, socketPath string) (any, error) {
+		select {
+		case calls <- call{ctx: fetchCtx, socket: socketPath}:
+		default:
+		}
+		return tmux.SessionSnapshot{}, nil
+	})
+
+	<-w.events
+
+	var got call
+	select {
+	case got = <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("fetch was never called")
+	}
+
+	if got.socket != "test.sock" {
+		t.Fatalf("expected socket path test.sock, got %q", got.socket)
+	}
+	if got.ctx == nil {
+		t.Fatalf("fetch received a nil context")
+	}
+	if err := got.ctx.Err(); err != nil {
+		t.Fatalf("fetch context should be live before stop, got %v", err)
+	}
+
+	w.Stop()
+	w.Wait()
+
+	if err := got.ctx.Err(); !errors.Is(err, context.Canceled) {
+		t.Fatalf("stop should cancel the context handed to fetch, got %v", err)
 	}
 }
 

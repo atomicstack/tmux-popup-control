@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -89,7 +90,9 @@ func (w *Watcher) Wait() {
 }
 
 // fetchFunc retrieves a snapshot of one resource kind for the given socket.
-type fetchFunc func(socketPath string) (any, error)
+// The context is the watcher's own: fetchers are expected to abandon work once
+// it is cancelled, which is what keeps Stop/Wait bounded.
+type fetchFunc func(ctx context.Context, socketPath string) (any, error)
 
 // startPollers launches one poller goroutine per resource kind. The pollers
 // differ only by Kind and the fetch function, so they share a single start
@@ -99,9 +102,15 @@ func (w *Watcher) startPollers() {
 		kind  Kind
 		fetch fetchFunc
 	}{
-		{KindSessions, func(socketPath string) (any, error) { return tmux.FetchSessions(socketPath) }},
-		{KindWindows, func(socketPath string) (any, error) { return tmux.FetchWindows(socketPath) }},
-		{KindPanes, func(socketPath string) (any, error) { return tmux.FetchPanes(socketPath) }},
+		{KindSessions, func(ctx context.Context, socketPath string) (any, error) {
+			return tmux.FetchSessionsContext(ctx, socketPath)
+		}},
+		{KindWindows, func(ctx context.Context, socketPath string) (any, error) {
+			return tmux.FetchWindowsContext(ctx, socketPath)
+		}},
+		{KindPanes, func(ctx context.Context, socketPath string) (any, error) {
+			return tmux.FetchPanesContext(ctx, socketPath)
+		}},
 	}
 	for _, p := range pollers {
 		w.start(p.kind, p.fetch)
@@ -115,9 +124,51 @@ func (w *Watcher) start(kind Kind, fetch fetchFunc) {
 			if err := throttle.wait(ctx); err != nil {
 				return nil, err
 			}
-			return fetch(w.socketPath)
+			return fetch(ctx, w.socketPath)
 		})
 	})
+}
+
+// fetchAbandonGrace bounds how long a poller waits for an in-flight fetch to
+// land after cancellation before abandoning it. A healthy control-mode call
+// returns in milliseconds, so in a normal shutdown the fetch completes inside
+// the grace window and the poller still exits only once nothing is mid-fetch —
+// preserving the teardown ordering app.Run relies on. A wedged connection blows
+// through the window and is abandoned, which is what keeps Stop/Wait bounded.
+const fetchAbandonGrace = 250 * time.Millisecond
+
+// awaitFetch runs fetch on its own goroutine so a wedged call cannot pin the
+// poller. It returns as soon as the fetch lands; once ctx is cancelled it waits
+// only fetchAbandonGrace longer, then gives up on the result. The abandoned
+// goroutine is not leaked indefinitely: it unblocks when the shared
+// control-mode client is closed by tmux.Shutdown during teardown, which fails
+// every in-flight request.
+func awaitFetch(ctx context.Context, fetch func(context.Context) (any, error)) (any, error) {
+	type result struct {
+		data any
+		err  error
+	}
+	// Buffered so an abandoned fetch can always deliver and exit.
+	done := make(chan result, 1)
+	go func() {
+		data, err := fetch(ctx)
+		done <- result{data: data, err: err}
+	}()
+
+	select {
+	case r := <-done:
+		return r.data, r.err
+	case <-ctx.Done():
+	}
+
+	timer := time.NewTimer(fetchAbandonGrace)
+	defer timer.Stop()
+	select {
+	case r := <-done:
+		return r.data, r.err
+	case <-timer.C:
+		return nil, fmt.Errorf("fetch abandoned after cancellation: %w", ctx.Err())
+	}
 }
 
 func (w *Watcher) poll(kind Kind, fetch func(context.Context) (any, error)) {
@@ -131,7 +182,7 @@ func (w *Watcher) poll(kind Kind, fetch func(context.Context) (any, error)) {
 		})
 		t0 := time.Now()
 		logging.Trace("backend.poll.start", map[string]any{"kind": kind.String()})
-		data, err := fetch(w.ctx)
+		data, err := awaitFetch(w.ctx, fetch)
 		dur := time.Since(t0)
 		count := watcherItemCount(data)
 		if count >= 0 {
