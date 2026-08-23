@@ -130,19 +130,28 @@ func (w *Watcher) start(kind Kind, fetch fetchFunc) {
 }
 
 // fetchAbandonGrace bounds how long a poller waits for an in-flight fetch to
-// land after cancellation before abandoning it. A healthy control-mode call
-// returns in milliseconds, so in a normal shutdown the fetch completes inside
-// the grace window and the poller still exits only once nothing is mid-fetch —
-// preserving the teardown ordering app.Run relies on. A wedged connection blows
-// through the window and is abandoned, which is what keeps Stop/Wait bounded.
+// land after cancellation before abandoning it.
+//
+// Since gotmuxcc v0.2.0 the list calls take a context and return promptly once
+// it is cancelled, so this window is normally never reached. It survives as a
+// backstop for the calls that still have no context variant — ListClients and
+// DisplayMessage, reached through realAttachedClients and currentSessionName —
+// which run near the end of each fetch and would otherwise pin the poller
+// exactly as the uncancellable list calls once did. Those two are fast in
+// practice, so letting them land inside the window lets the poller exit
+// cleanly rather than detaching a goroutine whose result is discarded anyway.
 const fetchAbandonGrace = 250 * time.Millisecond
 
-// awaitFetch runs fetch on its own goroutine so a wedged call cannot pin the
-// poller. It returns as soon as the fetch lands; once ctx is cancelled it waits
-// only fetchAbandonGrace longer, then gives up on the result. The abandoned
-// goroutine is not leaked indefinitely: it unblocks when the shared
-// control-mode client is closed by tmux.Shutdown during teardown, which fails
-// every in-flight request.
+// awaitFetch runs fetch on its own goroutine so a call that cannot observe
+// cancellation still cannot pin the poller. It returns as soon as the fetch
+// lands; once ctx is cancelled it waits only fetchAbandonGrace longer, then
+// gives up on the result.
+//
+// Giving up is safe rather than lossy: gotmuxcc's own context cancellation is
+// caller-side only — an already-written command stays in the router's pending
+// queue and its reply is discarded on arrival — and Close is idempotent and
+// safe alongside in-flight commands, so the tmux.Shutdown that follows
+// teardown reclaims anything still outstanding.
 func awaitFetch(ctx context.Context, fetch func(context.Context) (any, error)) (any, error) {
 	type result struct {
 		data any

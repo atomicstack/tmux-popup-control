@@ -56,14 +56,14 @@ func Run(cfg Config) error {
 	}
 	watcher := backend.NewWatcher(socketPath, 1500*time.Millisecond)
 	// Tear down in order: stop the watcher and drain its pollers before
-	// closing the shared control-mode client. Wait is bounded — a poller whose
-	// fetch has wedged abandons it after the backend's grace window instead of
-	// blocking here forever, so in a healthy shutdown nothing is mid-fetch when
-	// the client closes, and in a wedged one we still exit. The abandoned fetch
-	// is reclaimed by the Shutdown below: closing the client fails every
-	// in-flight control-mode request, unblocking the detached goroutine.
-	// LIFO defers would close the client first, hence the explicit ordered
-	// teardown here.
+	// closing the shared control-mode client. Stop cancels the watcher context,
+	// which gotmuxcc's context-aware list calls honour, so Wait returns
+	// promptly; the backend's grace window bounds the remainder for the few
+	// calls that still have no context variant. Closing the client afterwards
+	// discards whatever a cancelled or abandoned fetch left outstanding — the
+	// reply is dropped on arrival and Close is idempotent, so this is safe even
+	// with a command still in flight. LIFO defers would close the client first,
+	// hence the explicit ordered teardown here.
 	defer func() {
 		watcher.Stop()
 		watcher.Wait()

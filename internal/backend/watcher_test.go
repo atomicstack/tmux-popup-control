@@ -150,9 +150,12 @@ func TestWatcherStopDrainsPromptlyThroughThrottle(t *testing.T) {
 }
 
 func TestWatcherStopDrainsPromptlyThroughWedgedFetch(t *testing.T) {
-	// A wedged fetch (e.g. a hung control-mode call) must not block Stop+Wait
-	// indefinitely. This reproduces the shutdown hang: poll's fetch call was
-	// not itself cancellable, only the throttle and the emit send were.
+	// A fetch that cannot observe cancellation must not block Stop+Wait
+	// indefinitely. This reproduces the original shutdown hang, when poll's
+	// fetch call was not cancellable at all — and it still guards the calls
+	// that remain uncancellable now that gotmuxcc's list operations take a
+	// context: ListClients and DisplayMessage have no context variants, so a
+	// wedge in either would pin the poller exactly like this stub does.
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &Watcher{
 		socketPath: "test.sock",
