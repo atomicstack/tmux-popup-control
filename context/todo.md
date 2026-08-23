@@ -26,3 +26,12 @@ Recent follow-up fixes:
 - `9317f12` — show command summaries under the prompt and render aligned argument descriptions in the completion popup.
 - Uncommitted follow-up: suppress exact-match value dropdowns and treat `move-window -r -t` as a session target so direct execution keeps working in the real tmux flow.
 Full spec: `docs/superpowers/specs/2026-04-02-command-argument-completion-design.md`
+
+## gotmuxcc upstream reports (raised 2026-08-23, feat-watcher-fetch-context)
+
+- `Tmux.Close()` nils `t.router` / `t.transport` / `t.Socket` with no synchronisation while `t.runCommand()` reads `t.router` — a data race, and the `if t.router == nil` guard followed by `t.router.runCommand(...)` is a check-then-use that can nil-deref. The router itself is correctly mutex-guarded; only the `Tmux` wrapper's field nil-ing is unsafe.
+- No context-aware command API: `ListSessions`/`ListAllWindows`/`ListAllPanes`/`CapturePane` block in `req.wait()` with no way to abandon. `NewTmuxContext` already establishes the ctx idiom for the constructor. A ctx-aware command path would let `internal/backend`'s `awaitFetch` grace-window workaround be deleted in favour of plain propagation.
+
+## adjacent, not fixed
+
+- `newTmux` (`internal/tmux/types.go`) holds `clientMu` across the gotmuxcc dial + control-mode handshake. If that handshake hangs, `tmux.Shutdown()` blocks on the same mutex forever — a second, independent shutdown-wedge point the watcher-side fix cannot reach. Fixing it means dialling outside the lock or passing a deadline ctx via `NewTmuxContext`.

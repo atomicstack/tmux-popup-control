@@ -65,3 +65,16 @@ Extrakto-style token extractor. Spec/plan in obsidian vault (tmux-popup-control/
 - `internal/ui/extract.go` (+ model/commands/navigation/view) — token list is a normal Level (reuses fuzzy filter/multiselect/render); ctrl-f cycles category in place (async, seq-guarded, filter preserved, category reset to word on entry); header via Level.Subtitle (theme styles, raw:true); enter=insert into origin pane, ctrl-y=copy to buffer; multi-select join newline for all/line else space; quit-on-escape for direct invocation.
 - Tests: engine unit (ported extrakto corpus), UI harness (cycle/insert/copy/escape/multiselect/seq-guard), live-tmux integration (`internal/tmux`: capture→extract→insert paste-landed). Regenerated `testdata/capture/root_menu.txt` golden for the new extract root item.
 - Deferred (inventory in spec §9): grab-area cycle, edit/open actions, clip-mode/OSC-52 system clipboard, alt-variants, prefix-name, @extrakto-* config compat.
+
+## bounded watcher shutdown — context through the fetch path (feat-watcher-fetch-context, 2026-08-23)
+
+Fixed a shutdown hang: `internal/backend/watcher.go` threaded its context into the throttle but dropped it before the tmux call, so a wedged control-mode connection pinned a poller forever, `Stop()` did nothing, and `app.Run`'s ordered teardown blocked on `Wait()` — the popup never exited. Design note in the obsidian vault (`tmux-popup-control/2026-08-23/feat-watcher-fetch-context.md`).
+
+- `internal/tmux/snapshots.go` — added `FetchSessionsContext` / `FetchWindowsContext` / `FetchPanesContext`; the old names are now `context.Background()` wrappers so `internal/resurrect` (which holds them as `func(string) (T, error)` values) is untouched. ctx reaches an entry check, one interstitial check after the primary list call, and the exec-based helpers (`fetchSessionsFallback`, `envOrOption` → `ShowOptionContext`, `fetchWindowLines`, `fetchPaneLines`).
+- `internal/tmux/restore.go` — `ShowOptionContext` on `runExecCommandContext`; cache behaviour unchanged.
+- `internal/backend/watcher.go` — `fetchFunc` gains a ctx; `poll` now goes through `awaitFetch`, which runs the fetch on its own goroutine and, once ctx is cancelled, waits only `fetchAbandonGrace` (250ms) before abandoning the result.
+- `internal/app/app.go` — teardown comment restated: `Wait()` is bounded now, and the `tmux.Shutdown()` that follows is what reclaims an abandoned fetch (gotmuxcc's router fails every pending/in-flight request on close).
+
+**Honest scope:** this does not cancel the underlying gotmuxcc call — that API takes no context — so it converts an unbounded hang into a ~250ms drain plus a transiently-detached goroutine. Deliberately not worked around with exec hacks; reported upstream instead.
+
+Tests: `TestWatcherStopDrainsPromptlyThroughWedgedFetch` (fails at its 2s deadline before the fix, passes in ~250ms after), `TestPollAwaitsInFlightFetchWithinGrace`, `TestAwaitFetchAbandonsWedgedFetchWithCancelledContext`, `TestStartForwardsWatcherContextToFetch`, plus `internal/tmux/snapshots_context_test.go`. `internal/backend` green under `-race`. Full `make test` green except the pre-existing `TestTreeFilterShowsOnlyMatchingItems` failure in `internal/testutil`, verified failing identically on unmodified `main`.
