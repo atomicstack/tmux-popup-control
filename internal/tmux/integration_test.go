@@ -777,3 +777,73 @@ func TestWindowPaneIDsIntegration(t *testing.T) {
 
 	Shutdown()
 }
+
+// TestResolveThemeColourIntegration attaches a real TTY client to an
+// isolated server and checks that tmux theme colour names resolve to a
+// concrete colour spec through that client. The test skips on tmux builds
+// that predate themes (the c/f format modifier yields nothing for them).
+func TestResolveThemeColourIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+	t.Setenv("TMUX_TMPDIR", filepath.Dir(socket))
+	Shutdown()
+	t.Cleanup(Shutdown)
+
+	session := "swatch-client"
+	if err := testutil.TmuxCommand(socket, "new-session", "-d", "-s", session, "-x", "80", "-y", "24").Run(); err != nil {
+		t.Fatalf("new-session: %v", err)
+	}
+	// A nested attach inside a window of the same server gives us a real
+	// (non-control-mode) client with a terminal to resolve colours for.
+	attach := fmt.Sprintf("env -u TMUX TERM=xterm-256color tmux -S %q attach -t %q", socket, session)
+	if err := testutil.TmuxCommand(socket, "new-window", "-d", "-t", session, attach).Run(); err != nil {
+		t.Fatalf("new-window attach: %v", err)
+	}
+
+	var client string
+	deadline := time.Now().Add(5 * time.Second)
+	for client == "" && time.Now().Before(deadline) {
+		out, err := testutil.TmuxCommand(socket, "list-clients", "-F", "#{client_name}\t#{client_control_mode}").Output()
+		if err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				name, control, _ := strings.Cut(line, "\t")
+				if control == "0" && strings.TrimSpace(name) != "" {
+					client = strings.TrimSpace(name)
+					break
+				}
+			}
+		}
+		if client == "" {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if client == "" {
+		t.Skip("skipping: no tty client could be attached")
+	}
+	t.Logf("tty client: %s", client)
+
+	probe, _ := testutil.TmuxCommand(socket, "display-message", "-c", client, "-p", "#{c/f:themegreen}").Output()
+	if strings.TrimSpace(string(probe)) == "" {
+		t.Skip("skipping: tmux build has no theme colours")
+	}
+
+	for _, name := range []string{"themegreen", "themeblue", "thememagenta"} {
+		spec, ok := ResolveThemeColour(socket, client, name)
+		if !ok {
+			t.Fatalf("ResolveThemeColour(%s) failed (probe output %q)", name, probe)
+		}
+		t.Logf("%s -> %s", name, spec)
+		isHex := len(spec) == 7 && spec[0] == '#'
+		isIndex := spec != "" && strings.Trim(spec, "0123456789") == ""
+		if !isHex && !isIndex {
+			t.Fatalf("ResolveThemeColour(%s) = %q; want #rrggbb or palette index", name, spec)
+		}
+	}
+	if _, ok := ResolveThemeColour(socket, client, "red"); ok {
+		t.Fatal("basic colour names must not resolve through the theme path")
+	}
+}
