@@ -188,6 +188,7 @@ type fakeClient struct {
 
 	// NewSession tracking.
 	newSessionOptsCalls []*gotmux.SessionOptions
+	newSessionID        string
 }
 
 func (f *fakeClient) ListSessions() ([]*gotmux.Session, error) {
@@ -277,7 +278,7 @@ func (f *fakeClient) NewSession(opts *gotmux.SessionOptions) (*gotmux.Session, e
 	if opts != nil {
 		name = opts.Name
 	}
-	return &gotmux.Session{Name: name}, nil
+	return &gotmux.Session{Name: name, Id: f.newSessionID}, nil
 }
 
 func (f *fakeClient) KillServer() error { return nil }
@@ -708,8 +709,8 @@ func TestFetchSessionsPropagatesError(t *testing.T) {
 func TestFetchWindowLinesParsesOutput(t *testing.T) {
 	fake := &fakeClient{
 		listWindowsFormatLines: []string{
-			" @1\tdev:0\tdev:0 main",
-			"%2\tdev:1\tcustom label ",
+			" @1\t$1\tdev\t0\tdev:0\tdev:0 main",
+			"%2\t$1\tdev\t1\tdev:1\tcustom label ",
 		},
 	}
 	t.Setenv("TMUX_POPUP_CONTROL_WINDOW_FILTER", "")
@@ -756,8 +757,8 @@ func TestFallbackWindowLines(t *testing.T) {
 func TestFetchPaneLinesParsesOutput(t *testing.T) {
 	fake := &fakeClient{
 		listPanesFormatLines: []string{
-			"%0\tdev:0.0\tlabel\tdev\tmain\t0\t0\t1",
-			"%1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
+			"%0\t@0\t$1\tdev:0.0\tlabel\tdev\tmain\t0\t0\t1",
+			"%1\t@0\t$1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
 		},
 	}
 	lines, err := fetchPaneLines(context.Background(), "", fake)
@@ -1033,8 +1034,8 @@ func TestFetchPanesParsesOutput(t *testing.T) {
 			{Id: "%1", Title: "tail", CurrentCommand: "tail", Width: 80, Height: 20, Active: false},
 		},
 		listPanesFormatLines: []string{
-			"%0\tdev:0.0\tlabel0\tdev\tmain\t0\t0\t1",
-			"%1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
+			"%0\t@0\t$1\tdev:0.0\tlabel0\tdev\tmain\t0\t0\t1",
+			"%1\t@0\t$1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
 		},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
@@ -1207,10 +1208,10 @@ func TestKillSessionsPropagatesError(t *testing.T) {
 }
 
 func TestSwitchPaneValidatesTarget(t *testing.T) {
-	if err := SwitchPane("", "", "dev"); err == nil || !strings.Contains(err.Error(), "invalid pane target") {
+	if err := SwitchPane("", "", PaneRef{}); err == nil || !strings.Contains(err.Error(), "pane id required") {
 		t.Fatalf("expected validation error, got %v", err)
 	}
-	if err := SwitchPane("", "", "dev:0"); err == nil || !strings.Contains(err.Error(), "invalid pane target") {
+	if err := SwitchPane("", "", PaneRef{SessionID: "$1", WindowID: "@0"}); err == nil || !strings.Contains(err.Error(), "pane id required") {
 		t.Fatalf("expected validation error, got %v", err)
 	}
 }
@@ -1225,18 +1226,18 @@ func TestRealSessionHandleID(t *testing.T) {
 func TestSwitchPaneRunsCommands(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	if err := SwitchPane("sock", "/dev/ttys009", "dev:0.%0"); err != nil {
+	if err := SwitchPane("sock", "/dev/ttys009", PaneRef{SessionID: "$1", WindowID: "@0", PaneID: "%0"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if fake.lastSwitchOpts == nil ||
-		fake.lastSwitchOpts.TargetSession != "dev" ||
+		fake.lastSwitchOpts.TargetSession != "$1" ||
 		fake.lastSwitchOpts.TargetClient != "/dev/ttys009" {
 		t.Fatalf("unexpected switch opts %#v", fake.lastSwitchOpts)
 	}
-	if len(fake.selectWindowCalls) != 1 || fake.selectWindowCalls[0] != "dev:0" {
+	if len(fake.selectWindowCalls) != 1 || fake.selectWindowCalls[0] != "@0" {
 		t.Fatalf("unexpected select window calls %#v", fake.selectWindowCalls)
 	}
-	if len(fake.selectPaneCalls) != 1 || fake.selectPaneCalls[0] != "dev:0.%0" {
+	if len(fake.selectPaneCalls) != 1 || fake.selectPaneCalls[0] != "%0" {
 		t.Fatalf("unexpected select pane calls %#v", fake.selectPaneCalls)
 	}
 }
@@ -1244,7 +1245,7 @@ func TestSwitchPaneRunsCommands(t *testing.T) {
 func TestSwitchPaneSkipsInvalidClientID(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
-	if err := SwitchPane("sock", "[shells] O:zsh, pane 0", "dev:0.%0"); err != nil {
+	if err := SwitchPane("sock", "[shells] O:zsh, pane 0", PaneRef{SessionID: "$1", WindowID: "@0", PaneID: "%0"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if fake.lastSwitchOpts == nil {

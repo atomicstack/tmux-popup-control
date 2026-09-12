@@ -18,13 +18,25 @@ type Window struct {
 	Label      string
 	Current    bool
 	InternalID string
+	SessionID  string
 	Layout     string
 	Zoomed     bool
+}
+
+// PaneRef identifies a pane by tmux ids so it can be addressed regardless of
+// what the session or window is called. PaneID is required; SessionID and
+// WindowID are used when known.
+type PaneRef struct {
+	SessionID string
+	WindowID  string
+	PaneID    string
 }
 
 type Pane struct {
 	ID        string
 	PaneID    string
+	SessionID string
+	WindowID  string
 	Session   string
 	Window    string
 	WindowIdx int
@@ -56,7 +68,11 @@ type PaneSnapshot struct {
 }
 
 type Session struct {
-	Name     string
+	Name string
+	// ID is the tmux session id ($N). tmux next-3.8 allows ':' and '.' in
+	// session names, which makes name-based targets unparseable, so every
+	// tmux command must target the id.
+	ID       string
 	Label    string
 	Path     string
 	Attached bool

@@ -83,7 +83,7 @@ func TestFetchSessionsContextPassesContextToExecFallback(t *testing.T) {
 		joined := strings.Join(args, " ")
 		if strings.Contains(joined, "list-sessions") {
 			capturedCtx = ctx
-			return stubCommander{output: []byte("dev\t1\t0\n")}
+			return stubCommander{output: []byte("$1\tdev\t1\t0\n")}
 		}
 		// show-options lookups (custom session format / switch-current) —
 		// not under test here, return empty output so the rest of

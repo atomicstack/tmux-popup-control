@@ -68,6 +68,7 @@ func FetchSessionsContext(ctx context.Context, socketPath string) (SessionSnapsh
 		clients := realClients[s.Name]
 		entry := Session{
 			Name:     s.Name,
+			ID:       s.Id,
 			Label:    label,
 			Path:     s.Path,
 			Attached: len(clients) > 0,
@@ -118,18 +119,12 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 	for _, line := range lines {
 		w := windowMap[line.windowID]
 		if w == nil {
-			session := ""
-			var idx int
-			if parts := strings.SplitN(line.displayID, ":", 2); len(parts) > 0 {
-				session = strings.TrimSpace(parts[0])
-				if len(parts) > 1 {
-					idx = atoiOr0(parts[1])
-				}
-			}
+			session := strings.TrimSpace(line.session)
 			entry := Window{
 				ID:         line.displayID,
 				Session:    session,
-				Index:      idx,
+				SessionID:  line.sessionID,
+				Index:      line.index,
 				Label:      line.label,
 				InternalID: line.windowID,
 			}
@@ -156,6 +151,7 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 			Label:      line.label,
 			Current:    session == currentSession && w.Active,
 			InternalID: line.windowID,
+			SessionID:  line.sessionID,
 			Layout:     w.Layout,
 			Zoomed:     w.ZoomedFlag,
 		}
@@ -224,6 +220,8 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 		entry := Pane{
 			ID:        line.displayID,
 			PaneID:    line.paneID,
+			SessionID: line.sessionID,
+			WindowID:  line.windowID,
 			Session:   session,
 			Window:    line.windowName,
 			WindowIdx: line.windowIndex,
@@ -281,7 +279,7 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 // race at startup). It is intentionally kept as a direct tmux invocation
 // so it still works if the control-mode transport is misbehaving.
 func fetchSessionsFallback(ctx context.Context, socketPath string) ([]*gotmux.Session, error) {
-	format := "#{session_name}\t#{session_windows}\t#{session_attached}"
+	format := "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}"
 	args := make([]string, 0, 6)
 	if socketPath != "" {
 		args = append(args, "-S", socketPath)
@@ -298,14 +296,15 @@ func fetchSessionsFallback(ctx context.Context, socketPath string) ([]*gotmux.Se
 	lines := strings.Split(text, "\n")
 	sessions := make([]*gotmux.Session, 0, len(lines))
 	for _, line := range lines {
-		parts := splitTabLine(line, 3)
-		if len(parts) < 3 {
+		parts := splitTabLine(line, 4)
+		if len(parts) < 4 {
 			continue
 		}
 		sessions = append(sessions, &gotmux.Session{
-			Name:     parts[0],
-			Windows:  atoiOr0(parts[1]),
-			Attached: atoiOr0(parts[2]),
+			Id:       parts[0],
+			Name:     parts[1],
+			Windows:  atoiOr0(parts[2]),
+			Attached: atoiOr0(parts[3]),
 		})
 	}
 	return sessions, nil
@@ -331,12 +330,17 @@ func realAttachedClients(client tmuxClient) map[string][]string {
 
 type windowLine struct {
 	windowID  string
+	sessionID string
+	session   string
+	index     int
 	displayID string
 	label     string
 }
 
 type paneLine struct {
 	paneID      string
+	windowID    string
+	sessionID   string
 	displayID   string
 	label       string
 	session     string
@@ -353,22 +357,32 @@ func fetchWindowLines(ctx context.Context, socketPath string, client tmuxClient)
 		formatExpr = "#{window_name}"
 	}
 	labelFormat := fmt.Sprintf("#S:#{window_index}: %s", formatExpr)
-	format := fmt.Sprintf("#{window_id}\t#{session_name}:#{window_index}\t%s", labelFormat)
+	// The session name and window index travel as separate fields: the
+	// display id "session:index" cannot be split reliably because session
+	// names may contain ':' on tmux next-3.8.
+	format := fmt.Sprintf("#{window_id}\t#{session_id}\t#{session_name}\t#{window_index}\t#{session_name}:#{window_index}\t%s", labelFormat)
 	listFn := func(filter, format string) ([]string, error) {
 		return client.ListWindowsFormatContext(ctx, "", filter, format)
 	}
-	rows, err := fetchFormattedLines(listFn, filter, format, 3, 2)
+	rows, err := fetchFormattedLines(listFn, filter, format, 6, 5)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]windowLine, 0, len(rows))
 	for _, parts := range rows {
-		display := parts[1]
+		display := parts[4]
 		label := display
-		if len(parts) > 2 && parts[2] != "" {
-			label = parts[2]
+		if len(parts) > 5 && parts[5] != "" {
+			label = parts[5]
 		}
-		result = append(result, windowLine{windowID: parts[0], displayID: display, label: label})
+		result = append(result, windowLine{
+			windowID:  parts[0],
+			sessionID: parts[1],
+			session:   parts[2],
+			index:     atoiOr0(parts[3]),
+			displayID: display,
+			label:     label,
+		})
 	}
 	return result, nil
 }
@@ -379,7 +393,7 @@ func fallbackWindowLines(windows []*gotmux.Window) []windowLine {
 		session := firstSession(w)
 		id := fmt.Sprintf("%s:%d", session, w.Index)
 		label := fmt.Sprintf("%s:%d %s", session, w.Index, w.Name)
-		lines = append(lines, windowLine{windowID: w.Id, displayID: id, label: label})
+		lines = append(lines, windowLine{windowID: w.Id, session: session, index: w.Index, displayID: id, label: label})
 	}
 	return lines
 }
@@ -391,30 +405,32 @@ func fetchPaneLines(ctx context.Context, socketPath string, client tmuxClient) (
 		formatExpr = "[#{window_name}:#{pane_title}] #{pane_current_command}  [#{pane_width}x#{pane_height}] [history #{history_size}/#{history_limit}, #{history_bytes} bytes] #{?pane_active,[active],[inactive]}"
 	}
 	labelFormat := fmt.Sprintf("#S:#{window_index}.#{pane_index}: %s", formatExpr)
-	format := fmt.Sprintf("#{pane_id}\t#S:#{window_index}.#{pane_index}\t%s\t#{session_name}\t#{window_name}\t#{window_index}\t#{pane_index}\t#{?pane_active&&window_active&&session_attached,1,0}", labelFormat)
+	format := fmt.Sprintf("#{pane_id}\t#{window_id}\t#{session_id}\t#S:#{window_index}.#{pane_index}\t%s\t#{session_name}\t#{window_name}\t#{window_index}\t#{pane_index}\t#{?pane_active&&window_active&&session_attached,1,0}", labelFormat)
 	listFn := func(filter, format string) ([]string, error) {
 		return client.ListPanesFormatContext(ctx, "", filter, format)
 	}
-	rows, err := fetchFormattedLines(listFn, filter, format, 8, 8)
+	rows, err := fetchFormattedLines(listFn, filter, format, 10, 10)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]paneLine, 0, len(rows))
 	for _, parts := range rows {
-		displayID := parts[1]
-		label := parts[2]
+		displayID := parts[3]
+		label := parts[4]
 		if label == "" {
 			label = displayID
 		}
 		result = append(result, paneLine{
 			paneID:      parts[0],
+			windowID:    parts[1],
+			sessionID:   parts[2],
 			displayID:   displayID,
 			label:       label,
-			session:     parts[3],
-			windowName:  parts[4],
-			windowIndex: atoiOr0(parts[5]),
-			paneIndex:   atoiOr0(parts[6]),
-			current:     parts[7] == "1",
+			session:     parts[5],
+			windowName:  parts[6],
+			windowIndex: atoiOr0(parts[7]),
+			paneIndex:   atoiOr0(parts[8]),
+			current:     parts[9] == "1",
 		})
 	}
 	return result, nil

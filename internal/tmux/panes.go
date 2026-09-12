@@ -157,30 +157,37 @@ func ResizePane(socketPath, direction string, amount int) error {
 	return err
 }
 
-func SwitchPane(socketPath, clientID, target string) error {
-	session, windowPart, ok := strings.Cut(target, ":")
-	if !ok {
-		return fmt.Errorf("invalid pane target %q", target)
+// SwitchPane moves the user's client to the pane identified by ref: it
+// switches the client to the pane's session, selects the window and then the
+// pane. Every target is a tmux id, never a name, because session and window
+// names may contain ':' and '.' on tmux next-3.8. When the session id is not
+// known the pane id doubles as the switch-client target (tmux resolves a %N
+// target to the pane's session).
+func SwitchPane(socketPath, clientID string, ref PaneRef) error {
+	paneID := strings.TrimSpace(ref.PaneID)
+	if paneID == "" {
+		return fmt.Errorf("pane id required")
 	}
-	windowIdx, _, ok := strings.Cut(windowPart, ".")
-	if !ok {
-		return fmt.Errorf("invalid pane target %q", target)
-	}
-	window := fmt.Sprintf("%s:%s", session, windowIdx)
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return err
 	}
 
-	switchOpts := &gotmux.SwitchClientOptions{TargetSession: session}
+	sessionTarget := strings.TrimSpace(ref.SessionID)
+	if sessionTarget == "" {
+		sessionTarget = paneID
+	}
+	switchOpts := &gotmux.SwitchClientOptions{TargetSession: sessionTarget}
 	if id := strings.TrimSpace(clientID); isValidClientName(id) {
 		switchOpts.TargetClient = id
 	}
 	if err := client.SwitchClient(switchOpts); err != nil {
 		return err
 	}
-	if err := client.SelectWindow(window); err != nil {
-		return err
+	if windowID := strings.TrimSpace(ref.WindowID); windowID != "" {
+		if err := client.SelectWindow(windowID); err != nil {
+			return err
+		}
 	}
-	return client.SelectPane(target)
+	return client.SelectPane(paneID)
 }

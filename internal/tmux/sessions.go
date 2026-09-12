@@ -14,14 +14,23 @@ import (
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
 
-func NewSession(socketPath, name string) error {
+// NewSession creates a detached session and returns its tmux id ($N) so the
+// caller can switch to it without relying on the name, which may contain
+// characters tmux cannot target by.
+func NewSession(socketPath, name string) (string, error) {
 	client, err := newTmux(socketPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	_, err = client.NewSession(&gotmux.SessionOptions{Name: name})
-	return err
+	session, err := client.NewSession(&gotmux.SessionOptions{Name: name})
+	if err != nil {
+		return "", err
+	}
+	if session == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(session.Id), nil
 }
 
 func RenameSession(socketPath, target, newName string) error {
@@ -160,17 +169,19 @@ func ResolveSocketPath(flagValue string) (string, error) {
 	return filepath.Join(baseDir, fmt.Sprintf("tmux-%s", u.Uid), "default"), nil
 }
 
+// findSession resolves a session target to a handle. A "$N" target is matched
+// against session ids; anything else is treated as the complete session name
+// (names may legitimately contain ':' on tmux next-3.8, so nothing is cut).
 func findSession(client tmuxClient, target string) (sessionHandle, error) {
-	name := target
-	if idx := strings.IndexRune(target, ':'); idx >= 0 {
-		name = target[:idx]
-	}
-	if name == "" {
-		name = target
-	}
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for {
-		session, err := client.GetSessionByName(name)
+		var session *gotmux.Session
+		var err error
+		if strings.HasPrefix(target, "$") {
+			session, err = sessionByID(client, target)
+		} else {
+			session, err = client.GetSessionByName(target)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -182,6 +193,20 @@ func findSession(client tmuxClient, target string) (sessionHandle, error) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// sessionByID looks a session up by its tmux id ($N).
+func sessionByID(client tmuxClient, id string) (*gotmux.Session, error) {
+	sessions, err := client.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range sessions {
+		if s != nil && strings.TrimSpace(s.Id) == id {
+			return s, nil
+		}
+	}
+	return nil, nil
 }
 
 func sessionHasClient(client tmuxClient, session string) (bool, error) {
