@@ -186,3 +186,15 @@ func TestCommandHandlersIncludesAutosaveAlias(t *testing.T) {
 		t.Fatalf("expected autosave labels, got %q and %q", autosave.ErrorLabel, autosaveStatus.ErrorLabel)
 	}
 }
+
+// TestShowPopupRejectsEmptyClient guards the popup launcher: since tmux
+// af3e4d2e, display-popup aimed at a control-mode client (which is what an
+// empty -c target resolves to when the command arrives over control mode)
+// returns success without opening anything. Refusing an empty client name
+// turns that silent no-op into an error.
+func TestShowPopupRejectsEmptyClient(t *testing.T) {
+	err := showPopup("/nonexistent/tmux.sock", "  ")
+	if err == nil || !strings.Contains(err.Error(), "client") {
+		t.Fatalf("expected a client error, got %v", err)
+	}
+}

@@ -551,7 +551,17 @@ func buildSelfCommand(args ...string) (string, error) {
 	return shquote.JoinCommand(append([]string{binary}, args...)...), nil
 }
 
+// showPopup opens this binary in a display-popup on the user's terminal
+// client. The client must be a real TTY client: since tmux af3e4d2e a
+// display-popup whose target client is a control-mode client (which is what an
+// empty -c resolves to when the command arrives over our control-mode
+// connection) returns success without opening anything, so an empty name is
+// refused here rather than silently doing nothing.
 func showPopup(socketPath, clientName string, args ...string) error {
+	clientName = strings.TrimSpace(clientName)
+	if clientName == "" {
+		return fmt.Errorf("display-popup needs a terminal client (tmux ignores popups aimed at a control-mode client)")
+	}
 	popupCmd, err := buildSelfCommand(args...)
 	if err != nil {
 		return err
