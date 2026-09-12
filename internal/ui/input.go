@@ -446,9 +446,12 @@ func (m *Model) triggerCompletion() {
 		for _, candidate := range candidates {
 			value := "-" + string(candidate.Flag)
 			values = append(values, value)
-			if candidate.ArgType != "" {
+			switch {
+			case candidate.ArgType != "" && candidate.OptionalValue:
+				labels[value] = fmt.Sprintf("-%c [%s]", candidate.Flag, candidate.ArgType)
+			case candidate.ArgType != "":
 				labels[value] = fmt.Sprintf("-%c <%s>", candidate.Flag, candidate.ArgType)
-			} else {
+			default:
 				labels[value] = value
 			}
 			descriptions[value] = helpDescriptions[value]

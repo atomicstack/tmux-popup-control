@@ -630,7 +630,7 @@ func (m *Model) applyRootMenuOverride(requested string) {
 				for _, item := range items {
 					labels = append(labels, item.Label)
 				}
-				m.commandSchemas = cmdparse.BuildRegistry(labels)
+				m.commandSchemas = cmdparse.BuildCatalogRegistry(labels)
 			}
 		}
 	} else {

@@ -291,12 +291,7 @@ func findFilterTokens(schema *cmdparse.CommandSchema, filter string, isOpt, isHo
 	for i < len(tokens) {
 		tok := tokens[i]
 		if strings.HasPrefix(tok, "-") && len(tok) >= 2 {
-			flag := rune(tok[1])
-			if cmdparse.SchemaHasArgFlag(schema, flag) {
-				i += 2
-				continue
-			}
-			i++
+			i += 1 + flagValueTokensAt(schema, tokens, i)
 			continue
 		}
 
@@ -614,22 +609,13 @@ func precedingPositional(schema *cmdparse.CommandSchema, filter string, position
 	if len(tokens) < 2 {
 		return ""
 	}
-	argFlags := make(map[rune]bool, len(schema.ArgFlags))
-	for _, af := range schema.ArgFlags {
-		argFlags[af.Short] = true
-	}
 	seen := 0
 	i := 1 // skip command name
 	for i < len(tokens) {
 		tok := tokens[i]
 		if strings.HasPrefix(tok, "-") && len(tok) >= 2 && tok != "--" {
-			flag := rune(tok[1])
-			if argFlags[flag] {
-				// arg-flag: skip flag and its value
-				i += 2
-				continue
-			}
-			i++
+			// skip the flag and, when it takes one, its value
+			i += 1 + flagValueTokensAt(schema, tokens, i)
 			continue
 		}
 		if seen == positionalIdx {
@@ -639,4 +625,17 @@ func precedingPositional(schema *cmdparse.CommandSchema, filter string, position
 		i++
 	}
 	return ""
+}
+
+// flagValueTokensAt reports how many tokens the flag at tokens[i] consumes
+// as its value (0 or 1), honouring optional-value flags that are followed by
+// another flag or by nothing.
+func flagValueTokensAt(schema *cmdparse.CommandSchema, tokens []string, i int) int {
+	flag := rune(tokens[i][1])
+	next := ""
+	hasNext := i+1 < len(tokens)
+	if hasNext {
+		next = tokens[i+1]
+	}
+	return cmdparse.FlagValueTokens(schema, flag, next, hasNext)
 }

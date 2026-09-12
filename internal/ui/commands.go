@@ -178,7 +178,7 @@ func (m *Model) handleCommandPreloadMsg(msg tea.Msg) tea.Cmd {
 	for _, item := range preload.items {
 		labels = append(labels, item.Label)
 	}
-	m.commandSchemas = cmdparse.BuildRegistry(labels)
+	m.commandSchemas = cmdparse.BuildCatalogRegistry(labels)
 	return nil
 }
 

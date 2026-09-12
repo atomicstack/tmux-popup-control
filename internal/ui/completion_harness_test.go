@@ -616,3 +616,75 @@ func sendKeys(h *Harness, text string) {
 		h.Send(tea.KeyPressMsg{Text: string(r)})
 	}
 }
+
+// The preload handler must build schemas from the option catalog: the
+// synopsis scraper alone used to lose every flag of a command whose bool
+// cluster held a digit (send-prefix [-2]).
+func TestHandleCommandPreloadUsesCatalogSchemas(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	items := []menu.Item{
+		{ID: "send-prefix", Label: "send-prefix [-2] [-t target-pane]"},
+		{ID: "resize-pane", Label: "resize-pane (resizep) [-DLMRTUZ] [-x width] [-y height] [-t target-pane] [adjustment]"},
+	}
+
+	m.handleCommandPreloadMsg(commandPreloadMsg{items: items})
+
+	schema := m.commandSchemas["send-prefix"]
+	if schema == nil {
+		t.Fatal("expected send-prefix schema")
+	}
+	if len(cmdparse.FlagCandidates(schema, nil)) != 2 {
+		t.Fatalf("expected send-prefix to offer -2 and -t, got %v", cmdparse.FlagCandidates(schema, nil))
+	}
+	if len(schema.Positionals) != 0 {
+		t.Fatalf("expected no positionals for send-prefix, got %+v", schema.Positionals)
+	}
+	if !cmdparse.SchemaFlagValueOptional(m.commandSchemas["resizep"], 'D') {
+		t.Fatal("expected catalog schema (optional-value -D) for resize-pane, not the live synopsis")
+	}
+}
+
+// "resize-pane -D " must offer further flags, since -D takes an optional
+// value, and the dropdown must label the optional value in brackets.
+func TestCompletionOptionalValueFlagOffersMoreFlags(t *testing.T) {
+	h := setupCommandHarness(t)
+	h.model.commandSchemas = cmdparse.BuildCatalogRegistry(nil)
+
+	sendKeys(h, "resize-pane")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+	sendKeys(h, "-")
+
+	if !h.model.completionVisible() {
+		t.Fatal("expected flag dropdown after 'resize-pane -'")
+	}
+	var dLabel, tLabel string
+	for _, item := range h.model.completion.items {
+		switch item.Value {
+		case "-D":
+			dLabel = item.Label
+		case "-t":
+			tLabel = item.Label
+		}
+	}
+	if dLabel != "-D [lines]" {
+		t.Errorf("expected -D labelled '-D [lines]', got %q", dLabel)
+	}
+	if tLabel != "-t <target-pane>" {
+		t.Errorf("expected -t labelled '-t <target-pane>', got %q", tLabel)
+	}
+
+	sendKeys(h, "D")
+	h.Send(tea.KeyPressMsg{Code: tea.KeySpace})
+
+	if !h.model.completionVisible() {
+		t.Fatal("expected flag dropdown to stay open after 'resize-pane -D '")
+	}
+	if got := h.model.completion.argType; got != "flag" {
+		t.Fatalf("expected flag completion after optional-value flag, got argType %q", got)
+	}
+	for _, item := range h.model.completion.filtered {
+		if item.Value == "-D" {
+			t.Fatal("expected used flag -D to be excluded from candidates")
+		}
+	}
+}

@@ -347,8 +347,20 @@ func TestTriggerCompletionKeepsRepeatableFlagAfterUse(t *testing.T) {
 	if m.completion == nil {
 		t.Fatal("expected completion state")
 	}
-	if got := m.completion.filtered[0].Value; got != "-e" {
-		t.Fatalf("expected repeatable flag -e to remain available, got %q", got)
+	// The catalog schema may know flags the synopsis above omits (e.g. -E),
+	// so only assert on the flags that were actually used: every used
+	// non-repeatable flag is gone and the repeatable -e is still offered.
+	remaining := make(map[string]bool, len(m.completion.filtered))
+	for _, item := range m.completion.filtered {
+		remaining[item.Value] = true
+	}
+	if !remaining["-e"] {
+		t.Fatalf("expected repeatable flag -e to remain available, got %v", m.completion.filtered)
+	}
+	for _, used := range []string{"-a", "-b", "-d", "-k", "-P", "-S", "-c", "-F", "-n", "-t"} {
+		if remaining[used] {
+			t.Fatalf("expected used flag %s to be excluded, got %v", used, m.completion.filtered)
+		}
 	}
 }
 
