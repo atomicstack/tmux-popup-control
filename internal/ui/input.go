@@ -138,7 +138,7 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if msg.Text == "" {
 			return false, nil
 		}
-		for _, r := range []rune(msg.Text) {
+		for _, r := range msg.Text {
 			if unicode.IsControl(r) {
 				return false, nil
 			}
@@ -259,7 +259,7 @@ func renderFilterSpans(runes []rune, offset int, spans []filterSpan, render func
 	if len(spans) == 0 || len(runes) == 0 {
 		return render(styles.Filter, string(runes))
 	}
-	var result string
+	var result strings.Builder
 	i := 0
 	for i < len(runes) {
 		absPos := offset + i
@@ -269,7 +269,7 @@ func renderFilterSpans(runes []rune, offset int, spans []filterSpan, render func
 			for j < len(runes) && spanAt(spans, offset+j) == s {
 				j++
 			}
-			result += s.Render(string(runes[i:j]))
+			result.WriteString(s.Render(string(runes[i:j])))
 			i = j
 		} else {
 			// find contiguous run outside all spans
@@ -277,11 +277,11 @@ func renderFilterSpans(runes []rune, offset int, spans []filterSpan, render func
 			for j < len(runes) && spanAt(spans, offset+j) == nil {
 				j++
 			}
-			result += render(styles.Filter, string(runes[i:j]))
+			result.WriteString(render(styles.Filter, string(runes[i:j])))
 			i = j
 		}
 	}
-	return result
+	return result.String()
 }
 
 // autoCompleteGhost returns the ghost text suffix for autocomplete, or "" if

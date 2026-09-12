@@ -12,10 +12,12 @@ import (
 )
 
 type SessionSpec struct {
-	SocketPath string
-	Name       string
-	Dir        string
-	Command    string
+	// FirstWindowIndex relocates the initial window when restoring saved indices.
+	FirstWindowIndex *int
+	SocketPath       string
+	Name             string
+	Dir              string
+	Command          string
 }
 
 type WindowSpec struct {
@@ -28,6 +30,8 @@ type WindowSpec struct {
 }
 
 type PaneSpec struct {
+	// Append creates the pane after the last existing pane, preserving saved order.
+	Append     bool
 	SocketPath string
 	Target     string
 	Dir        string
@@ -45,10 +49,28 @@ func CreateSession(spec SessionSpec) error {
 	if spec.Dir != "" {
 		args = append(args, "-c", spec.Dir)
 	}
+	if spec.FirstWindowIndex != nil {
+		args = append(args, "-P", "-F", "#{window_id}:#{window_index}")
+	}
 	if spec.Command != "" {
 		args = append(args, spec.Command)
 	}
-	_, err = client.Command(args...)
+	if spec.FirstWindowIndex == nil {
+		_, err = client.Command(args...)
+		return err
+	}
+	windowInfo, err := client.Command(args...)
+	if err != nil {
+		return err
+	}
+	windowID, currentIndex, ok := strings.Cut(strings.TrimSpace(windowInfo), ":")
+	if !ok {
+		return fmt.Errorf("invalid new session window %q", windowInfo)
+	}
+	if currentIndex == strconv.Itoa(*spec.FirstWindowIndex) {
+		return nil
+	}
+	_, err = client.Command("move-window", "-s", windowID, "-t", fmt.Sprintf("%s:%d", spec.Name, *spec.FirstWindowIndex))
 	return err
 }
 
@@ -76,6 +98,17 @@ func SplitPane(spec PaneSpec) error {
 	client, err := newTmux(spec.SocketPath)
 	if err != nil {
 		return err
+	}
+	if spec.Append {
+		output, err := client.Command("list-panes", "-t", spec.Target, "-F", "#{pane_id}")
+		if err != nil {
+			return err
+		}
+		ids := strings.Fields(output)
+		if len(ids) == 0 {
+			return fmt.Errorf("no panes in %s", spec.Target)
+		}
+		spec.Target = ids[len(ids)-1]
 	}
 	args := []string{"split-window", "-d", "-t", spec.Target}
 	if spec.Dir != "" {
@@ -220,14 +253,15 @@ func SetSessionOption(socketPath, session, option, value string) error {
 
 // ShowOption queries a tmux server-level (global) option value. Returns an
 // empty string if the option is not set or an error occurs. Results are
-// memoized per (socket, option) for the life of the process — see cache.go.
+// memoized per (socket, option) until a user command or shutdown invalidates
+// the cache — see cache.go.
 //
 // This reads via a one-shot `tmux show-options -gqv`, not the control-mode
 // connection. ShowOption feeds the autosave-status path (which tmux runs
 // roughly once per second) and the restore path; a control-mode attach in
 // either forces a full server state-sync and saturates the single-threaded
 // server during a large restore. The per-process memoization below keeps the
-// exec cost to one invocation per (socket, option).
+// exec cost to one invocation per (socket, option) between invalidations.
 func ShowOption(socketPath, option string) string {
 	return ShowOptionContext(context.Background(), socketPath, option)
 }
@@ -240,6 +274,7 @@ func ShowOptionContext(ctx context.Context, socketPath, option string) string {
 		optionCacheMu.RUnlock()
 		return v
 	}
+	generation := optionCacheGeneration
 	optionCacheMu.RUnlock()
 
 	args := append(baseArgs(socketPath), "show-options", "-gqv", option)
@@ -249,7 +284,9 @@ func ShowOptionContext(ctx context.Context, socketPath, option string) string {
 	}
 	trimmed := strings.TrimSpace(string(output))
 	optionCacheMu.Lock()
-	optionCache[key] = trimmed
+	if generation == optionCacheGeneration {
+		optionCache[key] = trimmed
+	}
 	optionCacheMu.Unlock()
 	return trimmed
 }
@@ -269,4 +306,30 @@ func DefaultCommand(socketPath string) string {
 		return sh
 	}
 	return "/bin/sh"
+}
+
+// SelectPaneByPosition selects the zero-based pane position in a window,
+// independent of its pane-base-index option. The numeric suffix is a position.
+func SelectPaneByPosition(socketPath, target string) error {
+	window, positionText, ok := strings.Cut(target, ".")
+	if !ok {
+		return fmt.Errorf("invalid pane position target %q", target)
+	}
+	position, err := strconv.Atoi(positionText)
+	if err != nil {
+		return err
+	}
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	output, err := client.Command("list-panes", "-t", window, "-F", "#{pane_id}")
+	if err != nil {
+		return err
+	}
+	ids := strings.Fields(output)
+	if position < 0 || position >= len(ids) {
+		return fmt.Errorf("pane position %d is unavailable in %s", position, window)
+	}
+	return client.SelectPane(ids[position])
 }

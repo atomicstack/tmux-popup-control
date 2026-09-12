@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,9 @@ func Installed(pluginDir string) ([]Plugin, error) {
 	}
 	var plugins []Plugin
 	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), cloneStagingPrefix) {
+			continue
+		}
 		if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
 			continue
 		}

@@ -2,29 +2,28 @@ package tmux
 
 import "sync"
 
-// optionCache memoizes per-(socket,option) global tmux option lookups for the
-// life of the process. tmux server options the binary cares about
-// (`@tmux-popup-control-*`, plus a few session-storage settings) are
-// configured at tmux startup and do not change while the popup runs, so a
-// permanent cache is safe and avoids issuing redundant `show-options`
-// commands on every backend poll cycle. Each backend tick previously fired
-// 3+ duplicate ShowOption calls for the same option; under heavy parallel
-// test load each control-mode round-trip costs hundreds of milliseconds and
-// these dominated startup latency.
+// optionCache memoizes global option reads between user commands. A generation
+// prevents reads started before invalidation from repopulating stale entries.
 var (
-	optionCacheMu sync.RWMutex
-	optionCache   = map[string]string{}
+	optionCacheMu         sync.RWMutex
+	optionCache           = map[string]string{}
+	optionCacheGeneration uint64
 )
 
 func optionCacheKey(socketPath, option string) string {
 	return socketPath + "\x00" + option
 }
 
-// resetCaches clears the per-process tmux caches. Test-only helper used by
-// table-driven cases that swap socket paths or fake clients between runs.
+// resetCaches clears per-process option reads on shutdown, after commands,
+// and when tests swap socket paths or fake clients.
 func resetCaches() {
 	optionCacheMu.Lock()
+	optionCacheGeneration++
 	optionCache = map[string]string{}
 	optionCacheMu.Unlock()
 	resetThemeColourCache()
 }
+
+// InvalidateOptionCache refreshes options after a user command may change them.
+// Commands can partially succeed, so callers invalidate even after an error.
+func InvalidateOptionCache() { resetCaches() }

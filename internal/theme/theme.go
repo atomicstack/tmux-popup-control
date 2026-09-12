@@ -42,116 +42,116 @@ type Styles struct {
 }
 
 var defaultStyles = Styles{
-	Loading: ptr(
+	Loading: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Italic(true),
 	),
-	Item: ptr(
+	Item: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 	),
-	ItemIndicator: ptr(
+	ItemIndicator: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("238")),
 	),
-	SelectedItemIndicator: ptr(
+	SelectedItemIndicator: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Background(lipgloss.Color("238")),
 	),
-	SelectedItem: ptr(
+	SelectedItem: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("238")).Bold(true),
 	),
-	Error: ptr(
+	Error: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
 	),
-	Warning: ptr(
+	Warning: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true),
 	),
-	Info: ptr(
+	Info: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 	),
-	Header: ptr(
+	Header: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true),
 	),
-	Footer: ptr(
+	Footer: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 	),
-	Filter: ptr(
+	Filter: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 	),
-	FilterPrompt: ptr(
+	FilterPrompt: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("34")).Bold(true),
 	),
-	FilterPlaceholder: ptr(
+	FilterPlaceholder: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
 	),
 	// SelectorValue styles the active value in the extract selector bar
 	// ("mode: <value>", "area: <value>") with the same accent blue (33) as
 	// the active item indicator.
-	SelectorValue: ptr(
+	SelectorValue: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true),
 	),
 	// SelectorHintKey styles the key names inside the angle brackets on the
 	// extract bar — the selector hotkeys ("<^f>", "<^g>") and the action hints
 	// ("insert: <Enter>", "copy: <Tab>") — a slightly lighter grey (245) than
 	// the surrounding labels/brackets (FilterPlaceholder, 241).
-	SelectorHintKey: ptr(
+	SelectorHintKey: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 	),
-	Cursor: ptr(
+	Cursor: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("33")).Blink(true),
 	),
-	PreviewTitle: ptr(
+	PreviewTitle: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Bold(true),
 	),
-	PreviewBody: ptr(
+	PreviewBody: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("250")),
 	),
-	PreviewError: ptr(
+	PreviewError: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true),
 	),
-	Checkbox: ptr(
+	Checkbox: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("241")),
 	),
-	CheckboxChecked: ptr(
+	CheckboxChecked: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true),
 	),
-	CheckboxAll: ptr(
+	CheckboxAll: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true),
 	),
-	ProgressFilled: ptr(
+	ProgressFilled: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("33")),
 	),
-	ProgressEmpty: ptr(
+	ProgressEmpty: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("238")),
 	),
-	ProgressEmptyBg: ptr(
+	ProgressEmptyBg: new(
 		lipgloss.NewStyle().Background(lipgloss.Color("#222222")),
 	),
-	HeaderItem: ptr(
+	HeaderItem: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("243")),
 	),
-	CompletionBorder: ptr(
+	CompletionBorder: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
 	),
-	CompletionItem: ptr(
+	CompletionItem: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 	),
-	CompletionSelected: ptr(
+	CompletionSelected: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("255")).Background(lipgloss.Color("240")),
 	),
-	OptionScopeServer: ptr(
+	OptionScopeServer: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("203")),
 	),
-	OptionScopeSession: ptr(
+	OptionScopeSession: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("39")),
 	),
-	OptionScopeWindow: ptr(
+	OptionScopeWindow: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("170")),
 	),
-	OptionScopePane: ptr(
+	OptionScopePane: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("84")),
 	),
-	OptionScopeUser: ptr(
+	OptionScopeUser: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("220")),
 	),
-	OptionScopeHook: ptr(
+	OptionScopeHook: new(
 		lipgloss.NewStyle().Foreground(lipgloss.Color("139")),
 	),
 }
@@ -159,8 +159,4 @@ var defaultStyles = Styles{
 // Default exposes the standard style set used across the application.
 func Default() *Styles {
 	return &defaultStyles
-}
-
-func ptr(style lipgloss.Style) *lipgloss.Style {
-	return &style
 }

@@ -9,8 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
@@ -91,10 +90,10 @@ func ValidateSaveName(name string) error {
 func savePath(dir, name string) string {
 	ts := time.Now().Format("20060102T150405")
 	if name == "" {
-		id := uuid.New().String()
+		id := uuid.NewV4().String()
 		return filepath.Join(dir, id+"_"+ts+".json")
 	}
-	return filepath.Join(dir, name+"_"+ts+".json")
+	return filepath.Join(dir, name+"_"+uuid.NewV4().String()+"_"+ts+".json")
 }
 
 // paneArchivePath returns the path for the pane-contents archive that
@@ -146,9 +145,14 @@ func DeleteSave(dir, path string) error {
 // created atomically via a rename so readers never see a dangling link.
 func updateLastSymlink(dir, target string) error {
 	link := filepath.Join(dir, "last")
-	tmp := link + ".tmp"
-	// remove any stale tmp link
-	_ = os.Remove(tmp)
+	tmp := link + "." + uuid.NewV4().String() + ".tmp"
+	if !filepath.IsAbs(target) && filepath.Dir(target) != "." {
+		var err error
+		target, err = filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+	}
 	if err := os.Symlink(target, tmp); err != nil {
 		return fmt.Errorf("could not create symlink: %w", err)
 	}
@@ -165,7 +169,10 @@ func WriteSaveFile(path string, sf *SaveFile) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal save file: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := atomicWriteFile(path, func(f *os.File) error {
+		_, err := f.Write(data)
+		return err
+	}); err != nil {
 		return fmt.Errorf("could not write save file %q: %w", path, err)
 	}
 	return nil
@@ -320,4 +327,25 @@ func SaveFileExists(dir, name string) bool {
 	}
 	matches, _ := filepath.Glob(filepath.Join(dir, name+"_*.json"))
 	return len(matches) > 0
+}
+
+// atomicWriteFile publishes a complete file by renaming a private sibling.
+// Readers retain the old inode until the new contents are closed and synced.
+func atomicWriteFile(path string, write func(*os.File) error) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if err := write(f); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }

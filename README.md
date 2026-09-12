@@ -201,7 +201,7 @@ list plus the env vars and tmux options that override each default.
 
 ## Prerequisites
 
-- Go 1.24+
+- go 1.27+
 - `tmux` 3.2+ available in `$PATH`
 
 ## Installation

@@ -34,8 +34,9 @@ type Watcher struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	events chan Event
-	wg     sync.WaitGroup
+	events      chan Event
+	wg          sync.WaitGroup
+	closeEvents sync.Once
 }
 
 func (k Kind) String() string {
@@ -64,10 +65,7 @@ func NewWatcher(socketPath string, interval time.Duration) *Watcher {
 
 	w.startPollers()
 
-	go func() {
-		w.wg.Wait()
-		close(w.events)
-	}()
+	go w.Wait()
 
 	return w
 }
@@ -87,6 +85,7 @@ func (w *Watcher) Stop() {
 // is closed. Call after Stop when a clean shutdown is required.
 func (w *Watcher) Wait() {
 	w.wg.Wait()
+	w.closeEvents.Do(func() { close(w.events) })
 }
 
 // fetchFunc retrieves a snapshot of one resource kind for the given socket.

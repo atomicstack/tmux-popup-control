@@ -1,23 +1,26 @@
 package plugin
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestInstallPlugin_ClonesUninstalledPlugins(t *testing.T) {
+	base := t.TempDir()
 	var calls [][]string
 	withStubGit(t, func(args ...string) ([]byte, error) {
 		calls = append(calls, args)
-		return []byte("ok"), nil
+		return []byte("ok"), os.MkdirAll(args[len(args)-1], 0700)
 	})
 
 	plugins := []Plugin{
-		{Name: "tmux-sensible", Source: "tmux-plugins/tmux-sensible", Dir: "/tmp/plugins/tmux-sensible", Installed: false},
-		{Name: "already-here", Source: "user/already-here", Dir: "/tmp/plugins/already-here", Installed: true},
+		{Name: "tmux-sensible", Source: "tmux-plugins/tmux-sensible", Dir: filepath.Join(base, "tmux-sensible"), Installed: false},
+		{Name: "already-here", Source: "user/already-here", Dir: filepath.Join(base, "already-here"), Installed: true},
 	}
 
-	err := Install("/tmp/plugins", plugins)
+	err := Install(base, plugins)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,17 +41,18 @@ func TestInstallPlugin_ClonesUninstalledPlugins(t *testing.T) {
 }
 
 func TestInstallPlugin_WithBranch(t *testing.T) {
+	base := t.TempDir()
 	var calls [][]string
 	withStubGit(t, func(args ...string) ([]byte, error) {
 		calls = append(calls, args)
-		return []byte("ok"), nil
+		return []byte("ok"), os.MkdirAll(args[len(args)-1], 0700)
 	})
 
 	plugins := []Plugin{
-		{Name: "my-plugin", Source: "user/my-plugin", Branch: "dev", Dir: "/tmp/plugins/my-plugin"},
+		{Name: "my-plugin", Source: "user/my-plugin", Branch: "dev", Dir: filepath.Join(base, "my-plugin")},
 	}
 
-	if err := Install("/tmp/plugins", plugins); err != nil {
+	if err := Install(base, plugins); err != nil {
 		t.Fatal(err)
 	}
 	args := strings.Join(calls[0], " ")
@@ -84,5 +88,18 @@ func TestUpdate_PullsAndUpdatesSubmodules(t *testing.T) {
 	subArgs := strings.Join(calls[1], " ")
 	if !strings.Contains(subArgs, "submodule") {
 		t.Errorf("second call should be submodule update, got: %s", subArgs)
+	}
+}
+
+func TestLegacyGitSeamRemainsUsable(t *testing.T) {
+	original := runGitCommand
+	t.Cleanup(func() { runGitCommand = original })
+	called := false
+	runGitCommand = func(args ...string) ([]byte, error) { called = true; return nil, nil }
+	if err := UpdatePullOne(Plugin{Name: "plugin", Dir: t.TempDir(), Installed: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("legacy git seam was bypassed")
 	}
 }

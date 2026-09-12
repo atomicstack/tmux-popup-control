@@ -200,7 +200,7 @@ func TestPaneRenameCommandUsesStub(t *testing.T) {
 }
 
 func TestPaneRenameFormEnterReturnsCommand(t *testing.T) {
-	form := NewPaneRenameForm(RenamePrompt{
+	form := NewPaneRenameForm(PanePrompt{
 		Context: Context{
 			SocketPath: "sock",
 			Panes: []PaneEntry{

@@ -1,7 +1,8 @@
 package extract
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 )
 
@@ -62,7 +63,7 @@ func runFilter(text string, def filterDef, cat Category) []Token {
 
 func extractLines(text string) []Token {
 	var out []Token
-	for _, ln := range strings.Split(text, "\n") {
+	for ln := range strings.SplitSeq(text, "\n") {
 		ln = strings.TrimSpace(ln)
 		if len([]rune(ln)) < defaultMinLength {
 			continue
@@ -89,7 +90,7 @@ func extractHosts(text string) []Token {
 	for _, m := range reHostSCP.FindAllStringSubmatchIndex(src, -1) {
 		hits = append(hits, hit{pos: m[0], host: src[m[4]:m[5]]}) // group 2
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return hits[i].pos < hits[j].pos })
+	slices.SortStableFunc(hits, func(a, b hit) int { return cmp.Compare(a.pos, b.pos) })
 	var out []Token
 	for _, h := range hits {
 		if len([]rune(h.host)) < defaultMinLength {
@@ -128,16 +129,14 @@ func extractAll(text string) []Token {
 func finalize(in []Token) []Token {
 	seen := make(map[string]struct{}, len(in))
 	out := make([]Token, 0, len(in))
-	for i := len(in) - 1; i >= 0; i-- {
-		if _, ok := seen[in[i].Text]; ok {
+	for _, token := range slices.Backward(in) {
+		if _, ok := seen[token.Text]; ok {
 			continue
 		}
-		seen[in[i].Text] = struct{}{}
-		out = append(out, in[i])
+		seen[token.Text] = struct{}{}
+		out = append(out, token)
 	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
+	slices.Reverse(out)
 	return out
 }
 

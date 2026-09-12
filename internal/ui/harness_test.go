@@ -1,27 +1,23 @@
 package ui
 
 import (
-	"reflect"
+	"github.com/atomicstack/tmux-popup-control/internal/menu"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
 )
-
-type harnessUpdateTestMsg struct{}
 
 func TestHarnessUpdateReturnsCommandWithoutExecutingIt(t *testing.T) {
 	m := NewModel(ModelConfig{})
+	m.stack = []*level{newLevel("pane:switch", "panes", []menu.Item{{ID: "dev:0.0"}}, nil)}
 	executed := false
-	m.handlers[reflect.TypeFor[harnessUpdateTestMsg]()] = func(tea.Msg) tea.Cmd {
-		return func() tea.Msg {
-			executed = true
-			return nil
-		}
+	previous := panePreviewFn
+	panePreviewFn = func(string, string) (tmux.PanePreviewData, error) {
+		executed = true
+		return tmux.PanePreviewData{}, nil
 	}
+	t.Cleanup(func() { panePreviewFn = previous })
 	h := NewHarness(m)
-
-	cmd := h.Update(harnessUpdateTestMsg{})
-
+	cmd := h.Update(previewTickMsg{})
 	if cmd == nil {
 		t.Fatal("expected update to return the model command")
 	}

@@ -38,6 +38,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 	var flagsUsed []rune
 	posIndex := 0          // how many positional args consumed
 	inPositionals := false // true once we've seen a non-flag token
+	flagsEnded := false    // true after the explicit -- terminator
 	i := 1
 	for i < len(tokens) {
 		tok := tokens[i]
@@ -46,17 +47,20 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 		// the user is mid-typing this token
 		isLast := i == len(tokens)-1 && !trailingSpace
 
-		if strings.HasPrefix(tok, "-") {
-			// bare "-" or "-X" — treat as flag territory
-			if len(tok) < 2 || isLast {
-				if isLast {
-					// user is mid-typing a flag
-					return CompletionContext{
-						Kind:      ContextFlagName,
-						Prefix:    tok,
-						FlagsUsed: flagsUsed,
-					}
-				}
+		if !flagsEnded && tok == "--" {
+			// Completion must not append a positional directly to the terminator.
+			if isLast {
+				return CompletionContext{Kind: ContextNone, FlagsUsed: flagsUsed}
+			}
+			flagsEnded = true
+			inPositionals = true
+			i++
+			continue
+		}
+
+		if !flagsEnded && strings.HasPrefix(tok, "-") && (len(tok) > 1 || isLast) {
+			if isLast {
+				return CompletionContext{Kind: ContextFlagName, Prefix: tok, FlagsUsed: flagsUsed}
 			}
 
 			flag := rune(tok[1])
@@ -130,21 +134,6 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 	}
 
 	// all tokens consumed and there's a trailing space — what comes next?
-
-	// check if the previous token was an arg flag awaiting its value
-	if len(tokens) >= 2 {
-		prevTok := tokens[len(tokens)-1]
-		if strings.HasPrefix(prevTok, "-") && len(prevTok) >= 2 {
-			flag := rune(prevTok[1])
-			if SchemaHasArgFlag(schema, flag) && !SchemaFlagValueOptional(schema, flag) {
-				return CompletionContext{
-					Kind:      ContextFlagValue,
-					ArgType:   schemaArgFlagType(schema, flag),
-					FlagsUsed: flagsUsed,
-				}
-			}
-		}
-	}
 
 	// if we haven't entered positional territory and unused flags remain,
 	// suggest a flag; once positionals have started, flags are no longer valid

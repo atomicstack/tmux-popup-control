@@ -205,8 +205,6 @@ func LastAutoSaveSuccess(dir string) (time.Time, error) {
 	switch {
 	case err == nil && !state.LastSuccess.IsZero():
 		return state.LastSuccess, nil
-	case err != nil && !errors.Is(err, os.ErrNotExist):
-		return time.Time{}, err
 	}
 
 	entries, err := ListSaves(dir)
@@ -226,7 +224,10 @@ func WriteAutoSaveState(dir string, ts time.Time) error {
 	if err != nil {
 		return fmt.Errorf("marshal autosave state: %w", err)
 	}
-	if err := os.WriteFile(autosaveStatePath(dir), data, 0o600); err != nil {
+	if err := atomicWriteFile(autosaveStatePath(dir), func(f *os.File) error {
+		_, err := f.Write(data)
+		return err
+	}); err != nil {
 		return fmt.Errorf("write autosave state: %w", err)
 	}
 	return nil

@@ -20,9 +20,6 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	if current == nil {
 		return tea.Quit
 	}
-	if len(m.stack) <= 1 {
-		return tea.Quit
-	}
 	if current.ID == "window:swap-target" {
 		m.pendingWindowSwap = nil
 	}
@@ -37,20 +34,18 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	var revertCmd tea.Cmd
 	if current.ID == "window:layout" {
 		if revert, ok := layoutRevertFromData(current.Data); ok {
-			socket := m.socketPath
-			revertCmd = func() tea.Msg {
-				err := layoutPreviewFn(socket, revert.Layout)
-				if err == nil && revert.Zoomed {
-					// select-layout unzoomed the window on the first
-					// preview; put the zoom back once the layout is.
-					err = zoomWindowFn(socket)
-				}
-				return layoutAppliedMsg{levelID: "window:layout", err: err}
-			}
+			revertCmd = m.layoutMutationCmd(m.socketPath, revert.Layout, revert.Zoomed, current.ID, 0)
 		}
 	}
 
 	m.clearPreview(current.ID)
+	if len(m.stack) <= 1 {
+		m.loading = true
+		if revertCmd != nil {
+			return func() tea.Msg { revertCmd(); return tea.Quit() }
+		}
+		return tea.Quit
+	}
 	parent := m.stack[len(m.stack)-2]
 	m.stack = m.stack[:len(m.stack)-1]
 	if parent != nil {
@@ -211,7 +206,11 @@ func (m *Model) handleEnterKey() tea.Cmd {
 			m.pendingLabel = item.Label
 			m.errMsg = ""
 			m.forceClearInfo()
-			return m.bus.Execute(ctx, command.Request{ID: node.ID, Label: item.Label, Handler: node.Action, Item: item})
+			cmd := m.bus.Execute(ctx, command.Request{ID: node.ID, Label: item.Label, Handler: node.Action, Item: item})
+			if current.ID == "window:layout" {
+				return m.serializeLayoutCommand(cmd)
+			}
+			return cmd
 		}
 	}
 	m.setInfo(fmt.Sprintf("Selected %s (no action defined yet)", item.Label))

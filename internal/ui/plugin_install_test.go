@@ -479,7 +479,7 @@ func TestPluginInstallInstallPhasesAdvanceProgress(t *testing.T) {
 		t.Fatalf("expected entry status cloning, got %v", got)
 	}
 
-	m.handlePluginInstallResultMsg(pluginInstallResultMsg{index: 0, err: nil})
+	m.handlePluginInstallResultMsg(pluginInstallResultMsg{operation: m.pluginInstallState, index: 0, err: nil})
 	if !m.pluginInstallState.finished {
 		t.Fatal("expected install flow to finish after result")
 	}
@@ -516,7 +516,7 @@ func TestPluginInstallUpdatePhasesAdvanceProgress(t *testing.T) {
 		t.Fatalf("expected entry status pulling, got %v", got)
 	}
 
-	m.handlePluginInstallStageMsg(pluginInstallStageMsg{index: 0, phase: pluginInstallSubmodules})
+	m.handlePluginInstallStageMsg(pluginInstallStageMsg{operation: m.pluginInstallState, index: 0, phase: pluginInstallSubmodules})
 	if got := m.pluginInstallState.progressCurrent; got != 4 {
 		t.Fatalf("expected progressCurrent=4 after submodules stage, got %d", got)
 	}
@@ -524,7 +524,7 @@ func TestPluginInstallUpdatePhasesAdvanceProgress(t *testing.T) {
 		t.Fatalf("expected entry status submodules, got %v", got)
 	}
 
-	m.handlePluginInstallResultMsg(pluginInstallResultMsg{index: 0, err: nil})
+	m.handlePluginInstallResultMsg(pluginInstallResultMsg{operation: m.pluginInstallState, index: 0, err: nil})
 	if !m.pluginInstallState.finished {
 		t.Fatal("expected update flow to finish after result")
 	}
@@ -553,7 +553,7 @@ func TestPluginInstallUpdateFailureFinishesProgress(t *testing.T) {
 		t.Fatalf("expected pulling stage, got %v", stage.phase)
 	}
 	m.handlePluginInstallStageMsg(stage)
-	m.handlePluginInstallResultMsg(pluginInstallResultMsg{index: 0, err: errors.New("pull failed")})
+	m.handlePluginInstallResultMsg(pluginInstallResultMsg{operation: m.pluginInstallState, index: 0, err: errors.New("pull failed")})
 
 	if !m.pluginInstallState.finished {
 		t.Fatal("expected update flow to finish after pull failure")

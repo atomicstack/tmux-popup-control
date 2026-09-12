@@ -1168,12 +1168,6 @@ func TestRestoreMergeIdempotent(t *testing.T) {
 	})
 	defer r11()
 
-	// simulate that the marker was already set from a prior restore
-	markerKey := restoreMarkerKey("work")
-	r12, r13 := withStatefulSessionOptionFns(map[string]string{markerKey: "1"})
-	defer r12()
-	defer r13()
-
 	sf := buildSaveFile(Session{
 		Name: "work",
 		Windows: []Window{
@@ -1182,6 +1176,11 @@ func TestRestoreMergeIdempotent(t *testing.T) {
 		},
 	})
 	path := writeSaveFile(t, dir, "repeat", sf)
+	// simulate that the marker was already set from a prior restore
+	markerKey := restoreMarkerKey("work", restoreSaveIdentity(sf))
+	r12, r13 := withStatefulSessionOptionFns(map[string]string{markerKey: "1"})
+	defer r12()
+	defer r13()
 
 	cfg := Config{SaveDir: dir}
 	ch := Restore(t.Context(), cfg, path)
@@ -1289,7 +1288,7 @@ func TestRestoreMergeSetsMarker(t *testing.T) {
 	if setOptions[0].session != "dev" {
 		t.Errorf("marker session: got %q, want %q", setOptions[0].session, "dev")
 	}
-	wantKey := "@tmux-popup-control-session-restored-dev"
+	wantKey := restoreMarkerKey("dev", restoreSaveIdentity(sf))
 	if setOptions[0].option != wantKey {
 		t.Errorf("marker key: got %q, want %q", setOptions[0].option, wantKey)
 	}
@@ -1366,7 +1365,7 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 	if len(setOptions) != 1 {
 		t.Fatalf("expected 1 set-option call, got %d", len(setOptions))
 	}
-	wantKey := "@tmux-popup-control-session-restored-fresh"
+	wantKey := restoreMarkerKey("fresh", restoreSaveIdentity(sf))
 	if setOptions[0].option != wantKey {
 		t.Errorf("marker key: got %q, want %q", setOptions[0].option, wantKey)
 	}

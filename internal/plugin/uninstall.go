@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,9 +11,20 @@ import (
 
 // Uninstall removes the specified plugin directories.
 func Uninstall(pluginDir string, plugins []Plugin) error {
+	return UninstallContext(context.Background(), pluginDir, plugins)
+}
+
+// UninstallContext is the cancellable variant of Uninstall.
+func UninstallContext(ctx context.Context, pluginDir string, plugins []Plugin) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	var errs []error
 	cleanBase := filepath.Clean(pluginDir) + string(os.PathSeparator)
 	for _, p := range plugins {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(append(errs, err)...)
+		}
 		if p.Dir == "" {
 			continue
 		}

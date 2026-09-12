@@ -12,5 +12,5 @@ type RenameRequest struct {
 	Value   string
 }
 
-type PanePrompt = RenamePrompt
-type WindowPrompt = RenamePrompt
+type PanePrompt RenamePrompt
+type WindowPrompt RenamePrompt

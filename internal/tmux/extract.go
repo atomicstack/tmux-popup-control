@@ -1,7 +1,8 @@
 package tmux
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -69,7 +70,7 @@ func WindowPaneIDs(socketPath, paneTarget string) ([]string, error) {
 		panes = append(panes, indexedPane{index: index, id: fields[1]})
 	}
 
-	sort.SliceStable(panes, func(i, j int) bool { return panes[i].index < panes[j].index })
+	slices.SortStableFunc(panes, func(a, b indexedPane) int { return cmp.Compare(a.index, b.index) })
 
 	ids := make([]string, len(panes))
 	for i, p := range panes {

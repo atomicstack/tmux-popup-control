@@ -362,3 +362,21 @@ func TestWatcherItemCount(t *testing.T) {
 		})
 	}
 }
+
+func TestWaitClosesEventsBeforeReturning(t *testing.T) {
+	w := &Watcher{events: make(chan Event, 1)}
+	w.wg.Go(func() { w.events <- Event{Kind: KindPanes} })
+	w.Wait()
+	if event, ok := <-w.Events(); !ok || event.Kind != KindPanes {
+		t.Fatal("wait discarded buffered event")
+	}
+	select {
+	case _, ok := <-w.Events():
+		if ok {
+			t.Fatal("unexpected event")
+		}
+	default:
+		t.Fatal("wait returned before the events channel closed")
+	}
+	w.Wait() // concurrent/background and repeated waits must be safe.
+}

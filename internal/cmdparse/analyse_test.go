@@ -253,3 +253,56 @@ func TestAnalyseRequiredValueFlagStillDemandsValue(t *testing.T) {
 		t.Fatalf("expected ContextFlagValue, got %d", ctx.Kind)
 	}
 }
+
+func TestAnalyseIncompleteFlagTokens(t *testing.T) {
+	schema := &CommandSchema{Name: "new-session", BoolFlags: []rune{'d'}, ArgFlags: []ArgFlagDef{{Short: 's', ArgType: "session-name"}}, Positionals: []PositionalDef{{Name: "shell-command"}, {Name: "argument", Variadic: true}}}
+	reg := buildTestRegistry(schema)
+	for _, tt := range []struct {
+		input       string
+		kind        ContextKind
+		arg, prefix string
+	}{
+		{"new-session - ", ContextPositionalValue, "argument", ""},
+		{"new-session -- ", ContextPositionalValue, "shell-command", ""},
+		{"new-session -- -s", ContextPositionalValue, "shell-command", "-s"},
+		{"new-session -- -s ", ContextPositionalValue, "argument", ""},
+		{"new-session -s - ", ContextFlagName, "", ""},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			got := Analyse(reg, tt.input)
+			if got.Kind != tt.kind || got.ArgType != tt.arg || got.Prefix != tt.prefix {
+				t.Fatalf("got %+v, want kind %v, arg %q, prefix %q", got, tt.kind, tt.arg, tt.prefix)
+			}
+		})
+	}
+}
+
+func FuzzAnalyseIncompleteInput(f *testing.F) {
+	reg := buildTestRegistry(attachSchema(), bindKeySchema(), resizePaneSchema(), &CommandSchema{Name: "new-session", BoolFlags: []rune{'d'}})
+	for _, seed := range []string{"new-session - ", "new-session -- ", "attach-session -t ", "attach-session -t - ", "bind-key -- -T ", "resize-pane -D -", "bind-key '", "bind-key \\", "attach-session \"-"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, input string) { Analyse(reg, input) })
+}
+
+func TestAnalyseFlagTerminatorRequiresSeparator(t *testing.T) {
+	schema := &CommandSchema{Name: "set-option", BoolFlags: []rune{'g'}, Positionals: []PositionalDef{{Name: "option-name"}, {Name: "value"}}}
+	reg := buildTestRegistry(schema)
+	for _, tt := range []struct {
+		input string
+		kind  ContextKind
+		arg   string
+	}{
+		{"set-option --", ContextNone, ""},
+		{"set-option -g --", ContextNone, ""},
+		{"set-option -- ", ContextPositionalValue, "option-name"},
+		{"set-option -g -- ", ContextPositionalValue, "option-name"},
+	} {
+		t.Run(tt.input, func(t *testing.T) {
+			got := Analyse(reg, tt.input)
+			if got.Kind != tt.kind || got.ArgType != tt.arg {
+				t.Fatalf("got %+v, want kind %v and arg %q", got, tt.kind, tt.arg)
+			}
+		})
+	}
+}

@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/logging"
 	"github.com/atomicstack/tmux-popup-control/internal/shquote"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 // listCommandsFn fetches the tmux command list. Swappable for tests.
@@ -66,6 +67,7 @@ func RunCommand(socketPath, command string) tea.Cmd {
 			return ActionResult{Err: err}
 		}
 		out, err := runCommandOutputFn(socketPath, args...)
+		tmux.InvalidateOptionCache()
 		span.AddAttr("argv", args)
 		span.AddAttr("output_bytes", len(out))
 		if err != nil {

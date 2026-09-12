@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -169,7 +170,9 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 	}
 
 	if res.WindowsUpdated {
-		m.pendingWindowSwap = nil
+		if m.pendingWindowSwap != nil && !slices.ContainsFunc(ctx.Windows, func(entry menu.WindowEntry) bool { return entry.ID == m.pendingWindowSwap.ID }) {
+			m.pendingWindowSwap = nil
+		}
 		m.applySimpleLevelUpdates(ctx, []levelUpdate{
 			{"window:switch", menu.WindowSwitchItems},
 		})
@@ -191,7 +194,9 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 	}
 
 	if res.PanesUpdated {
-		m.pendingPaneSwap = nil
+		if m.pendingPaneSwap != nil && !slices.ContainsFunc(ctx.Panes, func(entry menu.PaneEntry) bool { return entry.ID == m.pendingPaneSwap.ID }) {
+			m.pendingPaneSwap = nil
+		}
 		m.applySimpleLevelUpdates(ctx, []levelUpdate{
 			{"pane:switch", paneSwitchItems},
 			{"pane:break", paneBreakItems},

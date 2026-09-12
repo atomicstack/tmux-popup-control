@@ -107,9 +107,17 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 	if err != nil {
 		lines = fallbackWindowLines(allWindows)
 	}
-	windowMap := make(map[string]*gotmux.Window, len(allWindows))
+	type windowLink struct {
+		id, session string
+		index       int
+	}
+	windowMap := make(map[windowLink]*gotmux.Window, len(allWindows))
 	for _, w := range allWindows {
-		windowMap[w.Id] = w
+		session := w.Session
+		if session == "" {
+			session = firstSession(w)
+		}
+		windowMap[windowLink{w.Id, session, w.Index}] = w
 	}
 	currentSession := currentSessionName(ctx, client)
 	includeCurrent := envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_SWITCH_CURRENT", "@tmux-popup-control-switch-current") != ""
@@ -117,9 +125,11 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 	snapshot.IncludeCurrent = includeCurrent
 	snapshot.CurrentSession = currentSession
 	for _, line := range lines {
-		w := windowMap[line.windowID]
+		// The global window id is shared across links; session/index/active
+		// belong to the link represented by this formatted row.
+		session, idx := line.session, line.index
+		w := windowMap[windowLink{line.windowID, session, idx}]
 		if w == nil {
-			session := strings.TrimSpace(line.session)
 			entry := Window{
 				ID:         line.displayID,
 				Session:    session,
@@ -128,15 +138,8 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 				Label:      line.label,
 				InternalID: line.windowID,
 			}
-			if session == currentSession {
-				entry.Current = true
-			}
 			snapshot.Windows = append(snapshot.Windows, entry)
 			continue
-		}
-		session := firstSession(w)
-		if session == "" {
-			session = strings.TrimSpace(w.Session)
 		}
 		displayID := line.displayID
 		if displayID == "" {
@@ -390,7 +393,10 @@ func fetchWindowLines(ctx context.Context, socketPath string, client tmuxClient)
 func fallbackWindowLines(windows []*gotmux.Window) []windowLine {
 	lines := make([]windowLine, 0, len(windows))
 	for _, w := range windows {
-		session := firstSession(w)
+		session := w.Session
+		if session == "" {
+			session = firstSession(w)
+		}
 		id := fmt.Sprintf("%s:%d", session, w.Index)
 		label := fmt.Sprintf("%s:%d %s", session, w.Index, w.Name)
 		lines = append(lines, windowLine{windowID: w.Id, session: session, index: w.Index, displayID: id, label: label})

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"image/color"
 	"os"
@@ -41,6 +42,8 @@ type pluginInstallEntry struct {
 }
 
 type pluginInstallState struct {
+	ctx             context.Context
+	cancel          context.CancelFunc
 	entries         []pluginInstallEntry
 	pluginDir       string
 	operation       string // "install" or "update"
@@ -52,23 +55,28 @@ type pluginInstallState struct {
 }
 
 type pluginInstallStageMsg struct {
-	index int
-	phase pluginInstallStatus
+	operation *pluginInstallState
+	index     int
+	phase     pluginInstallStatus
 }
 
 type pluginInstallResultMsg struct {
-	index int
-	err   error
+	operation *pluginInstallState
+	index     int
+	err       error
 }
 
 var reloadPluginsFn = plugin.Source
 
 func (m *Model) startPluginProgress(plugins []plugin.Plugin, pluginDir, operation string) tea.Cmd {
+	m.stopPluginInstall()
+	ctx, cancel := context.WithCancel(m.ctx)
 	entries := make([]pluginInstallEntry, len(plugins))
 	for i, p := range plugins {
 		entries[i] = pluginInstallEntry{plugin: p, status: pluginInstallQueued}
 	}
 	s := &pluginInstallState{
+		ctx: ctx, cancel: cancel,
 		entries:       entries,
 		pluginDir:     pluginDir,
 		operation:     operation,
@@ -138,14 +146,14 @@ func (m *Model) handlePluginInstallKey(msg tea.Msg) (bool, tea.Cmd) {
 		switch keyMsg.String() {
 		case "y", "Y":
 			if len(s.installed) == 0 {
-				m.pluginInstallState = nil
+				m.stopPluginInstall()
 				m.mode = ModeMenu
 				return true, nil
 			}
 			installed := s.installed
 			pluginDir := s.pluginDir
 			summary := s.summary
-			m.pluginInstallState = nil
+			m.stopPluginInstall()
 			m.mode = ModeMenu
 			m.loading = true
 			m.pendingLabel = "reloading plugins"
@@ -160,7 +168,7 @@ func (m *Model) handlePluginInstallKey(msg tea.Msg) (bool, tea.Cmd) {
 			}
 		case "n", "N", "esc":
 			summary := s.summary
-			m.pluginInstallState = nil
+			m.stopPluginInstall()
 			m.mode = ModeMenu
 			if len(s.installed) > 0 {
 				return true, func() tea.Msg {
@@ -173,7 +181,7 @@ func (m *Model) handlePluginInstallKey(msg tea.Msg) (bool, tea.Cmd) {
 	}
 
 	if keyMsg.String() == "esc" {
-		m.pluginInstallState = nil
+		m.stopPluginInstall()
 		m.mode = ModeMenu
 		return true, nil
 	}
@@ -216,7 +224,7 @@ func (m *Model) handlePluginUninstallAskingKey(s *pluginInstallState, key tea.Ke
 		m.advancePluginUninstallAsking()
 		return m.maybeStartUninstallRemoval(), true
 	case "esc":
-		m.pluginInstallState = nil
+		m.stopPluginInstall()
 		m.mode = ModeMenu
 		return nil, true
 	}
@@ -268,7 +276,7 @@ func (m *Model) maybeStartUninstallRemoval() tea.Cmd {
 func (m *Model) handlePluginInstallStageMsg(msg tea.Msg) tea.Cmd {
 	stage := msg.(pluginInstallStageMsg)
 	s := m.pluginInstallState
-	if s == nil {
+	if s == nil || stage.operation != s || s.finished {
 		return nil
 	}
 	if stage.index < 0 || stage.index >= len(s.entries) {
@@ -283,7 +291,7 @@ func (m *Model) handlePluginInstallStageMsg(msg tea.Msg) tea.Cmd {
 func (m *Model) handlePluginInstallResultMsg(msg tea.Msg) tea.Cmd {
 	done := msg.(pluginInstallResultMsg)
 	s := m.pluginInstallState
-	if s == nil {
+	if s == nil || done.operation != s || s.finished || done.index < 0 || done.index >= len(s.entries) {
 		return nil
 	}
 	if done.index >= 0 && done.index < len(s.entries) {
@@ -327,7 +335,7 @@ func (m *Model) advancePluginInstall() tea.Cmd {
 			nextPhase = pluginInstallCloning
 		}
 		return func() tea.Msg {
-			return pluginInstallStageMsg{index: idx, phase: nextPhase}
+			return pluginInstallStageMsg{operation: s, index: idx, phase: nextPhase}
 		}
 	}
 	return m.finishPluginInstall()
@@ -416,27 +424,27 @@ func (m *Model) runPluginInstallStage(index int, phase pluginInstallStatus) tea.
 	case pluginInstallCloning:
 		return func() tea.Msg {
 			events.Plugins.Install(p.Name)
-			return pluginInstallResultMsg{index: index, err: plugin.InstallOne(s.pluginDir, p)}
+			return pluginInstallResultMsg{operation: s, index: index, err: plugin.InstallOneContext(s.ctx, s.pluginDir, p)}
 		}
 	case pluginInstallPulling:
 		return func() tea.Msg {
 			events.Plugins.Update(p.Name)
-			if err := plugin.UpdatePullOne(p); err != nil {
-				return pluginInstallResultMsg{index: index, err: err}
+			if err := plugin.UpdatePullOneContext(s.ctx, p); err != nil {
+				return pluginInstallResultMsg{operation: s, index: index, err: err}
 			}
-			return pluginInstallStageMsg{index: index, phase: pluginInstallSubmodules}
+			return pluginInstallStageMsg{operation: s, index: index, phase: pluginInstallSubmodules}
 		}
 	case pluginInstallSubmodules:
 		return func() tea.Msg {
-			if err := plugin.UpdateSubmodulesOne(p); err != nil {
-				return pluginInstallResultMsg{index: index, err: err}
+			if err := plugin.UpdateSubmodulesOneContext(s.ctx, p); err != nil {
+				return pluginInstallResultMsg{operation: s, index: index, err: err}
 			}
-			return pluginInstallResultMsg{index: index, err: nil}
+			return pluginInstallResultMsg{operation: s, index: index, err: nil}
 		}
 	case pluginInstallRemoving:
 		return func() tea.Msg {
 			events.Plugins.Uninstall(p.Name)
-			return pluginInstallResultMsg{index: index, err: plugin.Uninstall(s.pluginDir, []plugin.Plugin{p})}
+			return pluginInstallResultMsg{operation: s, index: index, err: plugin.UninstallContext(s.ctx, s.pluginDir, []plugin.Plugin{p})}
 		}
 	default:
 		return nil
@@ -912,4 +920,11 @@ func sourceableInstalledPlugins(pluginDir string, plugins []plugin.Plugin) []plu
 		out[i] = p
 	}
 	return out
+}
+
+func (m *Model) stopPluginInstall() {
+	if s := m.pluginInstallState; s != nil && s.cancel != nil {
+		s.cancel()
+	}
+	m.pluginInstallState = nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"os/exec"
 	"slices"
-	"sync"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
 )
@@ -111,34 +110,7 @@ type sessionHandle interface {
 var (
 	defaultSessionFormat = "#S: #{session_windows} windows#{?session_attached, (attached),}"
 
-	clientMu     sync.Mutex
-	cachedClient tmuxClient
-	cachedSocket string
-
-	newTmux = func(socketPath string) (tmuxClient, error) {
-		clientMu.Lock()
-		defer clientMu.Unlock()
-		if cachedClient != nil && cachedSocket == socketPath {
-			return cachedClient, nil
-		}
-		if cachedClient != nil {
-			cachedClient.Close()
-		}
-		var c tmuxClient
-		var err error
-		if socketPath != "" {
-			c, err = gotmux.NewTmux(socketPath)
-		} else {
-			c, err = gotmux.DefaultTmux()
-		}
-		if err != nil {
-			return nil, err
-		}
-		cachedClient = newTracedTmuxClient(socketPath, c)
-		cachedSocket = socketPath
-		configureControlClient(cachedClient)
-		return cachedClient, nil
-	}
+	newTmux = sharedTmux
 
 	runExecCommand = func(name string, args ...string) commander {
 		return tracedCommander{
@@ -300,20 +272,4 @@ func (h *realSessionHandle) Detach() error {
 
 func (h *realSessionHandle) Kill() error {
 	return h.session.Kill()
-}
-
-// Shutdown closes the cached control-mode connection, if any.
-// Call this at application exit to avoid leaking tmux -C processes.
-func Shutdown() {
-	clientMu.Lock()
-	if cachedClient != nil {
-		cachedClient.Close()
-		cachedClient = nil
-		cachedSocket = ""
-	}
-	clientMu.Unlock()
-	// Drop memoized lookups too — callers reaching for Shutdown expect a
-	// fully clean slate before reconnecting (tests, in particular, swap
-	// sockets/sessions and would otherwise read stale cache entries).
-	resetCaches()
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -79,6 +80,8 @@ func newLevel(id, title string, items []menu.Item, node *menu.Node) *level {
 
 // Model implements the Bubble Tea model for the tmux popup menu.
 type Model struct {
+	ctx                        context.Context
+	cancel                     context.CancelFunc
 	stack                      []*level
 	loading                    bool
 	pendingID                  string
@@ -100,6 +103,7 @@ type Model struct {
 	paneForm                   *menu.PaneRenameForm
 	saveForm                   *menu.SaveForm
 	paneCaptureForm            *menu.PaneCaptureForm
+	layoutMutations            *layoutMutations
 	pendingWindowSwap          *menu.Item
 	pendingPaneSwap            *menu.Item
 	commandItemsCache          []menu.Item
@@ -122,8 +126,6 @@ type Model struct {
 	extractModeSeq             int
 	extractAreaPopup           *completionState
 	extractAreaPrePopup        extract.GrabArea
-
-	handlers map[reflect.Type]msgHandler
 
 	registry           *menu.Registry
 	bus                *command.Bus
@@ -183,7 +185,9 @@ func NewModel(cfg ModelConfig) *Model {
 	panes.SetIncludeCurrent(true)
 	rootItems := menu.RootItems()
 	root := newLevel("root", "Main Menu", rootItems, registry.Root())
+	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
+		ctx: ctx, cancel: cancel,
 		stack:        []*level{root},
 		registry:     registry,
 		bus:          command.New(),
@@ -217,7 +221,6 @@ func NewModel(cfg ModelConfig) *Model {
 	}
 	m.previewBlink = cursor.New()
 	m.applyRootMenuOverride(cfg.RootMenu)
-	m.registerHandlers()
 	return m
 }
 
@@ -234,7 +237,9 @@ func (m *Model) Init() tea.Cmd {
 		cmds = append(cmds, m.initCmd)
 		m.initCmd = nil
 	}
-	cmds = append(cmds, previewTick())
+	if !m.noPreview {
+		cmds = append(cmds, previewTick())
+	}
 	if m.commandItemsCache == nil {
 		if node, ok := m.registry.Find("command"); ok && node.Loader != nil {
 			cmds = append(cmds, preloadCommandList(m.socketPath, node.Loader))
@@ -273,20 +278,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd := m.updatePreviewBlinkModel(msg); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	if handled, cmd := m.handleActiveForm(msg); handled {
-		if cmd != nil {
+	handler := m.handlerFor(msg)
+	_, isKey := msg.(tea.KeyPressMsg)
+	_, isMouse := msg.(tea.MouseWheelMsg)
+	if handler == nil || isKey || isMouse {
+		if handled, cmd := m.handleActiveForm(msg); handled {
 			cmds = append(cmds, cmd)
+			return m, m.finishUpdate(cmds)
 		}
-		span.AddAttr("cmd_count", len(cmds))
-		return m, m.finishUpdate(cmds)
 	}
-
-	if handler := m.handlerFor(msg); handler != nil {
-		if cmd := handler(msg); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		span.AddAttr("cmd_count", len(cmds))
-		return m, m.finishUpdate(cmds)
+	if handler != nil {
+		cmds = append(cmds, handler(msg))
 	}
 
 	span.AddAttr("cmd_count", len(cmds))
@@ -314,58 +316,78 @@ func (m *Model) handleActiveForm(msg tea.Msg) (bool, tea.Cmd) {
 	}
 }
 
-func (m *Model) registerHandlers() {
-	m.handlers = map[reflect.Type]msgHandler{
-		reflect.TypeFor[tea.KeyPressMsg]():            m.handleKeyMsg,
-		reflect.TypeFor[tea.WindowSizeMsg]():          m.handleWindowSizeMsg,
-		reflect.TypeFor[categoryLoadedMsg]():          m.handleCategoryLoadedMsg,
-		reflect.TypeFor[menu.ActionResult]():          m.handleActionResultMsg,
-		reflect.TypeFor[menu.WindowPrompt]():          m.handleWindowPromptMsg,
-		reflect.TypeFor[menu.PanePrompt]():            m.handlePanePromptMsg,
-		reflect.TypeFor[menu.WindowSwapPrompt]():      m.handleWindowSwapPromptMsg,
-		reflect.TypeFor[menu.PaneSwapPrompt]():        m.handlePaneSwapPromptMsg,
-		reflect.TypeFor[menu.SessionPrompt]():         m.handleSessionPromptMsg,
-		reflect.TypeFor[backendEventMsg]():            m.handleBackendEventMsg,
-		reflect.TypeFor[backendDoneMsg]():             m.handleBackendDoneMsg,
-		reflect.TypeFor[commandPreloadMsg]():          m.handleCommandPreloadMsg,
-		reflect.TypeFor[userOptionsPreloadMsg]():      m.handleUserOptionsPreloadMsg,
-		reflect.TypeFor[previewTickMsg]():             m.handlePreviewTickMsg,
-		reflect.TypeFor[previewLoadedMsg]():           m.handlePreviewLoadedMsg,
-		reflect.TypeFor[layoutAppliedMsg]():           m.handleLayoutAppliedMsg,
-		reflect.TypeFor[tea.MouseWheelMsg]():          m.handleMouseMsg,
-		reflect.TypeFor[menu.PluginConfirmPrompt]():   m.handlePluginConfirmPromptMsg,
-		reflect.TypeFor[menu.PluginInstallStart]():    m.handlePluginInstallStartMsg,
-		reflect.TypeFor[menu.PluginUpdateStart]():     m.handlePluginUpdateStartMsg,
-		reflect.TypeFor[pluginInstallStageMsg]():      m.handlePluginInstallStageMsg,
-		reflect.TypeFor[pluginInstallResultMsg]():     m.handlePluginInstallResultMsg,
-		reflect.TypeFor[menu.ResurrectStart]():        m.handleResurrectStartMsg,
-		reflect.TypeFor[resurrectProgressMsg]():       m.handleResurrectProgressMsg,
-		reflect.TypeFor[resurrectTickMsg]():           m.handleResurrectTickMsg,
-		reflect.TypeFor[resurrectAnimTickMsg]():       m.handleResurrectAnimTickMsg,
-		reflect.TypeFor[restoreRefreshTickMsg]():      m.handleRestoreRefreshTickMsg,
-		reflect.TypeFor[restoreRefreshLoadedMsg]():    m.handleRestoreRefreshLoadedMsg,
-		reflect.TypeFor[menu.SaveAsPrompt]():          m.handleSaveAsPromptMsg,
-		reflect.TypeFor[menu.PaneCapturePrompt]():     m.handlePaneCapturePromptMsg,
-		reflect.TypeFor[menu.PaneCapturePreviewMsg](): m.handlePaneCapturePreviewMsg,
-		reflect.TypeFor[deleteSavedReloadedMsg]():     m.handleDeleteSavedReloadedMsg,
-		reflect.TypeFor[extractReloadMsg]():           m.handleExtractReloadMsg,
-		reflect.TypeFor[extractDoneMsg]():             m.handleExtractDoneMsg,
-		reflect.TypeFor[extractModeTimeoutMsg]():      m.handleExtractModeTimeoutMsg,
-	}
-}
-
 func (m *Model) handlerFor(msg tea.Msg) msgHandler {
-	if msg == nil || m.handlers == nil {
-		return nil
-	}
-	t := reflect.TypeOf(msg)
-	if handler, ok := m.handlers[t]; ok {
-		return handler
-	}
-	if t.Kind() == reflect.Ptr {
-		if handler, ok := m.handlers[t.Elem()]; ok {
-			return handler
-		}
+	switch msg.(type) {
+	case tea.KeyPressMsg:
+		return m.handleKeyMsg
+	case tea.WindowSizeMsg:
+		return m.handleWindowSizeMsg
+	case categoryLoadedMsg:
+		return m.handleCategoryLoadedMsg
+	case menu.ActionResult:
+		return m.handleActionResultMsg
+	case menu.WindowPrompt:
+		return m.handleWindowPromptMsg
+	case menu.PanePrompt:
+		return m.handlePanePromptMsg
+	case menu.WindowSwapPrompt:
+		return m.handleWindowSwapPromptMsg
+	case menu.PaneSwapPrompt:
+		return m.handlePaneSwapPromptMsg
+	case menu.SessionPrompt:
+		return m.handleSessionPromptMsg
+	case backendEventMsg:
+		return m.handleBackendEventMsg
+	case backendDoneMsg:
+		return m.handleBackendDoneMsg
+	case commandPreloadMsg:
+		return m.handleCommandPreloadMsg
+	case userOptionsPreloadMsg:
+		return m.handleUserOptionsPreloadMsg
+	case previewTickMsg:
+		return m.handlePreviewTickMsg
+	case previewLoadedMsg:
+		return m.handlePreviewLoadedMsg
+	case layoutAppliedMsg:
+		return m.handleLayoutAppliedMsg
+	case tea.MouseWheelMsg:
+		return m.handleMouseMsg
+	case menu.PluginConfirmPrompt:
+		return m.handlePluginConfirmPromptMsg
+	case menu.PluginInstallStart:
+		return m.handlePluginInstallStartMsg
+	case menu.PluginUpdateStart:
+		return m.handlePluginUpdateStartMsg
+	case pluginInstallStageMsg:
+		return m.handlePluginInstallStageMsg
+	case pluginInstallResultMsg:
+		return m.handlePluginInstallResultMsg
+	case menu.ResurrectStart:
+		return m.handleResurrectStartMsg
+	case resurrectProgressMsg:
+		return m.handleResurrectProgressMsg
+	case resurrectTickMsg:
+		return m.handleResurrectTickMsg
+	case resurrectAnimTickMsg:
+		return m.handleResurrectAnimTickMsg
+	case restoreRefreshTickMsg:
+		return m.handleRestoreRefreshTickMsg
+	case restoreRefreshLoadedMsg:
+		return m.handleRestoreRefreshLoadedMsg
+	case menu.SaveAsPrompt:
+		return m.handleSaveAsPromptMsg
+	case menu.PaneCapturePrompt:
+		return m.handlePaneCapturePromptMsg
+	case menu.PaneCapturePreviewMsg:
+		return m.handlePaneCapturePreviewMsg
+	case deleteSavedReloadedMsg:
+		return m.handleDeleteSavedReloadedMsg
+	case extractReloadMsg:
+		return m.handleExtractReloadMsg
+	case extractDoneMsg:
+		return m.handleExtractDoneMsg
+	case extractModeTimeoutMsg:
+		return m.handleExtractModeTimeoutMsg
 	}
 	return nil
 }
@@ -381,4 +403,15 @@ func (m *Model) finishUpdate(cmds []tea.Cmd) tea.Cmd {
 		return nil
 	}
 	return tea.Batch(cmds...)
+}
+
+// Close cancels background contexts and discards queued layout mutations.
+// An already executing tmux mutation may finish; shutdown never waits for it.
+func (m *Model) Close() {
+	if m.layoutMutations != nil {
+		m.layoutMutations.close()
+	}
+	if m.cancel != nil {
+		m.cancel()
+	}
 }

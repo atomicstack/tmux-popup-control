@@ -231,8 +231,7 @@ func killSessionCLI(socketPath, name, id string) error {
 	if err == nil {
 		return nil
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok && exitErr.ExitCode() == 1 {
 		return nil
 	}
 	return fmt.Errorf("failed to kill session %s [%s]: %w", name, id, err)

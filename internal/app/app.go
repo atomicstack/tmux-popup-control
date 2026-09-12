@@ -82,6 +82,7 @@ func Run(cfg Config) error {
 		ClientID:    clientID,
 		SessionName: strings.TrimSpace(cfg.SessionName),
 	})
+	defer model.Close()
 	if cfg.ResurrectOp != "" {
 		model.SetResurrectInit(buildResurrectStart(cfg, socketPath, clientID))
 	}

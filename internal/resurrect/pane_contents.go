@@ -16,40 +16,37 @@ import (
 // pane. The key in contents is used as the tar entry filename (e.g. "dev:0.1")
 // and the value is the plain-text pane content.
 func WritePaneArchive(path string, contents map[string]string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("could not create pane archive %q: %w", path, err)
-	}
-	defer f.Close()
+	return atomicWriteFile(path, func(f *os.File) error {
 
-	gz := gzip.NewWriter(f)
-	defer gz.Close()
+		gz := gzip.NewWriter(f)
+		defer gz.Close()
 
-	tw := tar.NewWriter(gz)
-	defer tw.Close()
+		tw := tar.NewWriter(gz)
+		defer tw.Close()
 
-	for name, body := range contents {
-		data := []byte(body)
-		hdr := &tar.Header{
-			Name: name,
-			Mode: 0o600,
-			Size: int64(len(data)),
+		for name, body := range contents {
+			data := []byte(body)
+			hdr := &tar.Header{
+				Name: name,
+				Mode: 0o600,
+				Size: int64(len(data)),
+			}
+			if err := tw.WriteHeader(hdr); err != nil {
+				return fmt.Errorf("could not write tar header for %q: %w", name, err)
+			}
+			if _, err := tw.Write(data); err != nil {
+				return fmt.Errorf("could not write tar entry for %q: %w", name, err)
+			}
 		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return fmt.Errorf("could not write tar header for %q: %w", name, err)
-		}
-		if _, err := tw.Write(data); err != nil {
-			return fmt.Errorf("could not write tar entry for %q: %w", name, err)
-		}
-	}
 
-	if err := tw.Close(); err != nil {
-		return fmt.Errorf("could not finalise tar archive: %w", err)
-	}
-	if err := gz.Close(); err != nil {
-		return fmt.Errorf("could not finalise gzip stream: %w", err)
-	}
-	return nil
+		if err := tw.Close(); err != nil {
+			return fmt.Errorf("could not finalise tar archive: %w", err)
+		}
+		if err := gz.Close(); err != nil {
+			return fmt.Errorf("could not finalise gzip stream: %w", err)
+		}
+		return nil
+	})
 }
 
 // ExtractPaneArchive extracts the .tar.gz archive at archivePath into destDir.

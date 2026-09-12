@@ -1536,47 +1536,6 @@ func TestShutdownClosesClient(t *testing.T) {
 	}
 }
 
-func TestNewTmuxCachesConnection(t *testing.T) {
-	callCount := 0
-	fake := &fakeClient{}
-	prev := newTmux
-	prevClient := cachedClient
-	prevSocket := cachedSocket
-	cachedClient = nil
-	cachedSocket = ""
-	newTmux = func(socketPath string) (tmuxClient, error) {
-		clientMu.Lock()
-		defer clientMu.Unlock()
-		if cachedClient != nil && cachedSocket == socketPath {
-			return cachedClient, nil
-		}
-		callCount++
-		cachedClient = fake
-		cachedSocket = socketPath
-		return fake, nil
-	}
-	t.Cleanup(func() {
-		newTmux = prev
-		cachedClient = prevClient
-		cachedSocket = prevSocket
-	})
-
-	c1, err := newTmux("/tmp/test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	c2, err := newTmux("/tmp/test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if c1 != c2 {
-		t.Fatalf("expected same client instance from cache")
-	}
-	if callCount != 1 {
-		t.Fatalf("expected newTmux factory called once, got %d", callCount)
-	}
-}
-
 func TestEnvOrOptionPrefersEnvVar(t *testing.T) {
 	withStubCommander(t, func(string, ...string) commander {
 		return stubCommander{output: []byte("from-tmux\n")}

@@ -333,7 +333,7 @@ func TestWindowRenameCommandUsesStub(t *testing.T) {
 }
 
 func TestWindowRenameFormEnterReturnsCommand(t *testing.T) {
-	form := NewWindowRenameForm(RenamePrompt{
+	form := NewWindowRenameForm(WindowPrompt{
 		Context: Context{SocketPath: "sock"},
 		Target:  "s1:1",
 		Initial: "main",

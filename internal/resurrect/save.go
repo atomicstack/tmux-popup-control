@@ -3,6 +3,8 @@ package resurrect
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -77,7 +79,9 @@ func Save(ctx context.Context, cfg Config) <-chan ProgressEvent {
 	ch := make(chan ProgressEvent, 32)
 	go func() {
 		defer close(ch)
-		runSave(ctx, cfg, ch)
+		if err := runSave(ctx, cfg, ch); err != nil {
+			sendProgress(ctx, ch, ProgressEvent{Kind: "error", Done: true, Err: err})
+		}
 	}()
 	return ch
 }
@@ -94,31 +98,22 @@ func sendProgress(ctx context.Context, ch chan<- ProgressEvent, ev ProgressEvent
 	}
 }
 
-// sendError sends an error done event and returns the error so the caller can
-// return it to trigger the deferred close. The send respects ctx so it cannot
-// block forever on an undrained channel.
-func sendError(ctx context.Context, ch chan<- ProgressEvent, format string, args ...any) error {
-	err := fmt.Errorf(format, args...)
-	sendProgress(ctx, ch, ProgressEvent{Kind: "error", Done: true, Err: err})
-	return err
-}
-
 func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 	// ── Phase 1: discovery ───────────────────────────────────────────────────
 
 	sessionSnap, err := saveDeps.FetchSessions(cfg.SocketPath)
 	if err != nil {
-		return sendError(ctx, ch, "fetching sessions: %w", err)
+		return fmt.Errorf("fetching sessions: %w", err)
 	}
 
 	windowSnap, err := saveDeps.FetchWindows(cfg.SocketPath)
 	if err != nil {
-		return sendError(ctx, ch, "fetching windows: %w", err)
+		return fmt.Errorf("fetching windows: %w", err)
 	}
 
 	paneSnap, err := saveDeps.FetchPanes(cfg.SocketPath)
 	if err != nil {
-		return sendError(ctx, ch, "fetching panes: %w", err)
+		return fmt.Errorf("fetching panes: %w", err)
 	}
 
 	nSessions := len(sessionSnap.Sessions)
@@ -262,7 +257,7 @@ func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 					paneIDs = append(paneIDs, p.ID)
 					content, err := saveDeps.CapturePaneContents(cfg.SocketPath, p.ID)
 					if err != nil {
-						return sendError(ctx, ch, "capturing pane %s: %w", p.ID, err)
+						return fmt.Errorf("capturing pane %s: %w", p.ID, err)
 					}
 					paneContents[p.ID] = strings.TrimRight(content, "\n") + "\n"
 				}
@@ -283,23 +278,15 @@ func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 		saveFile.Sessions = append(saveFile.Sessions, sess)
 	}
 
-	// ── Phase 3: write JSON ─────────────────────────────────────────────────
-
 	jsonPath := savePath(cfg.SaveDir, cfg.Name)
-	step++
-	if !sendProgress(ctx, ch, ProgressEvent{
-		Step:    step,
-		Total:   total,
-		Message: fmt.Sprintf("writing %s", jsonPath),
-		Kind:    "info",
-	}) {
-		return ctx.Err()
-	}
-	if err := WriteSaveFile(jsonPath, &saveFile); err != nil {
-		return sendError(ctx, ch, "writing save file: %w", err)
-	}
+	published := false
+	defer func() {
+		if !published {
+			_ = os.Remove(paneArchivePath(jsonPath))
+		}
+	}()
 
-	// ── Phase 4: write pane archive ─────────────────────────────────────────
+	// ── Phase 3: write pane archive ─────────────────────────────────────────
 
 	if cfg.CapturePaneContents {
 		archivePath := paneArchivePath(jsonPath)
@@ -313,9 +300,26 @@ func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 			return ctx.Err()
 		}
 		if err := WritePaneArchive(archivePath, paneContents); err != nil {
-			return sendError(ctx, ch, "writing pane archive: %w", err)
+			return fmt.Errorf("writing pane archive: %w", err)
 		}
 	}
+
+	// ── Phase 4: write JSON ─────────────────────────────────────────────────
+
+	step++
+	if !sendProgress(ctx, ch, ProgressEvent{
+		Step:    step,
+		Total:   total,
+		Message: fmt.Sprintf("writing %s", jsonPath),
+		Kind:    "info",
+	}) {
+		return ctx.Err()
+	}
+	if err := WriteSaveFile(jsonPath, &saveFile); err != nil {
+		return fmt.Errorf("writing save file: %w", err)
+	}
+
+	published = true
 
 	// ── Phase 5: update last symlink ────────────────────────────────────────
 
@@ -329,8 +333,8 @@ func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 		}) {
 			return ctx.Err()
 		}
-		if err := updateLastSymlink(cfg.SaveDir, jsonPath); err != nil {
-			return sendError(ctx, ch, "updating last symlink: %w", err)
+		if err := updateLastSymlink(cfg.SaveDir, filepath.Base(jsonPath)); err != nil {
+			return fmt.Errorf("updating last symlink: %w", err)
 		}
 	}
 

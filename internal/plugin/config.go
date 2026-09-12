@@ -101,12 +101,7 @@ func parseConfigLines(content string) []optionPair {
 func parsePluginEntry(value string) Plugin {
 	value = strings.TrimSpace(value)
 	value = strings.Trim(value, "'\"")
-	source := value
-	branch := ""
-	if idx := strings.LastIndex(value, "#"); idx >= 0 {
-		source = value[:idx]
-		branch = value[idx+1:]
-	}
+	source, branch, _ := strings.CutLast(value, "#")
 	name := path.Base(source)
 	name = strings.TrimSuffix(name, ".git")
 	// Reject pathological names that could cause path traversal or

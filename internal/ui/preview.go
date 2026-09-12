@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -48,8 +49,6 @@ type previewData struct {
 	cursorX       int
 	cursorY       int
 	levelRef      *level
-	topology      tmux.PreviewTopology
-	topologyReady bool
 }
 
 type previewLoadedMsg struct {
@@ -128,7 +127,7 @@ func staticLinesCmd(levelID string, kind previewKind, target string, seq int, li
 }
 
 func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
-	if level == nil {
+	if level == nil || m.noPreview || m.mode != ModeMenu || m.loading {
 		return nil
 	}
 	kind := previewKindForLevel(level.ID)
@@ -152,20 +151,10 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 		m.preview = make(map[string]*previewData)
 	}
 
-	// Plugin preview is a static overview — same content regardless of cursor.
-	// Rebuilt each time to reflect changes from install/uninstall/etc.
+	// Plugin overview content is independent of the selected action.
 	if kind == previewKindPlugin {
-		lines := m.pluginPreviewLines()
-		m.previewSeq++
-		m.preview[level.ID] = &previewData{
-			kind:    kind,
-			target:  "__plugins__",
-			label:   "Plugins",
-			lines:   lines,
-			seq:     m.previewSeq,
-			rawANSI: true,
-		}
-		return nil
+		item.ID = "__plugins__"
+		item.Label = "plugins"
 	}
 
 	existing, ok := m.preview[level.ID]
@@ -175,10 +164,6 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	m.previewSeq++
 	seq := m.previewSeq
 	if ok {
-		if existing.levelRef != level {
-			existing.topology = tmux.PreviewTopology{}
-			existing.topologyReady = false
-		}
 		// Reuse entry — old lines stay visible until the new data arrives.
 		existing.kind = kind
 		existing.target = item.ID
@@ -200,22 +185,18 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	levelID := level.ID
 	target := item.ID
 	switch kind {
+	case previewKindPlugin:
+		return func() tea.Msg {
+			return previewLoadedMsg{levelID: levelID, kind: kind, target: target, seq: seq, lines: pluginPreviewLines(socket), rawANSI: true}
+		}
 	case previewKindTree:
 		return m.treePreviewCmd(levelID, target, seq, socket)
 	case previewKindPane:
 		return capturePaneCmd(levelID, kind, target, m.paneCaptureTarget(target), seq, socket)
 	case previewKindSession:
-		paneID := m.previewPaneIDForSession(level, target)
-		if paneID == "" {
-			return staticLinesCmd(levelID, kind, target, seq, m.sessionPreviewLines(target))
-		}
-		return capturePaneCmd(levelID, kind, target, paneID, seq, socket)
+		return topologyCaptureCmd(levelID, kind, target, target, m.activePaneIDForSession(target), seq, socket, m.sessionPreviewLines(target))
 	case previewKindWindow:
-		paneID := m.previewPaneIDForWindow(level, target)
-		if paneID == "" {
-			return staticLinesCmd(levelID, kind, target, seq, m.windowPreviewLines(target))
-		}
-		return capturePaneCmd(levelID, kind, target, paneID, seq, socket)
+		return topologyCaptureCmd(levelID, kind, target, target, m.activePaneIDForWindow(target), seq, socket, m.windowPreviewLines(target))
 	case previewKindLayout:
 		// Save original layout on first visit.
 		if level.Data == nil {
@@ -226,12 +207,9 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 					break
 				}
 			}
-			level.Data = state
+			level.Data = m.layoutOwner().begin(state)
 		}
-		return func() tea.Msg {
-			err := layoutPreviewFn(socket, target)
-			return layoutAppliedMsg{levelID: levelID, seq: seq, err: err}
-		}
+		return m.layoutMutationCmd(socket, target, false, levelID, seq)
 	default:
 		return nil
 	}
@@ -253,6 +231,9 @@ func (m *Model) ensurePreviewForCurrentLevel() tea.Cmd {
 }
 
 func (m *Model) handlePreviewTickMsg(msg tea.Msg) tea.Cmd {
+	if m.noPreview {
+		return nil
+	}
 	cmd := m.refreshPreviewForLevel(m.currentLevel())
 	return tea.Batch(cmd, previewTick())
 }
@@ -262,12 +243,6 @@ func (m *Model) handlePreviewTickMsg(msg tea.Msg) tea.Cmd {
 func (m *Model) refreshPreviewForLevel(level *level) tea.Cmd {
 	if level == nil {
 		return nil
-	}
-	// Mark existing preview as stale (not loading) so ensurePreviewForLevel
-	// will issue a new fetch, but do NOT delete the entry — its lines remain
-	// visible until the fresh data arrives.
-	if existing, ok := m.preview[level.ID]; ok {
-		existing.loading = false
 	}
 	return m.ensurePreviewForLevel(level)
 }
@@ -360,53 +335,127 @@ func (m *Model) activePaneIDForWindow(window string) string {
 	return fallback
 }
 
-func (m *Model) previewTopologyForLevel(level *level) tmux.PreviewTopology {
-	if level == nil || m.preview == nil {
-		return tmux.PreviewTopology{}
+// topologyCaptureCmd resolves live topology in the command, with immutable
+// snapshot-derived fallbacks captured by the model before dispatch.
+func topologyCaptureCmd(levelID string, kind previewKind, target, topologyTarget, fallbackPane string, seq int, socket string, fallbackLines []string) tea.Cmd {
+	return func() tea.Msg {
+		paneID := fallbackPane
+		if topology, err := fetchPreviewTopologyFn(socket); err == nil {
+			var resolved string
+			if kind == previewKindSession {
+				resolved = topology.ActivePaneIDForSession(topologyTarget)
+			} else {
+				resolved = topology.ActivePaneIDForWindow(topologyTarget)
+			}
+			if resolved != "" {
+				paneID = resolved
+			}
+		}
+		if paneID == "" {
+			return staticLinesCmd(levelID, kind, target, seq, fallbackLines)()
+		}
+		return capturePaneCmd(levelID, kind, target, paneID, seq, socket)()
 	}
-	data, ok := m.preview[level.ID]
-	if !ok {
-		return tmux.PreviewTopology{}
-	}
-	if data.levelRef != level {
-		data.levelRef = level
-		data.topology = tmux.PreviewTopology{}
-		data.topologyReady = false
-	}
-	if data.topologyReady {
-		return data.topology
-	}
-	topology, err := fetchPreviewTopologyFn(m.socketPath)
-	if err != nil {
-		return tmux.PreviewTopology{}
-	}
-	data.topology = topology
-	data.topologyReady = true
-	return topology
 }
 
-func (m *Model) previewPaneIDForSession(level *level, session string) string {
-	topology := m.previewTopologyForLevel(level)
-	if paneID := topology.ActivePaneIDForSession(session); paneID != "" {
-		return paneID
-	}
-	return m.activePaneIDForSession(session)
+// layoutMutations keeps required rollbacks ahead of subsequent choices. The
+// queue lock never spans I/O; only command goroutines acquire the execution lock.
+type layoutMutations struct {
+	mu        sync.Mutex
+	execution sync.Mutex
+	pending   []*layoutMutation
+	closed    bool
+	baseline  *layoutRevertState
+	visit     uint64
 }
 
-func (m *Model) previewPaneIDForWindow(level *level, window string) string {
-	topology := m.previewTopologyForLevel(level)
-	if paneID := topology.ActivePaneIDForWindow(window); paneID != "" {
-		return paneID
+type layoutMutation struct {
+	cmd      tea.Cmd
+	required bool
+	visit    uint64
+}
+
+func (m *Model) layoutOwner() *layoutMutations {
+	if m.layoutMutations == nil {
+		m.layoutMutations = &layoutMutations{}
 	}
-	return m.activePaneIDForWindow(window)
+	return m.layoutMutations
+}
+
+func (o *layoutMutations) begin(state layoutRevertState) layoutRevertState {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.baseline != nil {
+		state = *o.baseline
+	}
+	o.baseline = &state
+	o.visit++
+	return state
+}
+
+func (o *layoutMutations) enqueue(cmd tea.Cmd, required bool) tea.Cmd {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.closed {
+		return nil
+	}
+	// Rollbacks are barriers. A later command executes preceding barriers
+	// itself, so it never waits for a command Bubble Tea has not scheduled.
+	o.pending = slices.DeleteFunc(o.pending, func(p *layoutMutation) bool { return !p.required })
+	entry := &layoutMutation{cmd: cmd, required: required, visit: o.visit}
+	o.pending = append(o.pending, entry)
+	return func() tea.Msg { return o.run(entry) }
+}
+
+func (o *layoutMutations) run(target *layoutMutation) tea.Msg {
+	o.execution.Lock()
+	defer o.execution.Unlock()
+	for {
+		o.mu.Lock()
+		if o.closed || !slices.Contains(o.pending, target) {
+			o.mu.Unlock()
+			return nil
+		}
+		entry := o.pending[0]
+		o.pending = o.pending[1:]
+		o.mu.Unlock()
+		msg := entry.cmd()
+		if entry.required {
+			o.mu.Lock()
+			if result, ok := msg.(layoutAppliedMsg); ok && result.err == nil && o.visit == entry.visit {
+				o.baseline = nil
+			}
+			o.mu.Unlock()
+		}
+		if entry == target {
+			return msg
+		}
+	}
+}
+
+func (o *layoutMutations) close() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.closed = true
+	o.pending = nil
+}
+
+func (m *Model) serializeLayoutCommand(cmd tea.Cmd) tea.Cmd {
+	return m.layoutOwner().enqueue(cmd, false)
+}
+
+func (m *Model) layoutMutationCmd(socket, target string, zoom bool, levelID string, seq int) tea.Cmd {
+	return m.layoutOwner().enqueue(func() tea.Msg {
+		err := layoutPreviewFn(socket, target)
+		if err == nil && zoom {
+			err = zoomWindowFn(socket)
+		}
+		return layoutAppliedMsg{levelID: levelID, seq: seq, err: err}
+	}, seq == 0)
 }
 
 // treePreviewCmd returns a preview command appropriate for the tree item type.
 func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) tea.Cmd {
-	var level *level
-	if data, ok := m.preview[levelID]; ok {
-		level = data.levelRef
-	}
 	kind := menu.TreeItemKind(target)
 	switch kind {
 	case "pane":
@@ -427,19 +476,11 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 		if entry, ok := m.windowEntryByAnyID(key); ok && entry.ID != "" {
 			windowTarget = entry.ID
 		}
-		paneID := m.previewPaneIDForWindow(level, windowTarget)
-		if paneID == "" {
-			return staticLinesCmd(levelID, previewKindWindow, target, seq, m.windowPreviewLines(windowTarget))
-		}
-		return capturePaneCmd(levelID, previewKindWindow, target, paneID, seq, socket)
+		return topologyCaptureCmd(levelID, previewKindWindow, target, windowTarget, m.activePaneIDForWindow(windowTarget), seq, socket, m.windowPreviewLines(windowTarget))
 	case "session":
 		// tree:s:$N; stores are keyed by session name.
 		session := m.sessionNameByAnyID(strings.TrimPrefix(target, menu.TreePrefixSession))
-		paneID := m.previewPaneIDForSession(level, session)
-		if paneID == "" {
-			return staticLinesCmd(levelID, previewKindSession, target, seq, m.sessionPreviewLines(session))
-		}
-		return capturePaneCmd(levelID, previewKindSession, target, paneID, seq, socket)
+		return topologyCaptureCmd(levelID, previewKindSession, target, session, m.activePaneIDForSession(session), seq, socket, m.sessionPreviewLines(session))
 	default:
 		return nil
 	}
@@ -614,7 +655,7 @@ func (m *Model) windowPreviewLines(window string) []string {
 	return lines
 }
 
-func (m *Model) pluginPreviewLines() []string {
+func pluginPreviewLines(socketPath string) []string {
 	pluginDir := plugin.PluginDir()
 	installed, _ := plugin.Installed(pluginDir)
 	installedSet := make(map[string]plugin.Plugin, len(installed))
@@ -630,8 +671,8 @@ func (m *Model) pluginPreviewLines() []string {
 	var entries []entry
 	declaredSet := make(map[string]struct{})
 
-	if m.socketPath != "" {
-		declared, err := plugin.ParseConfig(m.socketPath)
+	if socketPath != "" {
+		declared, err := plugin.ParseConfig(socketPath)
 		if err == nil {
 			for _, p := range declared {
 				declaredSet[p.Name] = struct{}{}
