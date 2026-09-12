@@ -358,6 +358,7 @@ func WindowEntriesFromTmux(windows []tmux.Window) []WindowEntry {
 			InternalID: w.InternalID,
 			Current:    w.Current,
 			Layout:     w.Layout,
+			Zoomed:     w.Zoomed,
 		})
 	}
 	return entries

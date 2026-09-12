@@ -476,12 +476,12 @@ func TestLayoutPreviewSavesOriginalLayout(t *testing.T) {
 
 	m.ensurePreviewForLevel(lvl)
 
-	original, ok := lvl.Data.(string)
+	revert, ok := layoutRevertFromData(lvl.Data)
 	if !ok {
-		t.Fatalf("expected level.Data to be string, got %T", lvl.Data)
+		t.Fatalf("expected level.Data to hold a revert state, got %T (%v)", lvl.Data, lvl.Data)
 	}
-	if original != "bb62,159x48" {
-		t.Fatalf("expected original layout bb62,159x48, got %q", original)
+	if revert.Layout != "bb62,159x48" {
+		t.Fatalf("expected original layout bb62,159x48, got %q", revert.Layout)
 	}
 }
 

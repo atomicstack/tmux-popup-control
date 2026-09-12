@@ -36,10 +36,15 @@ func (m *Model) handleEscapeKey() tea.Cmd {
 	// Revert layout preview on escape.
 	var revertCmd tea.Cmd
 	if current.ID == "window:layout" {
-		if original, ok := current.Data.(string); ok && original != "" {
+		if revert, ok := layoutRevertFromData(current.Data); ok {
 			socket := m.socketPath
 			revertCmd = func() tea.Msg {
-				err := layoutPreviewFn(socket, original)
+				err := layoutPreviewFn(socket, revert.Layout)
+				if err == nil && revert.Zoomed {
+					// select-layout unzoomed the window on the first
+					// preview; put the zoom back once the layout is.
+					err = zoomWindowFn(socket)
+				}
 				return layoutAppliedMsg{levelID: "window:layout", err: err}
 			}
 		}

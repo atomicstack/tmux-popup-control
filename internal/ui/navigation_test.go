@@ -463,3 +463,68 @@ func TestRootMenuSessionRenameWithoutMenuArgsFallsThrough(t *testing.T) {
 		t.Fatal("expected deferredRename to be nil when menuArgs is empty")
 	}
 }
+
+// TestLayoutPreviewEscapeRezoomsWindow covers the zoom half of the layout
+// revert: select-layout always unzooms the window, so when the user escapes
+// out of the layout menu on a window that was zoomed, the original layout is
+// re-applied and the window is zoomed again, in that order.
+func TestLayoutPreviewEscapeRezoomsWindow(t *testing.T) {
+	var calls []string
+	oldLayout := layoutPreviewFn
+	layoutPreviewFn = func(_, layout string) error {
+		calls = append(calls, "layout:"+layout)
+		return nil
+	}
+	defer func() { layoutPreviewFn = oldLayout }()
+	oldZoom := zoomWindowFn
+	zoomWindowFn = func(_ string) error {
+		calls = append(calls, "zoom")
+		return nil
+	}
+	defer func() { zoomWindowFn = oldZoom }()
+
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 80, Height: 24})
+	items := []menu.Item{{ID: "even-horizontal", Label: "Even Horizontal"}}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	lvl.Data = layoutRevertState{Layout: "orig-layout", Zoomed: true}
+	m.stack = append(m.stack, lvl)
+
+	h := NewHarness(m)
+	calls = nil
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	want := []string{"layout:orig-layout", "zoom"}
+	if len(calls) != len(want) || calls[0] != want[0] || calls[1] != want[1] {
+		t.Fatalf("revert calls = %v, want %v", calls, want)
+	}
+}
+
+func TestLayoutPreviewEscapeDoesNotZoomUnzoomedWindow(t *testing.T) {
+	var calls []string
+	oldLayout := layoutPreviewFn
+	layoutPreviewFn = func(_, layout string) error {
+		calls = append(calls, "layout:"+layout)
+		return nil
+	}
+	defer func() { layoutPreviewFn = oldLayout }()
+	oldZoom := zoomWindowFn
+	zoomWindowFn = func(_ string) error {
+		calls = append(calls, "zoom")
+		return nil
+	}
+	defer func() { zoomWindowFn = oldZoom }()
+
+	m := NewModel(ModelConfig{SocketPath: "test.sock", Width: 80, Height: 24})
+	items := []menu.Item{{ID: "even-horizontal", Label: "Even Horizontal"}}
+	lvl := newLevel("window:layout", "Layout", items, nil)
+	lvl.Data = layoutRevertState{Layout: "orig-layout"}
+	m.stack = append(m.stack, lvl)
+
+	h := NewHarness(m)
+	calls = nil
+	h.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	if len(calls) != 1 || calls[0] != "layout:orig-layout" {
+		t.Fatalf("revert calls = %v, want only the layout", calls)
+	}
+}

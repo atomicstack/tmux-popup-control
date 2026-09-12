@@ -247,6 +247,7 @@ func (m *Model) menuContext() menu.Context {
 	for _, w := range ctx.Windows {
 		if w.Current {
 			ctx.CurrentWindowLayout = w.Layout
+			ctx.CurrentWindowZoomed = w.Zoomed
 			break
 		}
 	}

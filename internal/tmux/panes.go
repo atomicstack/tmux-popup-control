@@ -117,6 +117,17 @@ func SelectLayout(socketPath, layout string) error {
 	return err
 }
 
+// ZoomWindow zooms the active pane of the current window via control-mode
+// (`resize-pane -Z`). Used to restore a zoom that select-layout undid.
+func ZoomWindow(socketPath string) error {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	_, err = client.Command("resize-pane", "-Z")
+	return err
+}
+
 // ResizePane resizes the current pane via control-mode.
 // No explicit pane target is used; tmux applies the resize to the
 // currently active pane.

@@ -68,8 +68,29 @@ type previewLoadedMsg struct {
 var (
 	panePreviewFn          = tmux.PanePreview
 	layoutPreviewFn        = tmux.SelectLayout
+	zoomWindowFn           = tmux.ZoomWindow
 	fetchPreviewTopologyFn = tmux.FetchPreviewTopology
 )
+
+// layoutRevertState is stored in the window:layout level's Data so Escape can
+// put the window back the way it was. select-layout always unzooms, so the
+// zoom state has to be captured alongside the layout on first visit.
+type layoutRevertState struct {
+	Layout string
+	Zoomed bool
+}
+
+// layoutRevertFromData accepts either the structured state or a bare layout
+// string (older callers and tests) and reports whether a revert is needed.
+func layoutRevertFromData(data any) (layoutRevertState, bool) {
+	switch v := data.(type) {
+	case layoutRevertState:
+		return v, v.Layout != ""
+	case string:
+		return layoutRevertState{Layout: v}, v != ""
+	}
+	return layoutRevertState{}, false
+}
 
 type layoutAppliedMsg struct {
 	levelID string
@@ -198,15 +219,14 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	case previewKindLayout:
 		// Save original layout on first visit.
 		if level.Data == nil {
+			state := layoutRevertState{Zoomed: m.currentWindowZoomed()}
 			for _, it := range level.Items {
 				if it.Label == "current layout" {
-					level.Data = it.ID
+					state.Layout = it.ID
 					break
 				}
 			}
-			if level.Data == nil {
-				level.Data = ""
-			}
+			level.Data = state
 		}
 		return func() tea.Msg {
 			err := layoutPreviewFn(socket, target)
@@ -215,6 +235,17 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	default:
 		return nil
 	}
+}
+
+// currentWindowZoomed reports whether the popup's current window is zoomed,
+// from the latest window snapshot.
+func (m *Model) currentWindowZoomed() bool {
+	for _, w := range m.windows.Entries() {
+		if w.Current {
+			return w.Zoomed
+		}
+	}
+	return false
 }
 
 func (m *Model) ensurePreviewForCurrentLevel() tea.Cmd {

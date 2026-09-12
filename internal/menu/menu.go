@@ -34,6 +34,7 @@ type Context struct {
 	CurrentWindowLabel   string
 	CurrentWindowSession string
 	CurrentWindowLayout  string
+	CurrentWindowZoomed  bool
 	WindowIncludeCurrent bool
 	Panes                []PaneEntry
 	CurrentPaneID        string
@@ -53,6 +54,7 @@ type WindowEntry struct {
 	InternalID string
 	Current    bool
 	Layout     string
+	Zoomed     bool
 }
 
 // PaneEntry represents a tmux pane reference for menu loaders.
