@@ -1,13 +1,10 @@
 ## tmux next-3.9 follow-ups (from the 2026-09-12 upstream analysis)
 
-Details and verification transcripts: `~/obsidian/agent-notes/tmux-popup-control/2026-09-12/tmux-next-39-impact-analysis.md`.
+Details and verification transcripts: `~/obsidian/agent-notes/tmux-popup-control/2026-09-12/tmux-next-39-impact-analysis.md`. The defects found there (and the five from 2026-08-17) were fixed on 2026-09-12; see `done.md`. What remains:
 
-- Merge `feat-watcher-fetch-context` (or otherwise bump gotmuxcc to v0.2.0): it fixes the P0 control-mode framing bug (`a6f21f3`) and exposes `Pane.Floating`/`PaneX`/`PaneY`/`PaneZ`.
-- Resurrect: mark floating panes in the save file, exclude them from the layout pane count, and restore them with `new-pane -x -y -X -Y` (minimum: skip them). Today restore aborts with "have 3 panes but need 2" for any window that had a floater.
-- Resurrect: teach `selectableLayout` the JSON v2 layout format (strip `"I"` keys; tmux assigns panes in order when ids don't match) so saves survive the day control clients default to v2.
-- Do not set the `new-layouts` client flag on the shared connection until `window:layout`, the Escape revert, and resurrect handle JSON layouts.
-- `main.go:showPopup`: refuse an empty client name and document that tmux ≥ `af3e4d2e` silently ignores `display-popup` aimed at a control client.
-- Still open from the 2026-08-17 analysis: `:`/`.`/empty session and window names (`strings.Cut(id, ":")` sites), theme colour names (`themeblue`) and format-string values in the swatch renderer, and cmdparse zero-flag commands (`list-keys`, `command-prompt`, `send-prefix`).
+- gotmuxcc: `discoverAttachTarget` attaches the control client to the alphabetically-first session *by name*, which fails outright when that name contains `:` (noted in `internal/menu/ids_integration_test.go`, which keeps its weird session sorted last). Needs an upstream fix to attach by `$N`; do not work around it here.
+- Resurrect: a v1 (pre-json) save of a window that had a floating pane still cannot apply its layout on restore; it is now a warning rather than an abort. Only re-saving on a tmux with json layouts fixes such a file.
+- `new-pane -O -D -K -A` is now a credible `display-popup` replacement (tmux `d202aa7a` added `-D` and `remain-on-exit failed-key` "for better compatibility with popups"); revisit `main.sh` once modal panes settle.
 - Opportunity: gate pane previews / the pane poller on `#{pane_output_generation}` and `#{history_generation}` to skip unchanged captures.
 
 ## Command argument tab completion (feature/cmd-completion branch)

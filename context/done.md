@@ -2,6 +2,17 @@
 
 Here’s what’s happened so far:
 
+- tmux next-3.9 follow-ups implemented (2026-09-12, `2f27883`..`b80e126`):
+  - merged `feat-watcher-fetch-context` (rebased, fast-forward): gotmuxcc v0.2.0 (fixes the P0 control-mode framing bug, exposes floating/modal pane formats, per-command contexts, bounded handshake), context-aware `Fetch*`/`ShowOption`, bounded watcher shutdown; `vendor/` re-vendored offline from the module cache
+  - json layouts: the shared control client sets the `new-layouts` flag (separate `refresh-client` call, ignored by older tmux); `selectableLayout` handles the v2 `{"V":2,"L":{...}}` form by stripping the `"I"` pane-id keys; `tmux.Pane` carries `Floating`/`X`/`Y`/`Z` and `tmux.Window` carries `Zoomed`
+  - resurrect: floating panes are marked in the save file (format version 3) and come back through the json layout (tmux converts a split pane into a floater when the cell says so); a layout tmux cannot apply is a warning, not an abort; `TestSaveRestoreFloatingPaneIntegration` verifies the round trip on tmux next-3.9 and skips on older builds
+  - `window:layout`: escape re-zooms a window that was zoomed before the preview unzoomed it
+  - `showPopup` refuses an empty client name (tmux ≥ `af3e4d2e` silently ignores popups aimed at a control client)
+  - cmdparse builds schemas catalog-first from `argument_template`/`flags[]` (`BuildCatalogRegistry`), with the synopsis parser as fallback; digit bool clusters parse (`list-keys`, `command-prompt`, `send-prefix`), optional-value flags (`resize-pane -D`) no longer demand a value, `new-pane -e` and `refresh-client -B` are repeatable
+  - theme colours: `tmux.ResolveThemeColour` resolves `themeblue`-style names through `#{c/f:…}` on the user's tty client (cached per socket/client/name); `#` values must be `#rrggbb`, `#{…}`/`#[…]` are never colours, quoted style values are unquoted, `#,` escapes and nested formats survive tokenisation, `name[N]` array keys are looked up; `TestShowOptionsThemeColourSwatchIntegration` drives the real binary
+  - ids everywhere: `Session.ID`, `Window.SessionID`, `Pane.SessionID`/`WindowID` are fetched as dedicated format fields; every menu action resolves its display id to the entry and targets `$N`/`@N`/`%N` (`internal/menu/refs.go`); tree items are `tree:s:$N`/`tree:w:@N`/`tree:p:%N`; previews capture by `%N`; `SwitchPane` takes a `PaneRef`; `NewSession` returns the id; `TestActionsTargetSessionWithColonInNameIntegration` runs against a session named `zz:weird`
+  - process: three subagents ran in parallel worktrees; two were cut off by a rate limit and their work (theme colours, ids) was finished by hand from the tests they had written
+
 - Option catalog refreshed for tmux next-3.9 and upstream impact analysis (2026-09-12, `3cc4f9a`):
   - embedded catalog refreshed from option-catalog `647a917` + its uncommitted 2026-09-12 regeneration (tmux `e880cf63`): 272 options (+`clear-on-attach`), `remain-on-exit failed-key`, `pane-border-lines rounded`, `utf8` terminal feature, `capture-pane -I`, `display-message -j`, `new-pane -A/-D/-K`, and the `history_*`/`pane_output_generation` formats; command help diffed, no description regressions
   - analysed tmux `851c5a933d..e880cf63` (155 commits) with live verification on a scratch HEAD build; full `make test` passes against tmux next-3.9
