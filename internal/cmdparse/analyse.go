@@ -62,10 +62,20 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 			flag := rune(tok[1])
 
 			if SchemaHasArgFlag(schema, flag) {
-				// arg flag — consumes next token as its value
 				flagsUsed = append(flagsUsed, flag)
 				i++ // skip the flag token
-				if i < len(tokens) {
+				hasNext := i < len(tokens)
+				next := ""
+				if hasNext {
+					next = tokens[i]
+				}
+				if FlagValueTokens(schema, flag, next, hasNext) == 0 {
+					// optional-value flag with no value: complete on its
+					// own; whatever follows is analysed in its own right
+					continue
+				}
+				// arg flag — consumes next token as its value
+				if hasNext {
 					isValueLast := i == len(tokens)-1 && !trailingSpace
 					if isValueLast {
 						// user is mid-typing the flag value
@@ -126,7 +136,7 @@ func Analyse(registry map[string]*CommandSchema, input string) CompletionContext
 		prevTok := tokens[len(tokens)-1]
 		if strings.HasPrefix(prevTok, "-") && len(prevTok) >= 2 {
 			flag := rune(prevTok[1])
-			if SchemaHasArgFlag(schema, flag) {
+			if SchemaHasArgFlag(schema, flag) && !SchemaFlagValueOptional(schema, flag) {
 				return CompletionContext{
 					Kind:      ContextFlagValue,
 					ArgType:   schemaArgFlagType(schema, flag),

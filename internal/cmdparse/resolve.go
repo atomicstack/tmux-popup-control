@@ -53,11 +53,13 @@ func (r *StoreResolver) Resolve(argType string) []string {
 	}
 }
 
-// FlagCandidate represents a flag available for completion.
+// FlagCandidate represents a flag available for completion. OptionalValue
+// is true when the flag's value may be omitted.
 type FlagCandidate struct {
-	Flag    rune
-	Label   string
-	ArgType string
+	Flag          rune
+	Label         string
+	ArgType       string
+	OptionalValue bool
 }
 
 // FlagCandidates returns all flags from schema that are not already used,
@@ -78,11 +80,15 @@ func FlagCandidates(schema *CommandSchema, used []rune) []FlagCandidate {
 		if usedSet[flag.Short] && !flag.Repeatable {
 			continue
 		}
-		candidate := FlagCandidate{Flag: flag.Short}
-		if flag.ArgType != "" {
+		candidate := FlagCandidate{Flag: flag.Short, OptionalValue: flag.OptionalValue}
+		switch {
+		case flag.ArgType != "" && flag.OptionalValue:
+			candidate.Label = fmt.Sprintf("-%c [%s]", flag.Short, flag.ArgType)
+			candidate.ArgType = flag.ArgType
+		case flag.ArgType != "":
 			candidate.Label = fmt.Sprintf("-%c %s", flag.Short, flag.ArgType)
 			candidate.ArgType = flag.ArgType
-		} else {
+		default:
 			candidate.Label = fmt.Sprintf("-%c", flag.Short)
 		}
 		candidates = append(candidates, candidate)

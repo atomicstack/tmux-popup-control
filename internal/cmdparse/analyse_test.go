@@ -182,3 +182,74 @@ func TestAnalyseAfterUsingAllFlagsStillSuggestsRepeatableFlag(t *testing.T) {
 		t.Fatalf("expected ContextFlagName, got %d", ctx.Kind)
 	}
 }
+
+func resizePaneSchema() *CommandSchema {
+	return &CommandSchema{
+		Name:      "resize-pane",
+		Alias:     "resizep",
+		BoolFlags: []rune{'M', 'T', 'Z'},
+		ArgFlags: []ArgFlagDef{
+			{Short: 'D', ArgType: "lines"},
+			{Short: 't', ArgType: "target-pane"},
+		},
+		Flags: []FlagDef{
+			{Short: 'M'},
+			{Short: 'T'},
+			{Short: 'Z'},
+			{Short: 'D', ArgType: "lines", OptionalValue: true},
+			{Short: 't', ArgType: "target-pane"},
+		},
+	}
+}
+
+// An optional-value flag (getopt "D::") is complete on its own: with nothing
+// after it, the next completion point is another flag, not a mandatory value.
+func TestAnalyseOptionalValueFlagDoesNotDemandValue(t *testing.T) {
+	reg := buildTestRegistry(resizePaneSchema())
+	ctx := Analyse(reg, "resize-pane -D ")
+	if ctx.Kind != ContextFlagName {
+		t.Fatalf("expected ContextFlagName, got %d", ctx.Kind)
+	}
+	if !containsRune(ctx.FlagsUsed, 'D') {
+		t.Errorf("expected 'D' in FlagsUsed, got %v", ctx.FlagsUsed)
+	}
+}
+
+// A following token that does not look like a flag is the optional value.
+func TestAnalyseOptionalValueFlagConsumesValueToken(t *testing.T) {
+	reg := buildTestRegistry(resizePaneSchema())
+	ctx := Analyse(reg, "resize-pane -D 5")
+	if ctx.Kind != ContextFlagValue {
+		t.Fatalf("expected ContextFlagValue, got %d", ctx.Kind)
+	}
+	if ctx.ArgType != "lines" {
+		t.Errorf("expected ArgType %q, got %q", "lines", ctx.ArgType)
+	}
+	if ctx.Prefix != "5" {
+		t.Errorf("expected prefix %q, got %q", "5", ctx.Prefix)
+	}
+}
+
+// A following flag token ends the optional flag without a value, matching
+// tmux's args parser, so "-t" is then analysed as its own flag.
+func TestAnalyseOptionalValueFlagFollowedByFlag(t *testing.T) {
+	reg := buildTestRegistry(resizePaneSchema())
+	ctx := Analyse(reg, "resize-pane -D -t ")
+	if ctx.Kind != ContextFlagValue {
+		t.Fatalf("expected ContextFlagValue, got %d", ctx.Kind)
+	}
+	if ctx.ArgType != "target-pane" {
+		t.Errorf("expected ArgType %q, got %q", "target-pane", ctx.ArgType)
+	}
+	if !containsRune(ctx.FlagsUsed, 'D') || !containsRune(ctx.FlagsUsed, 't') {
+		t.Errorf("expected D and t in FlagsUsed, got %v", ctx.FlagsUsed)
+	}
+}
+
+func TestAnalyseRequiredValueFlagStillDemandsValue(t *testing.T) {
+	reg := buildTestRegistry(resizePaneSchema())
+	ctx := Analyse(reg, "resize-pane -t ")
+	if ctx.Kind != ContextFlagValue {
+		t.Fatalf("expected ContextFlagValue, got %d", ctx.Kind)
+	}
+}

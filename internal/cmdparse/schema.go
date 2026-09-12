@@ -10,11 +10,15 @@ type CommandSchema struct {
 	Positionals []PositionalDef
 }
 
-// FlagDef describes a command flag in synopsis order.
+// FlagDef describes a command flag in synopsis order. OptionalValue marks a
+// flag whose value may be omitted (getopt "x::", e.g. resize-pane -D
+// [lines]); such a flag is complete on its own and only consumes a
+// following token when that token does not look like another flag.
 type FlagDef struct {
-	Short      rune
-	ArgType    string
-	Repeatable bool
+	Short         rune
+	ArgType       string
+	Repeatable    bool
+	OptionalValue bool
 }
 
 // ArgFlagDef is a flag that expects a typed argument value.
@@ -84,12 +88,52 @@ func isRepeatableFlag(command string, flag rune) bool {
 	return flags[flag]
 }
 
+// repeatableFlagsByCommand lists flags tmux accepts more than once. The
+// option catalog does not model repeatability, so this stays hand-maintained.
 var repeatableFlagsByCommand = map[string]map[rune]bool{
 	"display-popup":  {'e': true},
+	"new-pane":       {'e': true},
 	"new-session":    {'e': true},
 	"new-window":     {'e': true},
-	"refresh-client": {'A': true},
+	"refresh-client": {'A': true, 'B': true},
 	"respawn-pane":   {'e': true},
 	"respawn-window": {'e': true},
 	"split-window":   {'e': true},
+}
+
+// SchemaFlagValueOptional reports whether flag takes an optional value.
+func SchemaFlagValueOptional(schema *CommandSchema, flag rune) bool {
+	if schema == nil {
+		return false
+	}
+	for _, def := range schema.OrderedFlags() {
+		if def.Short == flag {
+			return def.OptionalValue
+		}
+	}
+	return false
+}
+
+// LooksLikeFlag mirrors the rule tmux's argument parser uses to decide that
+// the token after an optional-value flag is a new flag rather than the
+// value: a dash followed by another dash or a letter.
+func LooksLikeFlag(tok string) bool {
+	if len(tok) < 2 || tok[0] != '-' {
+		return false
+	}
+	return tok[1] == '-' || isLetter(rune(tok[1]))
+}
+
+// FlagValueTokens returns how many tokens flag consumes after itself given
+// the token that follows it (hasNext false when it is the last token): 1 for
+// a required-value flag or an optional-value flag followed by a value, 0
+// otherwise.
+func FlagValueTokens(schema *CommandSchema, flag rune, next string, hasNext bool) int {
+	if !SchemaHasArgFlag(schema, flag) {
+		return 0
+	}
+	if SchemaFlagValueOptional(schema, flag) && (!hasNext || LooksLikeFlag(next)) {
+		return 0
+	}
+	return 1
 }
