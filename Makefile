@@ -3,6 +3,8 @@ BINARY := tmux-popup-control
 GOCACHE := $(CURDIR)/.gocache
 GOMODCACHE := $(CURDIR)/.gomodcache
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# Path to a markdown file with release notes; falls back to gh's generated notes.
+RELEASE_NOTES ?=
 LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
 # Base env for offline builds. GOTMUXCC_TRACE is intentionally NOT set here:
 # enabling it makes every gotmuxcc call write a trace line to disk and slows
@@ -96,4 +98,4 @@ release: ensure-dirs
 	cd $(RELEASE_DIR) && shasum -a 256 *.tar.gz > checksums.txt
 	gh release create v$(VERSION) $(RELEASE_DIR)/* \
 		--title "v$(VERSION)" \
-		--generate-notes
+		$(if $(RELEASE_NOTES),--notes-file $(RELEASE_NOTES),--generate-notes)
