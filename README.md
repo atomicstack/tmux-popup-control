@@ -1,6 +1,6 @@
 # tmux-popup-control
 
-Current version: **v0.16.0** — see the [release
+Current version: **v0.17.0** — see the [release
 notes](https://github.com/atomicstack/tmux-popup-control/releases/latest)
 for the latest changes.
 
@@ -80,6 +80,8 @@ list plus the env vars and tmux options that override each default.
 - **Rename** sessions via inline form
 - **Kill** sessions
 - **Detach** clients from sessions
+- Every tmux command targets sessions, windows, and panes by id, so names
+  containing `:` or `.` (allowed since tmux next-3.8) work throughout
 - **Tree view** — full session/window/pane hierarchy with expand/collapse,
   multi-word fuzzy filtering across the tree, and per-node live previews;
   marks the currently-attached window with a `(current)` suffix and
@@ -88,7 +90,8 @@ list plus the env vars and tmux options that override each default.
 ### Resurrect (save / restore)
 - **Save** sessions — auto-timestamped or named snapshots of all sessions,
   windows, panes, layouts, and optionally pane contents; supports
-  interval-based autosaves with bounded retention
+  interval-based autosaves with bounded retention. Floating panes are
+  saved and restored on tmux builds with JSON layouts (next-3.9+)
 - **Save as…** — inline form to name a snapshot
 - **Restore** sessions — from the most recent save, with progress UI;
   merges windows into existing sessions idempotently
