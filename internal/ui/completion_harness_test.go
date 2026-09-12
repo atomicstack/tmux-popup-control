@@ -173,7 +173,7 @@ func TestColourSpecForName(t *testing.T) {
 		{"", "", false},
 	}
 	for _, tc := range cases {
-		got, ok := colourSpecForName(tc.name)
+		got, ok := colourSpecForName(tc.name, nil)
 		if ok != tc.wantOk || got != tc.want {
 			t.Errorf("colourSpecForName(%q) = (%q, %v); want (%q, %v)", tc.name, got, ok, tc.want, tc.wantOk)
 		}

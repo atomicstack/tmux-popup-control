@@ -227,7 +227,7 @@ func TestDecorateShowOptionsLineDecoratesColourOption(t *testing.T) {
 	// status-bg is a TypeColour, session-scoped option in the catalog.
 	// The decorated line must carry the session scope colour on the name
 	// (ANSI 256 index 39) and the value "red" rendered in ANSI red (31).
-	decorated, ok := decorateShowOptionsLine("status-bg red", nil)
+	decorated, ok := decorateShowOptionsLine("status-bg red", nil, nil)
 	if !ok {
 		t.Fatal("expected decoration for 'status-bg red'")
 	}
@@ -250,7 +250,7 @@ func TestDecorateShowOptionsLineDecoratesColourOptionField(t *testing.T) {
 	// clock-mode-colour is Type=="string" with ColourOption==true in the
 	// refreshed catalog (it used to be Type=="colour"). Its value must still
 	// be rendered in the colour it names via the IsColour signal.
-	decorated, ok := decorateShowOptionsLine("clock-mode-colour red", nil)
+	decorated, ok := decorateShowOptionsLine("clock-mode-colour red", nil, nil)
 	if !ok {
 		t.Fatal("expected decoration for 'clock-mode-colour red'")
 	}
@@ -266,7 +266,7 @@ func TestDecorateShowOptionsLineDecoratesColourOptionField(t *testing.T) {
 func TestDecorateShowOptionsLineScopeColoursKnownOption(t *testing.T) {
 	// mouse is a session-scoped TypeFlag; no colour decoration applies
 	// but the name must still be rendered in the session scope colour.
-	decorated, ok := decorateShowOptionsLine("mouse on", nil)
+	decorated, ok := decorateShowOptionsLine("mouse on", nil, nil)
 	if !ok {
 		t.Fatal("expected scope decoration for 'mouse on'")
 	}
@@ -281,7 +281,7 @@ func TestDecorateShowOptionsLineScopeColoursKnownOption(t *testing.T) {
 func TestDecorateShowOptionsLineScopeColoursUserOption(t *testing.T) {
 	// @-prefixed names resolve to ScopeUser (220) even without a catalog
 	// entry.
-	decorated, ok := decorateShowOptionsLine("@my-plugin red", nil)
+	decorated, ok := decorateShowOptionsLine("@my-plugin red", nil, nil)
 	if !ok {
 		t.Fatal("expected scope decoration for '@my-plugin red'")
 	}
@@ -293,7 +293,7 @@ func TestDecorateShowOptionsLineScopeColoursUserOption(t *testing.T) {
 func TestDecorateShowOptionsLineInheritedStarSuffix(t *testing.T) {
 	// show-options -A appends '*' to inherited option names. The decorator
 	// must strip the star for catalog lookup but preserve it in the output.
-	decorated, ok := decorateShowOptionsLine("display-panes-active-colour* red", nil)
+	decorated, ok := decorateShowOptionsLine("display-panes-active-colour* red", nil, nil)
 	if !ok {
 		t.Fatal("expected decoration for star-suffixed option")
 	}
@@ -309,7 +309,7 @@ func TestDecorateShowOptionsLineInheritedStarSuffix(t *testing.T) {
 func TestDecorateShowOptionsLineStyleValue(t *testing.T) {
 	// Style values like "fg=colour33" should have the colour reference
 	// rendered in its own colour even when the option type is not TypeColour.
-	decorated, ok := decorateShowOptionsLine("message-style* fg=colour33", nil)
+	decorated, ok := decorateShowOptionsLine("message-style* fg=colour33", nil, nil)
 	if !ok {
 		t.Fatal("expected decoration for style value with colour reference")
 	}
@@ -323,7 +323,7 @@ func TestDecorateShowOptionsLineStyleValue(t *testing.T) {
 }
 
 func TestDecorateShowOptionsLineStyleMultipleAttrs(t *testing.T) {
-	decorated, ok := decorateShowOptionsLine("status-style* fg=red,bg=#0000ff,bold", nil)
+	decorated, ok := decorateShowOptionsLine("status-style* fg=red,bg=#0000ff,bold", nil, nil)
 	if !ok {
 		t.Fatal("expected decoration for multi-attr style value")
 	}
@@ -342,13 +342,13 @@ func TestDecorateShowOptionsLineStyleMultipleAttrs(t *testing.T) {
 func TestDecorateShowOptionsLineSkipsNameWithoutScope(t *testing.T) {
 	// A first token that is neither a catalog option nor @-prefixed has no
 	// scope and no colour decoration, so decoration should be skipped entirely.
-	if _, ok := decorateShowOptionsLine("not-a-real-option value", nil); ok {
+	if _, ok := decorateShowOptionsLine("not-a-real-option value", nil, nil); ok {
 		t.Fatal("expected no decoration for unknown non-user option name")
 	}
 }
 
 func TestDecorateShowOptionsLineSkipsMalformedLine(t *testing.T) {
-	if _, ok := decorateShowOptionsLine("no-space-in-this-line", nil); ok {
+	if _, ok := decorateShowOptionsLine("no-space-in-this-line", nil, nil); ok {
 		t.Fatal("expected no decoration for a line with no value")
 	}
 }

@@ -2,12 +2,17 @@ package testutil
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/atomicstack/tmux-popup-control/internal/shquote"
 )
 
 func TestRootMenuRendering(t *testing.T) {
@@ -635,4 +640,116 @@ func windowIndices(t *testing.T, socket, session string) []int {
 	}
 	sort.Ints(indices)
 	return indices
+}
+
+// TestShowOptionsThemeColourSwatchIntegration drives the real binary end to
+// end: a TTY client is attached to the server, the binary is told to use it
+// as the popup's client, and `show-options -g display-panes-colour` must
+// render its theme-colour value (themeblue on stock tmux next-3.8 defaults)
+// in a resolved colour. Skips on tmux builds without theme colours.
+func TestShowOptionsThemeColourSwatchIntegration(t *testing.T) {
+	bin := BuildBinary(t)
+	socket, cleanup, logDir := StartIsolatedTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	host := "swatch-host"
+	if err := TmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", host).Run(); err != nil {
+		t.Fatalf("create host session: %v", err)
+	}
+	valueOut, err := TmuxCommand(socket, "show-options", "-gv", "display-panes-colour").Output()
+	themeValue := strings.TrimSpace(string(valueOut))
+	if err != nil || !strings.HasPrefix(themeValue, "theme") {
+		t.Skipf("skipping: display-panes-colour is not a theme colour on this tmux (%q, %v)", themeValue, err)
+	}
+
+	// Nested attach inside a window of the host session yields a real
+	// (non-control-mode) client for the binary to resolve colours against.
+	attach := fmt.Sprintf("env -u TMUX TERM=xterm-256color tmux -S %q attach -t %q", socket, host)
+	if err := TmuxCommand(socket, "new-window", "-d", "-t", host, attach).Run(); err != nil {
+		t.Fatalf("new-window attach: %v", err)
+	}
+	var client string
+	deadline := time.Now().Add(5 * time.Second)
+	for client == "" && time.Now().Before(deadline) {
+		out, err := TmuxCommand(socket, "list-clients", "-F", "#{client_name}\t#{client_control_mode}").Output()
+		if err == nil {
+			for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+				name, control, _ := strings.Cut(line, "\t")
+				if control == "0" && strings.TrimSpace(name) != "" {
+					client = strings.TrimSpace(name)
+					break
+				}
+			}
+		}
+		if client == "" {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if client == "" {
+		t.Skip("skipping: no tty client could be attached")
+	}
+	probe, _ := TmuxCommand(socket, "display-message", "-c", client, "-p", "#{c/f:themeblue}").Output()
+	if strings.TrimSpace(string(probe)) == "" {
+		t.Skip("skipping: tmux build has no theme colours")
+	}
+	t.Logf("tty client %s resolves themeblue to %q", client, probe)
+
+	// Launch the binary with the TTY client pinned via env so it does not
+	// depend on discovering a client attached to its own session.
+	scriptDir := t.TempDir()
+	exitFile := filepath.Join(scriptDir, "exit-code")
+	scriptPath := filepath.Join(scriptDir, "run.sh")
+	script := "#!/bin/sh\n" +
+		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=truecolor\n" +
+		"export TMUX_POPUP_CONTROL_ROOT_MENU=command\n" +
+		"export TMUX_POPUP_CONTROL_CLIENT=" + shquote.Quote(client) + "\n" +
+		shquote.Quote(bin) + " -socket " + shquote.Quote(socket) + " -width 80 -height 24 2>/dev/null\n" +
+		"printf '%s' $? > " + shquote.Quote(exitFile) + "\n" +
+		"sleep 300\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write launcher script: %v", err)
+	}
+	runner := "swatch-runner"
+	if err := TmuxCommand(socket, "new-session", "-d", "-x", "80", "-y", "24", "-s", runner, scriptPath).Run(); err != nil {
+		t.Fatalf("start runner session: %v", err)
+	}
+	pane := runner + ":0.0"
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	WaitForContent(t, ctx, socket, pane, "command")
+	SendText(t, socket, pane, "show-options -g display-panes-colour")
+	SendKeys(t, socket, pane, "Enter")
+	// The typed command echoes "display-panes-colour" too, so wait for the
+	// option's value to appear and pick the output line, not the prompt.
+	WaitForContent(t, ctx, socket, pane, themeValue)
+
+	captured, err := CapturePane(t, socket, pane)
+	if err != nil {
+		t.Fatalf("capture pane: %v", err)
+	}
+	line := ""
+	for _, l := range strings.Split(captured, "\n") {
+		if strings.Contains(l, "display-panes-colour") && strings.Contains(l, themeValue) && !strings.Contains(l, "show-options") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatalf("show-options line not found in pane:\n%s", captured)
+	}
+	t.Logf("rendered line: %q", line)
+	valueAt := strings.Index(line, "theme")
+	if valueAt < 0 {
+		t.Fatalf("theme colour value missing from rendered line %q", line)
+	}
+	sgr := regexp.MustCompile(`\x1b\[[0-9;]*38;(2;\d+;\d+;\d+|5;\d+)[0-9;]*m`)
+	if !sgr.MatchString(line[:valueAt]) {
+		t.Fatalf("expected a resolved colour (38;2;… or 38;5;…) before the theme value, got %q", line)
+	}
+	if exit, err := os.ReadFile(exitFile); err == nil && strings.TrimSpace(string(exit)) != "" {
+		t.Fatalf("binary exited early with code %s", strings.TrimSpace(string(exit)))
+	}
+	_ = TmuxCommand(socket, "kill-session", "-t", runner).Run()
 }

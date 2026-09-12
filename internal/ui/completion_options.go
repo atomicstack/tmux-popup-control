@@ -7,8 +7,34 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/atomicstack/tmux-popup-control/internal/cmdparse"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 	"github.com/atomicstack/tmux-popup-control/internal/tmuxopts"
 )
+
+// colourResolver resolves colour names that colourSpecForName cannot map on
+// its own — tmux theme names such as themeblue — to a lipgloss colour spec.
+// A nil resolver means no external resolution is available.
+type colourResolver func(name string) (string, bool)
+
+// resolveThemeColourFn resolves theme colour names through tmux for a given
+// socket and TTY client. Injectable so UI tests can stub the lookup.
+var resolveThemeColourFn = tmux.ResolveThemeColour
+
+// colourResolver returns a resolver bound to the popup's socket and the
+// user's TTY client, so theme colours come back as the user's terminal
+// would actually draw them (dark/light theme, 16/256/truecolour). Without
+// a known TTY client there is no terminal to resolve against (tmux would
+// answer for the control-mode connection), so nil is returned and theme
+// names render undecorated.
+func (m *Model) colourResolver() colourResolver {
+	socket, client := m.socketPath, strings.TrimSpace(m.clientID)
+	if client == "" {
+		return nil
+	}
+	return func(name string) (string, bool) {
+		return resolveThemeColourFn(socket, client, name)
+	}
+}
 
 // commandsCompletingOptions lists commands whose "option" positional should
 // be completed from the tmuxopts catalog.
@@ -126,7 +152,7 @@ func (m *Model) tmuxOptCompletion(schema *cmdparse.CommandSchema, ctx cmdparse.C
 				label = cand.Value
 			}
 			if isColour {
-				label = decorateColourLabel(label, cand.Value)
+				label = decorateColourLabel(label, cand.Value, m.colourResolver())
 			}
 			if label != cand.Value {
 				labels[cand.Value] = label
@@ -255,7 +281,7 @@ func (m *Model) filterColourSpans() []filterSpan {
 
 	// value span — render in the colour the value represents
 	if ft.Value != "" && commandsCompletingOptionValues[schema.Name] {
-		if spec, ok := colourSpecForName(ft.Value); ok {
+		if spec, ok := colourSpecForName(ft.Value, m.colourResolver()); ok {
 			runeStart := len([]rune(current.Filter[:ft.ValueByte]))
 			spans = append(spans, filterSpan{
 				Start: runeStart,
@@ -337,7 +363,9 @@ func tokenByteOffsets(s string, tokens []string) []int {
 // false when the line is malformed (no space) or has no applicable
 // decoration. bodyStyle — when non-nil — wraps the undecorated text so
 // decorated and undecorated spans share consistent foreground/background.
-func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bool) {
+// resolve — when non-nil — maps theme colour names (themeblue, …) to a
+// concrete colour; values it cannot resolve are rendered plainly.
+func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style, resolve colourResolver) (string, bool) {
 	var name, rest, value string
 	sp := strings.IndexByte(line, ' ')
 	if sp > 0 {
@@ -348,9 +376,7 @@ func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bo
 		name = line
 	}
 
-	// Strip the trailing '*' that tmux appends for inherited values in
-	// show-options -A output before looking up the catalog entry.
-	lookupName := strings.TrimRight(name, "*")
+	lookupName := optionLookupName(name)
 
 	catalog, err := tmuxopts.Default()
 	if err != nil || catalog == nil {
@@ -360,31 +386,38 @@ func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bo
 	scope := primaryScope(catalog, lookupName)
 	scopeStyle := scopeStyleFor(scope)
 
+	renderBody := func(text string) string {
+		if text == "" || bodyStyle == nil {
+			return text
+		}
+		return bodyStyle.Render(text)
+	}
+
 	var valueRendered string
 	if value != "" {
+		// tmux quotes values containing format syntax or spaces; decorate
+		// the inner text and keep the quotes as plain body text.
+		open, inner, closing := unquoteOptionValue(value)
+		var innerRendered string
 		opt, _ := catalog.Lookup(lookupName)
 		if opt != nil && opt.IsColour() {
 			// Bare colour value — render the whole value in its colour.
-			if spec, ok := colourSpecForName(value); ok {
-				valueRendered = lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(value)
+			if spec, ok := colourSpecForName(inner, resolve); ok {
+				innerRendered = lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(inner)
 			}
 		}
-		if valueRendered == "" {
+		if innerRendered == "" {
 			// Try to colour inline colour references in style attributes
 			// (e.g. "fg=colour33", "bg=red,bold").
-			valueRendered = decorateStyleValue(value, bodyStyle)
+			innerRendered = decorateStyleValue(inner, bodyStyle, resolve)
+		}
+		if innerRendered != "" {
+			valueRendered = renderBody(open) + innerRendered + renderBody(closing)
 		}
 	}
 
 	if scopeStyle == nil && valueRendered == "" {
 		return "", false
-	}
-
-	renderBody := func(text string) string {
-		if bodyStyle == nil {
-			return text
-		}
-		return bodyStyle.Render(text)
 	}
 
 	nameRendered := renderBody(name)
@@ -398,31 +431,62 @@ func decorateShowOptionsLine(line string, bodyStyle *lipgloss.Style) (string, bo
 	return nameRendered + renderBody(rest), true
 }
 
+// optionLookupName reduces a show-options key to the catalog option name:
+// the trailing '*' that show-options -A appends to inherited values and the
+// "[N]" index suffix on array option entries (pane-colours[3]) are both
+// stripped.
+func optionLookupName(name string) string {
+	name = strings.TrimRight(name, "*")
+	if i := strings.IndexByte(name, '['); i > 0 && strings.HasSuffix(name, "]") {
+		name = name[:i]
+	}
+	return name
+}
+
+// unquoteOptionValue splits a show-options value into its surrounding quote
+// (if tmux quoted it) and the inner text. open/closing are "" when the
+// value is unquoted.
+func unquoteOptionValue(value string) (open, inner, closing string) {
+	if len(value) >= 2 {
+		if q := value[0]; (q == '"' || q == '\'') && value[len(value)-1] == q {
+			return value[:1], value[1 : len(value)-1], value[len(value)-1:]
+		}
+	}
+	return "", value, ""
+}
+
+// styleColourKeys lists the tmux style attributes whose value is a colour.
+var styleColourKeys = map[string]bool{
+	"fg":   true,
+	"bg":   true,
+	"us":   true,
+	"fill": true,
+}
+
 // decorateStyleValue colours inline colour references in tmux style values
-// like "fg=colour33", "bg=red,bold", "fg=#ff00ff,bg=blue". Each comma-
-// separated attribute is checked; those of the form key=colourValue have
-// the colour portion rendered in its own colour. Returns "" when no colour
+// like "fg=colour33", "bg=red,bold", "fg=#ff00ff,bg=blue". Each attribute
+// (see splitStyleAttrs) is checked; those of the form key=colourValue have
+// the colour portion rendered in its own colour. Attributes that are format
+// strings (#{…} / #[…]) are rendered plainly. Returns "" when no colour
 // references were found.
-func decorateStyleValue(value string, bodyStyle *lipgloss.Style) string {
+func decorateStyleValue(value string, bodyStyle *lipgloss.Style, resolve colourResolver) string {
 	renderBody := func(text string) string {
-		if bodyStyle == nil {
+		if text == "" || bodyStyle == nil {
 			return text
 		}
 		return bodyStyle.Render(text)
 	}
 
-	attrs := strings.Split(value, ",")
+	attrs := splitStyleAttrs(value)
 	any := false
-	var parts []string
+	parts := make([]string, 0, len(attrs))
 	for _, attr := range attrs {
-		if key, colourName, ok := strings.Cut(attr, "="); ok {
-			if (key == "fg" || key == "bg") && colourName != "" {
-				if spec, ok := colourSpecForName(colourName); ok {
-					coloured := lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(colourName)
-					parts = append(parts, renderBody(key+"=")+coloured)
-					any = true
-					continue
-				}
+		if key, colourName, ok := strings.Cut(attr, "="); ok && styleColourKeys[key] && colourName != "" {
+			if spec, ok := colourSpecForName(colourName, resolve); ok {
+				coloured := lipgloss.NewStyle().Foreground(lipgloss.Color(spec)).Render(colourName)
+				parts = append(parts, renderBody(key+"=")+coloured)
+				any = true
+				continue
 			}
 		}
 		parts = append(parts, renderBody(attr))
@@ -433,12 +497,53 @@ func decorateStyleValue(value string, bodyStyle *lipgloss.Style) string {
 	return strings.Join(parts, renderBody(","))
 }
 
+// splitStyleAttrs splits a tmux style string into its comma-separated
+// attributes the way tmux's style parser does: "#," is an escaped comma
+// (kept in the attribute), "##" is an escaped hash, and commas inside
+// #{…} conditionals or #[…] style blocks never split.
+func splitStyleAttrs(value string) []string {
+	var parts []string
+	start := 0
+	braces, brackets := 0, 0
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case '#':
+			if i+1 < len(value) {
+				switch value[i+1] {
+				case ',', '#':
+					i++
+				case '{':
+					braces++
+					i++
+				case '[':
+					brackets++
+					i++
+				}
+			}
+		case '}':
+			if braces > 0 {
+				braces--
+			}
+		case ']':
+			if brackets > 0 {
+				brackets--
+			}
+		case ',':
+			if braces == 0 && brackets == 0 {
+				parts = append(parts, value[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(parts, value[start:])
+}
+
 // decorateColourLabel renders a colour value's display label in the colour
-// it represents when the colour can be resolved by lipgloss. When the colour
-// name is an X11 extended name or otherwise unresolvable, the label is
-// returned unchanged.
-func decorateColourLabel(label, value string) string {
-	spec, ok := colourSpecForName(value)
+// it represents when the colour can be resolved. When the colour name is an
+// X11 extended name or otherwise unresolvable, the label is returned
+// unchanged.
+func decorateColourLabel(label, value string, resolve colourResolver) string {
+	spec, ok := colourSpecForName(value, resolve)
 	if !ok {
 		return label
 	}
@@ -446,24 +551,28 @@ func decorateColourLabel(label, value string) string {
 }
 
 // colourSpecForName returns a lipgloss.Color-compatible spec for the given
-// tmux colour name when it is one of the forms lipgloss can render without
+// tmux colour name when it is one of the forms that can be rendered without
 // an external name table:
 //
 //   - The 18 basic tmux names (black/red/…/white, bright variants, default,
 //     terminal) map to ANSI indices. "default" and "terminal" have no
 //     intrinsic colour and return ok=false.
 //   - "colourN" / "colorN" forms map to ANSI index N (0..255).
-//   - "#RRGGBB" / "#RGB" pass through unchanged.
+//   - "#RRGGBB" (exactly six hex digits, the only hex form tmux accepts)
+//     passes through unchanged.
+//   - Anything else is handed to resolve (theme colour names), when given.
 //
-// Extended X11 colour names (AliceBlue, cornflower blue, …) are NOT
-// supported here because lipgloss does not ship an X11 name table; callers
-// should present those without colour decoration rather than mis-rendering them.
-func colourSpecForName(name string) (string, bool) {
-	if name == "" {
+// Format strings (#{…} / #[…]) are never colours even though they start
+// with '#'. Extended X11 colour names (AliceBlue, cornflower blue, …) are
+// NOT supported here because lipgloss does not ship an X11 name table;
+// callers should present those without colour decoration rather than
+// mis-rendering them.
+func colourSpecForName(name string, resolve colourResolver) (string, bool) {
+	if name == "" || strings.Contains(name, "#{") || strings.Contains(name, "#[") {
 		return "", false
 	}
 	if strings.HasPrefix(name, "#") {
-		return name, true
+		return name, isHexColour(name)
 	}
 	lowered := strings.ToLower(name)
 	if idx, ok := basicColourIndices[lowered]; ok {
@@ -480,7 +589,20 @@ func colourSpecForName(name string) (string, bool) {
 			}
 		}
 	}
+	if resolve != nil {
+		return resolve(name)
+	}
 	return "", false
+}
+
+// isHexColour reports whether s is a "#rrggbb" colour, the only hex form
+// tmux's colour_fromstring accepts.
+func isHexColour(s string) bool {
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	_, err := strconv.ParseUint(s[1:], 16, 32)
+	return err == nil
 }
 
 // basicColourIndices maps the 18 tmux basic colour names to their ANSI
