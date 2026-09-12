@@ -2,6 +2,8 @@
 
 Here’s what’s happened so far:
 
+- Released v0.17.0 (2026-09-12, tag on `5ba5196`): tmux next-3.9 support (json layouts, floating-pane resurrect, theme colour swatches, id-based targets), catalog-driven command completion, gotmuxcc v0.3.0, and the merged lifecycle/restore-safety/plugin-install work. `make release` now accepts `RELEASE_NOTES=<file>`; README bumped. Notes: https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.17.0
+
 - tmux next-3.9 follow-ups implemented (2026-09-12, `2f27883`..`b80e126`):
   - merged `feat-watcher-fetch-context` (rebased, fast-forward): gotmuxcc v0.2.0 (fixes the P0 control-mode framing bug, exposes floating/modal pane formats, per-command contexts, bounded handshake), context-aware `Fetch*`/`ShowOption`, bounded watcher shutdown; `vendor/` re-vendored offline from the module cache
   - json layouts: the shared control client sets the `new-layouts` flag (separate `refresh-client` call, ignored by older tmux); `selectableLayout` handles the v2 `{"V":2,"L":{...}}` form by stripping the `"I"` pane-id keys; `tmux.Pane` carries `Floating`/`X`/`Y`/`Z` and `tmux.Window` carries `Zoomed`
