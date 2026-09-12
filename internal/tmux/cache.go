@@ -26,4 +26,5 @@ func resetCaches() {
 	optionCacheMu.Lock()
 	optionCache = map[string]string{}
 	optionCacheMu.Unlock()
+	resetThemeColourCache()
 }
