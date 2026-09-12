@@ -1,3 +1,15 @@
+## tmux next-3.9 follow-ups (from the 2026-09-12 upstream analysis)
+
+Details and verification transcripts: `~/obsidian/agent-notes/tmux-popup-control/2026-09-12/tmux-next-39-impact-analysis.md`.
+
+- Merge `feat-watcher-fetch-context` (or otherwise bump gotmuxcc to v0.2.0): it fixes the P0 control-mode framing bug (`a6f21f3`) and exposes `Pane.Floating`/`PaneX`/`PaneY`/`PaneZ`.
+- Resurrect: mark floating panes in the save file, exclude them from the layout pane count, and restore them with `new-pane -x -y -X -Y` (minimum: skip them). Today restore aborts with "have 3 panes but need 2" for any window that had a floater.
+- Resurrect: teach `selectableLayout` the JSON v2 layout format (strip `"I"` keys; tmux assigns panes in order when ids don't match) so saves survive the day control clients default to v2.
+- Do not set the `new-layouts` client flag on the shared connection until `window:layout`, the Escape revert, and resurrect handle JSON layouts.
+- `main.go:showPopup`: refuse an empty client name and document that tmux ≥ `af3e4d2e` silently ignores `display-popup` aimed at a control client.
+- Still open from the 2026-08-17 analysis: `:`/`.`/empty session and window names (`strings.Cut(id, ":")` sites), theme colour names (`themeblue`) and format-string values in the swatch renderer, and cmdparse zero-flag commands (`list-keys`, `command-prompt`, `send-prefix`).
+- Opportunity: gate pane previews / the pane poller on `#{pane_output_generation}` and `#{history_generation}` to skip unchanged captures.
+
 ## Command argument tab completion (feature/cmd-completion branch)
 
 Remaining tasks from `docs/superpowers/plans/2026-04-02-command-argument-completion.md`:

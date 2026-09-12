@@ -2,6 +2,12 @@
 
 Here’s what’s happened so far:
 
+- Option catalog refreshed for tmux next-3.9 and upstream impact analysis (2026-09-12, `3cc4f9a`):
+  - embedded catalog refreshed from option-catalog `647a917` + its uncommitted 2026-09-12 regeneration (tmux `e880cf63`): 272 options (+`clear-on-attach`), `remain-on-exit failed-key`, `pane-border-lines rounded`, `utf8` terminal feature, `capture-pane -I`, `display-message -j`, `new-pane -A/-D/-K`, and the `history_*`/`pane_output_generation` formats; command help diffed, no description regressions
+  - analysed tmux `851c5a933d..e880cf63` (155 commits) with live verification on a scratch HEAD build; full `make test` passes against tmux next-3.9
+  - findings: layout strings are JSON v2 but control clients keep v1 (tiled-only, now round-trippable, so the floating-pane `window:layout` defect is mitigated); `display-popup` targeted at a control client is a silent no-op; resurrect restore aborts for windows that had a floating pane ("have 3 panes but need 2"); gotmuxcc v0.2.0 fixes the P0 router framing bug and `main` still vendors v0.1.4
+  - write-up: `~/obsidian/agent-notes/tmux-popup-control/2026-09-12/tmux-next-39-impact-analysis.md`; action items in `todo.md`
+
 - Option catalog refreshed to schema v2 and command help re-sourced from it (2026-08-17, `f9cc2d2`):
   - embedded catalog refreshed from option-catalog `647a917` (tmux `851c5a933d`): 271 options — 21 new pane/window/client lifecycle hooks, `after-queue` removed, `display-panes-border-style` and `copy-mode-current-line-style` added
   - schema v2 adds structured command data (`usage`, `argument_template`, `description`, `after_hook_name`, `positional_arguments`, per-flag `value_mode`/`value_name`/`description`) — modelled on `TmuxCommandEntry`/`TmuxCommandFlag`; the new top-level `events` block (91 events with payload/`hook_*` format metadata) is deliberately left unmodelled until a consumer needs it
