@@ -3968,7 +3968,7 @@
       "control-notify.c",
       "*.c"
     ],
-    "tmux_git_commit": "851c5a933d4838c32ad06c248b2ba975d106149c"
+    "tmux_git_commit": "e880cf63e0a9fe095d7c5d313761520fb1a8653c"
   },
   "manpage_differences": {
     "manpage_only_options": [],
@@ -4070,6 +4070,7 @@
       "base-index",
       "bell-action",
       "buffer-limit",
+      "clear-on-attach",
       "client-active",
       "client-attached",
       "client-closed",
@@ -4388,6 +4389,40 @@
         },
         "set_time_validation": "strict_numeric_range",
         "static_checkability": "static-range"
+      }
+    },
+    {
+      "alternative_names": [],
+      "array": false,
+      "colour_option": false,
+      "default_source": {
+        "kind": "expression",
+        "value": "1"
+      },
+      "description": "Whether to use the alternate screen and clear it when a client is attached. When disabled, tmux does not enter the alternate screen on attach so terminal content before tmux remains in scrollback.",
+      "documented_scope": null,
+      "kind": "option",
+      "name": "clear-on-attach",
+      "scope": {
+        "default_inferred_scope": "server",
+        "scopes": [
+          "server"
+        ]
+      },
+      "scope_mismatch_with_manpage": false,
+      "style_option": false,
+      "summary": "Whether to use the alternate screen and clear it when a client is attached. When disabled, tmux does not enter the alternate screen on attach so terminal content before tmux remains in scrollback.",
+      "syntax_name": "clear-on-attach",
+      "type": "flag",
+      "value": {
+        "domain": "flag",
+        "menu": {
+          "kind": "enum",
+          "shared_domain_ref": "flag"
+        },
+        "set_time_validation": "strict_flag",
+        "static_checkability": "static-exact",
+        "toggle_without_value": true
       }
     },
     {
@@ -8438,7 +8473,7 @@
         "kind": "string",
         "value": "!\"#$%&'()*+,-./:;<=>?@[\\]^`{|}~"
       },
-      "description": "Characters considered to separate words.",
+      "description": "Characters considered to separate words; a space matches any character with the Unicode White_Space property.",
       "documented_scope": "session",
       "kind": "option",
       "name": "word-separators",
@@ -9905,7 +9940,8 @@
         "simple",
         "number",
         "spaces",
-        "none"
+        "none",
+        "rounded"
       ],
       "colour_option": false,
       "default_source": {
@@ -9939,7 +9975,8 @@
             "simple",
             "number",
             "spaces",
-            "none"
+            "none",
+            "rounded"
           ]
         },
         "set_time_validation": "strict_enum",
@@ -10369,14 +10406,15 @@
         "off",
         "on",
         "failed",
-        "key"
+        "key",
+        "failed-key"
       ],
       "colour_option": false,
       "default_source": {
         "kind": "expression",
         "value": "0"
       },
-      "description": "Whether panes should remain ('on'), remain until a key is pressed ('key') or be automatically killed ('off' or 'failed') when the program inside exits.",
+      "description": "Whether panes should remain ('on'), remain until a key is pressed after any exit ('key') or after a failure ('failed-key'), or be automatically killed ('off' or 'failed') when the program inside exits.",
       "documented_scope": "pane",
       "kind": "option",
       "name": "remain-on-exit",
@@ -10400,7 +10438,8 @@
             "off",
             "on",
             "failed",
-            "key"
+            "key",
+            "failed-key"
           ]
         },
         "set_time_validation": "strict_enum",
@@ -15158,11 +15197,23 @@
           "value_type": "string"
         },
         {
+          "name": "history_added",
+          "value_type": "string"
+        },
+        {
           "name": "history_all_bytes",
           "value_type": "string"
         },
         {
           "name": "history_bytes",
+          "value_type": "string"
+        },
+        {
+          "name": "history_collected",
+          "value_type": "string"
+        },
+        {
+          "name": "history_generation",
           "value_type": "string"
         },
         {
@@ -15403,6 +15454,10 @@
         },
         {
           "name": "pane_mode",
+          "value_type": "string"
+        },
+        {
+          "name": "pane_output_generation",
           "value_type": "string"
         },
         {
@@ -16064,7 +16119,8 @@
       "strikethrough",
       "sync",
       "title",
-      "usstyle"
+      "usstyle",
+      "utf8"
     ],
     "terminal_override_capabilities": [
       {
@@ -16281,6 +16337,10 @@
       },
       {
         "name": "il",
+        "value_type": "string"
+      },
+      {
+        "name": "ind",
         "value_type": "string"
       },
       {
@@ -17191,7 +17251,7 @@
         {
           "after_hook_name": "after-capture-pane",
           "alias": "capturep",
-          "argument_template": "ab:CeE:FHJLMNpPqRS:Tt:",
+          "argument_template": "ab:CeE:FHIJLMNpPqRS:Tt:",
           "description": "capture pane contents",
           "flags": [
             {
@@ -17233,6 +17293,12 @@
             {
               "description": "capture only hyperlinks",
               "name": "-H",
+              "value_mode": "none",
+              "value_name": null
+            },
+            {
+              "description": "include the time each line entered history, or zero if unavailable",
+              "name": "-I",
               "value_mode": "none",
               "value_name": null
             },
@@ -17308,7 +17374,7 @@
             "maximum": 0,
             "minimum": 0
           },
-          "usage": "capture-pane [-aCeFHJLMNpPqRT] [-b buffer-name] [-E end-line] [-S start-line] [-t target-pane]"
+          "usage": "capture-pane [-aCeFHIJLMNpPqRT] [-b buffer-name] [-E end-line] [-S start-line] [-t target-pane]"
         },
         {
           "after_hook_name": null,
@@ -18059,7 +18125,7 @@
         {
           "after_hook_name": "after-display-message",
           "alias": "display",
-          "argument_template": "aCc:d:lINpt:F:v",
+          "argument_template": "aCc:d:jlINpt:F:v",
           "description": "show or print a message",
           "flags": [
             {
@@ -18085,6 +18151,12 @@
               "name": "-d",
               "value_mode": "required",
               "value_name": "delay"
+            },
+            {
+              "description": "parse the message as JSON and print it",
+              "name": "-j",
+              "value_mode": "none",
+              "value_name": null
             },
             {
               "description": "don't expand formats",
@@ -18134,7 +18206,7 @@
             "maximum": 1,
             "minimum": 0
           },
-          "usage": "display-message [-aCIlNpv] [-c target-client] [-d delay] [-F format] [-t target-pane] [message]"
+          "usage": "display-message [-aCIjlNpv] [-c target-client] [-d delay] [-F format] [-t target-pane] [message]"
         },
         {
           "after_hook_name": "after-display-panes",
@@ -19275,9 +19347,15 @@
         {
           "after_hook_name": null,
           "alias": "newp",
-          "argument_template": "bB:Cc:de:EfF:hIkl:LMm:Op:PR:s:S:t:T:vWx:X:y:Y:Z",
+          "argument_template": "AbB:Cc:Dde:EfF:hIkl:KLMm:Op:PR:s:S:t:T:vWx:X:y:Y:Z",
           "description": "create a new floating pane",
           "flags": [
+            {
+              "description": "keep the floating pane visible above a zoomed pane",
+              "name": "-A",
+              "value_mode": "none",
+              "value_name": null
+            },
             {
               "description": "create before target pane",
               "name": "-b",
@@ -19301,6 +19379,12 @@
               "name": "-c",
               "value_mode": "required",
               "value_name": "start-directory"
+            },
+            {
+              "description": "close a modal pane when Escape or C-c is pressed",
+              "name": "-D",
+              "value_mode": "none",
+              "value_name": null
             },
             {
               "description": "don't select new pane",
@@ -19355,6 +19439,12 @@
               "name": "-l",
               "value_mode": "required",
               "value_name": "size"
+            },
+            {
+              "description": "pass all keys, including the prefix key, directly to the modal pane",
+              "name": "-K",
+              "value_mode": "none",
+              "value_name": null
             },
             {
               "description": "border lines",
@@ -19470,7 +19560,7 @@
             "maximum": -1,
             "minimum": 0
           },
-          "usage": "new-pane [-bCdefhIklMOPvWZ] [-B border-lines] [-c start-directory] [-e environment] [-F format] [-l size] [-m message] [-p percentage] [-s style] [-S active-border-style] [-R inactive-border-style] [-T title] [-x width] [-y height] [-X x-position] [-Y y-position] [-t target-pane] [shell-command [argument ...]]"
+          "usage": "new-pane [-AbCDefhIkKLMOPvWZ] [-B border-lines] [-c start-directory] [-e environment] [-F format] [-l size] [-m message] [-p percentage] [-s style] [-S active-border-style] [-R inactive-border-style] [-T title] [-x width] [-y height] [-X x-position] [-Y y-position] [-t target-pane] [shell-command [argument ...]]"
         },
         {
           "after_hook_name": "after-new-session",
@@ -19643,7 +19733,7 @@
               "value_name": null
             },
             {
-              "description": "select existing named window",
+              "description": "select an existing target window or named window instead of creating one",
               "name": "-S",
               "value_mode": "none",
               "value_name": null
