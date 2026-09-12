@@ -19,6 +19,7 @@ type Window struct {
 	Current    bool
 	InternalID string
 	Layout     string
+	Zoomed     bool
 }
 
 type Pane struct {
@@ -36,6 +37,14 @@ type Pane struct {
 	Active    bool
 	Label     string
 	Current   bool
+	// Floating reports a floating pane (tmux next-3.8+). tmux keeps floating
+	// panes in the ordinary pane list, so consumers that lay panes out (the
+	// tree view, resurrect) need the flag to tell them apart. X, Y and Z are
+	// the floating pane's position and z-index; zero for tiled panes.
+	Floating bool
+	X        int
+	Y        int
+	Z        int
 }
 
 type PaneSnapshot struct {
@@ -148,6 +157,12 @@ var (
 			return
 		}
 		_ = c.SetControlFlags("no-output")
+		// Opt into the JSON (v2) layout format. tmux next-3.9 keeps sending
+		// the old v1 format to control clients unless they set new-layouts,
+		// and v1 strings omit floating panes entirely, so resurrect could not
+		// round-trip a window that had one. Sent as a separate call so an
+		// older tmux that ignores or rejects the flag cannot undo no-output.
+		_ = c.SetControlFlags("new-layouts")
 	}
 
 	newWindowHandle = func(w *gotmux.Window) windowHandle {

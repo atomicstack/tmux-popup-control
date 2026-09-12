@@ -157,6 +157,7 @@ func FetchWindowsContext(ctx context.Context, socketPath string) (WindowSnapshot
 			Current:    session == currentSession && w.Active,
 			InternalID: line.windowID,
 			Layout:     w.Layout,
+			Zoomed:     w.ZoomedFlag,
 		}
 		if entry.Current {
 			snapshot.CurrentID = entry.ID
@@ -235,6 +236,10 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 			Active:    pane.Active,
 			Label:     line.label,
 			Current:   current,
+			Floating:  pane.FloatingFlag,
+			X:         pane.X,
+			Y:         pane.Y,
+			Z:         pane.Z,
 		}
 		if entry.Current {
 			snapshot.CurrentID = entry.ID
