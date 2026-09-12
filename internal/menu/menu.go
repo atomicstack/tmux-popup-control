@@ -52,6 +52,7 @@ type WindowEntry struct {
 	Session    string
 	Index      int
 	InternalID string
+	SessionID  string
 	Current    bool
 	Layout     string
 	Zoomed     bool
@@ -62,6 +63,8 @@ type PaneEntry struct {
 	ID        string
 	Label     string
 	PaneID    string
+	SessionID string
+	WindowID  string
 	Session   string
 	Window    string
 	WindowIdx int
@@ -73,7 +76,10 @@ type PaneEntry struct {
 
 // SessionEntry represents a tmux session reference for menu loaders.
 type SessionEntry struct {
-	Name     string
+	Name string
+	// ID is the tmux session id ($N), the only reliable tmux target for a
+	// session whose name contains ':' or '.'.
+	ID       string
 	Label    string
 	Attached bool
 	Current  bool

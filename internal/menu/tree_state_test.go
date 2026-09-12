@@ -73,10 +73,10 @@ func TestBuildItemsFullyExpanded(t *testing.T) {
 	if len(items) != 4 {
 		t.Fatalf("expected 4 items, got %d", len(items))
 	}
-	if items[2].ID != "tree:p:main:0:%1" {
+	if items[2].ID != "tree:p:%1" {
 		t.Errorf("[2] expected tree:p:main:0:%%1, got %s", items[2].ID)
 	}
-	if items[3].ID != "tree:p:main:0:%2" {
+	if items[3].ID != "tree:p:%2" {
 		t.Errorf("[3] expected tree:p:main:0:%%2, got %s", items[3].ID)
 	}
 }
@@ -155,7 +155,7 @@ func TestTreeItemKind(t *testing.T) {
 	}{
 		{"tree:s:main", "session"},
 		{"tree:w:main:0", "window"},
-		{"tree:p:main:0:%1", "pane"},
+		{"tree:p:%1", "pane"},
 		{"other", ""},
 	}
 	for _, tt := range tests {
@@ -254,7 +254,7 @@ func TestFilterItemsPaneMatchShowsAncestorsOnly(t *testing.T) {
 	if items[1].ID != "tree:w:dev:0" {
 		t.Errorf("[1] expected tree:w:dev:0, got %s", items[1].ID)
 	}
-	if items[2].ID != "tree:p:dev:0:%1" {
+	if items[2].ID != "tree:p:%1" {
 		t.Errorf("[2] expected tree:p:dev:0:%%1, got %s", items[2].ID)
 	}
 }
@@ -425,13 +425,13 @@ func TestFilterItemsPaneMatchedByOwnMetadataOnly(t *testing.T) {
 	if len(items) != 3 {
 		t.Fatalf("expected 3 items (session + window + pane), got %d: %v", len(items), ids)
 	}
-	if items[2].ID != "tree:p:dev:0:%1" {
+	if items[2].ID != "tree:p:%1" {
 		t.Errorf("[2] expected tree:p:dev:0:%%1, got %s", items[2].ID)
 	}
 
 	// "shell" pane should not appear — "vim" doesn't match it.
 	for _, it := range items {
-		if it.ID == "tree:p:dev:0:%2" {
+		if it.ID == "tree:p:%2" {
 			t.Errorf("pane 'shell' should not match 'vim', got %v", ids)
 		}
 	}
@@ -573,7 +573,7 @@ func TestTreeIsExpandable(t *testing.T) {
 	if !TreeIsExpandable("tree:w:main:0") {
 		t.Error("window should be expandable")
 	}
-	if TreeIsExpandable("tree:p:main:0:%1") {
+	if TreeIsExpandable("tree:p:%1") {
 		t.Error("pane should not be expandable")
 	}
 }

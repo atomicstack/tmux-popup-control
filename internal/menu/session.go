@@ -40,6 +40,13 @@ func loadSessionKillMenu(ctx Context) ([]Item, error) {
 	return SessionEntriesToItems(ctx.Sessions), nil
 }
 
+var (
+	killSessionsFn   = tmux.KillSessions
+	detachSessionsFn = tmux.DetachSessions
+	renameSessionFn  = tmux.RenameSession
+	createSessionFn  = tmux.NewSession
+)
+
 func SessionNewAction(ctx Context, item Item) tea.Cmd {
 	return func() tea.Msg {
 		events.Session.NewPrompt(len(ctx.Sessions))
@@ -48,9 +55,10 @@ func SessionNewAction(ctx Context, item Item) tea.Cmd {
 }
 
 func SessionSwitchAction(ctx Context, item Item) tea.Cmd {
+	target := ctx.sessionTarget(item.ID)
 	return func() tea.Msg {
 		events.Session.Switch(item.ID)
-		if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, item.ID); err != nil {
+		if err := switchClientFn(ctx.SocketPath, ctx.ClientID, target); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Switched to %s", item.Label)}
@@ -79,9 +87,10 @@ func SessionDetachAction(ctx Context, item Item) tea.Cmd {
 	if target == "" {
 		return failCmd("invalid session target")
 	}
+	tmuxTarget := ctx.sessionTarget(target)
 	return runAction(
 		func() { events.Session.Detach(target) },
-		func() error { return tmux.DetachSessions(ctx.SocketPath, []string{target}) },
+		func() error { return detachSessionsFn(ctx.SocketPath, []string{tmuxTarget}) },
 		fmt.Sprintf("Detached %s", label),
 	)
 }
@@ -92,9 +101,10 @@ func SessionKillAction(ctx Context, item Item) tea.Cmd {
 	if target == "" {
 		return failCmd("invalid session target")
 	}
+	tmuxTarget := ctx.sessionTarget(target)
 	return runAction(
 		func() { events.Session.Kill(target) },
-		func() error { return tmux.KillSessions(ctx.SocketPath, []string{target}) },
+		func() error { return killSessionsFn(ctx.SocketPath, []string{tmuxTarget}) },
 		fmt.Sprintf("Killed %s", label),
 	)
 }
@@ -103,10 +113,17 @@ func SessionCreateCommand(req SessionRequest) tea.Cmd {
 	return func() tea.Msg {
 		name := strings.TrimSpace(req.Value)
 		events.Session.Create(name)
-		if err := tmux.NewSession(req.Context.SocketPath, name); err != nil {
+		id, err := createSessionFn(req.Context.SocketPath, name)
+		if err != nil {
 			return ActionResult{Err: err}
 		}
-		if err := tmux.SwitchClient(req.Context.SocketPath, req.Context.ClientID, name); err != nil {
+		// Switch by the new session's id: the name the user typed may
+		// contain characters tmux cannot target by.
+		target := strings.TrimSpace(id)
+		if target == "" {
+			target = name
+		}
+		if err := switchClientFn(req.Context.SocketPath, req.Context.ClientID, target); err != nil {
 			return ActionResult{Err: fmt.Errorf("created session %s but failed to switch: %w", name, err)}
 		}
 		return ActionResult{Info: fmt.Sprintf("Created and switched to %s", name)}
@@ -124,7 +141,7 @@ func SessionRenameCommand(req SessionRequest) tea.Cmd {
 			return ActionResult{Err: fmt.Errorf("session name required")}
 		}
 		events.Session.Rename(target, name)
-		if err := tmux.RenameSession(req.Context.SocketPath, target, name); err != nil {
+		if err := renameSessionFn(req.Context.SocketPath, req.Context.sessionTarget(target), name); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Renamed %s to %s", target, name)}
@@ -366,47 +383,63 @@ func SessionTreeAction(ctx Context, item Item) tea.Cmd {
 	id := item.ID
 	switch {
 	case strings.HasPrefix(id, TreePrefixPane):
-		// tree:p:session:windowIndex:paneDisplayID
-		parts := strings.SplitN(strings.TrimPrefix(id, TreePrefixPane), ":", 3)
-		if len(parts) < 3 {
-			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid pane target: %s", id)} }
+		// tree:p:%N (or a legacy display id for callers that built one).
+		key := strings.TrimPrefix(id, TreePrefixPane)
+		ref, ok := ctx.paneRef(key)
+		if !ok {
+			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("unknown pane: %s", key)} }
 		}
-		session, paneTarget := parts[0], parts[2]
+		label := strings.TrimSpace(item.Label)
+		if label == "" {
+			label = key
+		}
 		return func() tea.Msg {
-			events.Session.Switch(session)
-			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
+			events.Session.Switch(ref.SessionID)
+			if err := switchPaneFn(ctx.SocketPath, ctx.ClientID, ref); err != nil {
 				return ActionResult{Err: err}
 			}
-			if err := tmux.SwitchPane(ctx.SocketPath, ctx.ClientID, paneTarget); err != nil {
-				return ActionResult{Err: err}
-			}
-			return ActionResult{Info: fmt.Sprintf("Switched to pane %s", paneTarget)}
+			return ActionResult{Info: fmt.Sprintf("Switched to pane %s", label)}
 		}
 	case strings.HasPrefix(id, TreePrefixWindow):
-		// tree:w:session:windowIndex
-		session, windowIdx, ok := strings.Cut(strings.TrimPrefix(id, TreePrefixWindow), ":")
+		// tree:w:@N (or a legacy display id).
+		key := strings.TrimPrefix(id, TreePrefixWindow)
+		win, ok := ctx.WindowEntryFor(key)
 		if !ok {
-			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("invalid window target: %s", id)} }
+			return func() tea.Msg { return ActionResult{Err: fmt.Errorf("unknown window: %s", key)} }
 		}
-		windowTarget := session + ":" + windowIdx
+		sessionTarget := ctx.windowSessionTarget(win)
+		windowTarget := win.InternalID
+		if windowTarget == "" {
+			windowTarget = win.ID
+		}
+		label := strings.TrimSpace(item.Label)
+		if label == "" {
+			label = win.ID
+		}
 		return func() tea.Msg {
-			events.Session.Switch(session)
-			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
+			events.Session.Switch(win.Session)
+			if err := switchClientFn(ctx.SocketPath, ctx.ClientID, sessionTarget); err != nil {
 				return ActionResult{Err: err}
 			}
-			if err := tmux.SelectWindow(ctx.SocketPath, windowTarget); err != nil {
+			if err := selectWindowFn(ctx.SocketPath, windowTarget); err != nil {
 				return ActionResult{Err: err}
 			}
-			return ActionResult{Info: fmt.Sprintf("Switched to window %s", windowTarget)}
+			return ActionResult{Info: fmt.Sprintf("Switched to window %s", label)}
 		}
 	case strings.HasPrefix(id, TreePrefixSession):
-		session := strings.TrimPrefix(id, TreePrefixSession)
+		// tree:s:$N (or a session name).
+		key := strings.TrimPrefix(id, TreePrefixSession)
+		target := ctx.sessionTarget(key)
+		label := strings.TrimSpace(item.Label)
+		if label == "" {
+			label = key
+		}
 		return func() tea.Msg {
-			events.Session.Switch(session)
-			if err := tmux.SwitchClient(ctx.SocketPath, ctx.ClientID, session); err != nil {
+			events.Session.Switch(key)
+			if err := switchClientFn(ctx.SocketPath, ctx.ClientID, target); err != nil {
 				return ActionResult{Err: err}
 			}
-			return ActionResult{Info: fmt.Sprintf("Switched to %s", session)}
+			return ActionResult{Info: fmt.Sprintf("Switched to %s", label)}
 		}
 	default:
 		return func() tea.Msg { return ActionResult{Err: fmt.Errorf("unknown tree item: %s", id)} }
@@ -428,6 +461,7 @@ func SessionEntriesFromTmux(sessions []tmux.Session) []SessionEntry {
 	for _, sess := range sessions {
 		entry := SessionEntry{
 			Name:     sess.Name,
+			ID:       sess.ID,
 			Label:    sess.Label,
 			Attached: sess.Attached,
 			Current:  sess.Current,

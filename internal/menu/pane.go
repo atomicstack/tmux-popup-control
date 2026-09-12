@@ -128,10 +128,14 @@ func PaneSwitchAction(ctx Context, item Item) tea.Cmd {
 	if target == "" {
 		return failCmd("invalid pane target")
 	}
+	ref, ok := ctx.paneRef(target)
+	if !ok {
+		return failCmd("unknown pane: %s", target)
+	}
 	label := item.Label
 	return runAction(
 		func() { events.Pane.Switch(target) },
-		func() error { return switchPaneFn(ctx.SocketPath, ctx.ClientID, target) },
+		func() error { return switchPaneFn(ctx.SocketPath, ctx.ClientID, ref) },
 		fmt.Sprintf("Switched to %s", label),
 	)
 }
@@ -141,9 +145,10 @@ func PaneKillAction(ctx Context, item Item) tea.Cmd {
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	label := item.Label
+	targets := targetsFor(sorted, ctx.paneTarget)
 	return func() tea.Msg {
 		events.Pane.Kill(sorted)
-		if err := killPanesFn(ctx.SocketPath, sorted); err != nil {
+		if err := killPanesFn(ctx.SocketPath, targets); err != nil {
 			return ActionResult{Err: err}
 		}
 		if len(sorted) == 1 {
@@ -163,10 +168,12 @@ func PaneJoinAction(ctx Context, item Item) tea.Cmd {
 	if target == "" {
 		return failCmd("no current pane to join into")
 	}
+	joinTarget := ctx.paneTarget(target)
+	sources := targetsFor(sorted, ctx.paneTarget)
 	return func() tea.Msg {
 		events.Pane.Join(sorted, target)
-		for _, id := range sorted {
-			if err := joinPaneFn(ctx.SocketPath, id, target); err != nil {
+		for _, id := range sources {
+			if err := joinPaneFn(ctx.SocketPath, id, joinTarget); err != nil {
 				return ActionResult{Err: err}
 			}
 		}
@@ -177,9 +184,16 @@ func PaneJoinAction(ctx Context, item Item) tea.Cmd {
 func PaneBreakAction(ctx Context, item Item) tea.Cmd {
 	target := strings.TrimSpace(item.ID)
 	label := item.Label
-	session := ctx.CurrentWindowSession
+	pane, _ := ctx.PaneEntryFor(target)
+	session := strings.TrimSpace(ctx.CurrentWindowSession)
+	sessionTarget := ctx.sessionTarget(session)
 	if session == "" {
-		session, _, _ = strings.Cut(target, ":")
+		// Fall back to the pane's own session, by id when known.
+		session = pane.Session
+		sessionTarget = pane.SessionID
+		if sessionTarget == "" {
+			sessionTarget = ctx.sessionTarget(session)
+		}
 	}
 	nextIdx := 0
 	for _, win := range ctx.Windows {
@@ -188,12 +202,13 @@ func PaneBreakAction(ctx Context, item Item) tea.Cmd {
 		}
 	}
 	destination := ""
-	if session != "" {
-		destination = fmt.Sprintf("%s:%d", session, nextIdx)
+	if sessionTarget != "" {
+		destination = fmt.Sprintf("%s:%d", sessionTarget, nextIdx)
 	}
+	source := ctx.paneTarget(target)
 	return func() tea.Msg {
 		events.Pane.Break(target, destination)
-		if err := breakPaneFn(ctx.SocketPath, target, destination); err != nil {
+		if err := breakPaneFn(ctx.SocketPath, source, destination); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Broke %s into new window", label)}
@@ -214,7 +229,7 @@ func PaneSwapAction(ctx Context, item Item) tea.Cmd {
 func PaneSwapCommand(ctx Context, first, second Item) tea.Cmd {
 	return func() tea.Msg {
 		events.Pane.Swap(first.ID, second.ID)
-		if err := swapPanesFn(ctx.SocketPath, first.ID, second.ID); err != nil {
+		if err := swapPanesFn(ctx.SocketPath, ctx.paneTarget(first.ID), ctx.paneTarget(second.ID)); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Swapped %s ↔ %s", first.Label, second.Label)}
@@ -301,6 +316,8 @@ func PaneEntriesFromTmux(panes []tmux.Pane) []PaneEntry {
 			ID:        p.ID,
 			Label:     p.Label,
 			PaneID:    p.PaneID,
+			SessionID: p.SessionID,
+			WindowID:  p.WindowID,
 			Session:   p.Session,
 			Window:    p.Window,
 			WindowIdx: p.WindowIdx,

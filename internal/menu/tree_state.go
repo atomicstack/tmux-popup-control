@@ -67,22 +67,52 @@ func TreeItemKind(id string) string {
 	}
 }
 
-// TreeSessionID formats a session tree item ID.
-func TreeSessionID(name string) string {
-	return TreePrefixSession + name
+// Tree item IDs wrap tmux ids ($N, @N, %N) rather than names: session and
+// window names may contain ':' and '.' on tmux next-3.8, so a name-based id
+// would be ambiguous and, worse, unusable as a tmux target. Entries that
+// predate the id fields (or test fixtures without them) fall back to the
+// display form via the *Key helpers.
+
+// TreeSessionID formats a session tree item ID from a session key.
+func TreeSessionID(key string) string {
+	return TreePrefixSession + key
 }
 
-// TreeWindowID formats a window tree item ID using the integer window index
-// to avoid colon conflicts with display-format IDs like "session:index".
-func TreeWindowID(sessionName string, windowIndex int) string {
-	return fmt.Sprintf("%s%s:%d", TreePrefixWindow, sessionName, windowIndex)
+// TreeWindowID formats a window tree item ID from a window key.
+func TreeWindowID(key string) string {
+	return TreePrefixWindow + key
 }
 
-// TreePaneID formats a pane tree item ID. windowIndex is numeric; paneID is
-// the pane's display ID (may contain colons) and is always the last component
-// so SplitN(…, 3) captures it correctly.
-func TreePaneID(sessionName string, windowIndex int, paneID string) string {
-	return fmt.Sprintf("%s%s:%d:%s", TreePrefixPane, sessionName, windowIndex, paneID)
+// TreePaneID formats a pane tree item ID from a pane key.
+func TreePaneID(key string) string {
+	return TreePrefixPane + key
+}
+
+// TreeSessionKey is the tmux session id when known, else the name.
+func TreeSessionKey(s SessionEntry) string {
+	if s.ID != "" {
+		return s.ID
+	}
+	return s.Name
+}
+
+// TreeWindowKey is the tmux window id when known, else "session:index".
+func TreeWindowKey(w WindowEntry) string {
+	if w.InternalID != "" {
+		return w.InternalID
+	}
+	if w.Session != "" {
+		return fmt.Sprintf("%s:%d", w.Session, w.Index)
+	}
+	return w.ID
+}
+
+// TreePaneKey is the tmux pane id when known, else the display id.
+func TreePaneKey(p PaneEntry) string {
+	if p.PaneID != "" {
+		return p.PaneID
+	}
+	return p.ID
 }
 
 // TreeItemsInput carries the data sources used to build a flat tree view.
@@ -154,21 +184,21 @@ func (s *TreeState) BuildTreeItems(input TreeItemsInput) []Item {
 
 	var items []Item
 	for _, sess := range input.Sessions {
-		sid := TreeSessionID(sess.Name)
+		sid := TreeSessionID(TreeSessionKey(sess))
 		items = append(items, Item{ID: sid, Label: sess.Name})
 
 		if !s.IsExpanded(sid) {
 			continue
 		}
 		for _, win := range winBySession[sess.Name] {
-			wid := TreeWindowID(sess.Name, win.Index)
+			wid := TreeWindowID(TreeWindowKey(win))
 			items = append(items, Item{ID: wid, Label: TreeWindowLabel(win)})
 
 			if !s.IsExpanded(wid) {
 				continue
 			}
 			for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
-				pid := TreePaneID(sess.Name, win.Index, pane.ID)
+				pid := TreePaneID(TreePaneKey(pane))
 				items = append(items, Item{ID: pid, Label: TreePaneLabel(pane)})
 			}
 		}
@@ -199,7 +229,7 @@ func (s *TreeState) FilterTreeItems(input TreeItemsInput, query string) []Item {
 
 	var items []Item
 	for _, sess := range input.Sessions {
-		sid := TreeSessionID(sess.Name)
+		sid := TreeSessionID(TreeSessionKey(sess))
 		sessionMatches := treeAllWordsMatch(sess.Name, words)
 
 		// Collect children that independently match (per-item matching).
@@ -208,12 +238,12 @@ func (s *TreeState) FilterTreeItems(input TreeItemsInput, query string) []Item {
 		// dimensions, history) that causes fuzzy false positives.
 		var sessionChildren []Item
 		for _, win := range winBySession[sess.Name] {
-			wid := TreeWindowID(sess.Name, win.Index)
+			wid := TreeWindowID(TreeWindowKey(win))
 			windowMatches := treeAllWordsMatch(win.Name, words)
 
 			var windowChildren []Item
 			for _, pane := range paneByWin[paneKey(sess.Name, win.Index)] {
-				pid := TreePaneID(sess.Name, win.Index, pane.ID)
+				pid := TreePaneID(TreePaneKey(pane))
 				paneContext := pane.Title + " " + pane.Command
 				if treeAllWordsMatch(paneContext, words) {
 					windowChildren = append(windowChildren, Item{ID: pid, Label: TreePaneLabel(pane)})

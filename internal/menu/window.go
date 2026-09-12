@@ -164,7 +164,17 @@ type windowOrderKey struct {
 func buildWindowOrderKey(entry WindowEntry) windowOrderKey {
 	session := strings.TrimSpace(entry.Session)
 	raw := strings.TrimSpace(entry.ID)
-	prefix, indexStr, hasIndex := strings.Cut(raw, ":")
+	// Prefer the structured fields; the display id "session:index" is only
+	// split as a last resort, at the LAST colon, because session names may
+	// themselves contain ':'.
+	if session != "" && entry.Index >= 0 {
+		return windowOrderKey{session: session, index: entry.Index, hasIndex: true}
+	}
+	prefix, indexStr := raw, ""
+	hasIndex := false
+	if cut := strings.LastIndex(raw, ":"); cut >= 0 {
+		prefix, indexStr, hasIndex = raw[:cut], raw[cut+1:], true
+	}
 	if session == "" {
 		session = strings.TrimSpace(prefix)
 	}
@@ -233,9 +243,11 @@ func WindowPushToSessionAction(ctx Context, item Item) tea.Cmd {
 	if targetSession == "" {
 		return failCmd("invalid target session")
 	}
+	sourceTarget := ctx.windowTarget(source)
+	sessionTarget := ctx.sessionTarget(targetSession)
 	return runAction(
 		func() { events.Window.PushToSession(source, targetSession) },
-		func() error { return moveWindowFn(ctx.SocketPath, source, targetSession) },
+		func() error { return moveWindowFn(ctx.SocketPath, sourceTarget, sessionTarget) },
 		fmt.Sprintf("Moved window to %s", targetSession),
 	)
 }
@@ -280,19 +292,24 @@ func WindowLayoutAction(ctx Context, item Item) tea.Cmd {
 }
 
 func WindowSwitchAction(ctx Context, item Item) tea.Cmd {
-	windowID := item.ID
-	session, _, ok := strings.Cut(windowID, ":")
+	windowID := strings.TrimSpace(item.ID)
+	win, ok := ctx.WindowEntryFor(windowID)
 	if !ok {
-		return failCmd("invalid window id: %s", windowID)
+		return failCmd("unknown window: %s", windowID)
+	}
+	sessionTarget := ctx.windowSessionTarget(win)
+	windowTarget := win.InternalID
+	if windowTarget == "" {
+		windowTarget = win.ID
 	}
 	label := item.Label
 	return runAction(
 		func() { events.Window.Switch(windowID) },
 		func() error {
-			if err := switchClientFn(ctx.SocketPath, ctx.ClientID, session); err != nil {
+			if err := switchClientFn(ctx.SocketPath, ctx.ClientID, sessionTarget); err != nil {
 				return err
 			}
-			return selectWindowFn(ctx.SocketPath, windowID)
+			return selectWindowFn(ctx.SocketPath, windowTarget)
 		},
 		fmt.Sprintf("Switched to %s", label),
 	)
@@ -303,9 +320,10 @@ func WindowKillAction(ctx Context, item Item) tea.Cmd {
 	sorted := slices.Clone(ids)
 	slices.SortFunc(sorted, func(a, b string) int { return cmp.Compare(b, a) })
 	label := item.Label
+	targets := targetsFor(sorted, ctx.windowTarget)
 	return func() tea.Msg {
 		events.Window.Kill(sorted)
-		if err := unlinkWindowsFn(ctx.SocketPath, sorted); err != nil {
+		if err := unlinkWindowsFn(ctx.SocketPath, targets); err != nil {
 			return ActionResult{Err: err}
 		}
 		if len(sorted) == 1 {
@@ -356,6 +374,7 @@ func WindowEntriesFromTmux(windows []tmux.Window) []WindowEntry {
 			Session:    w.Session,
 			Index:      w.Index,
 			InternalID: w.InternalID,
+			SessionID:  w.SessionID,
 			Current:    w.Current,
 			Layout:     w.Layout,
 			Zoomed:     w.Zoomed,
@@ -374,7 +393,7 @@ func WindowRenameCommand(req RenameRequest) tea.Cmd {
 			return ActionResult{Err: fmt.Errorf("window name required")}
 		}
 		events.Window.Rename(req.Target, trimmed)
-		if err := renameWindowFn(req.Context.SocketPath, req.Target, trimmed); err != nil {
+		if err := renameWindowFn(req.Context.SocketPath, req.Context.windowTarget(req.Target), trimmed); err != nil {
 			return ActionResult{Err: err}
 		}
 		return ActionResult{Info: fmt.Sprintf("Renamed %s to %s", req.Target, trimmed)}
@@ -390,22 +409,21 @@ func WindowLinkAction(ctx Context, item Item) tea.Cmd {
 	if targetSession == "" {
 		return failCmd("no active session detected")
 	}
+	sourceTarget := ctx.windowTarget(source)
+	sessionTarget := ctx.sessionTarget(targetSession)
 	return runAction(
 		func() { events.Window.Link(source, targetSession) },
-		func() error { return linkWindowFn(ctx.SocketPath, source, targetSession) },
+		func() error { return linkWindowFn(ctx.SocketPath, sourceTarget, sessionTarget) },
 		fmt.Sprintf("Linked %s to %s", item.Label, targetSession),
 	)
 }
 
 func WindowPullFromSessionAction(ctx Context, item Item) tea.Cmd {
-	// Tree items have IDs like "tree:w:session:windowIndex".
-	// Extract the tmux window target (session:windowIndex).
+	// Tree items have IDs like "tree:w:@N"; strip the prefix and resolve
+	// whatever remains (a tmux id or a legacy display id) to the window's
+	// tmux id.
 	source := strings.TrimSpace(item.ID)
-	if trimmed, ok := strings.CutPrefix(source, TreePrefixWindow); ok {
-		if sess, idx, ok := strings.Cut(trimmed, ":"); ok {
-			source = sess + ":" + idx
-		}
-	}
+	source = strings.TrimPrefix(source, TreePrefixWindow)
 	targetSession := strings.TrimSpace(ctx.CurrentWindowSession)
 	if source == "" {
 		return failCmd("invalid window target")
@@ -413,9 +431,11 @@ func WindowPullFromSessionAction(ctx Context, item Item) tea.Cmd {
 	if targetSession == "" {
 		return failCmd("no active session detected")
 	}
+	sourceTarget := ctx.windowTarget(source)
+	sessionTarget := ctx.sessionTarget(targetSession)
 	return runAction(
 		func() { events.Window.PullFromSession(source, targetSession) },
-		func() error { return moveWindowFn(ctx.SocketPath, source, targetSession) },
+		func() error { return moveWindowFn(ctx.SocketPath, sourceTarget, sessionTarget) },
 		fmt.Sprintf("Pulled %s into %s", source, targetSession),
 	)
 }
@@ -434,7 +454,7 @@ func WindowSwapAction(ctx Context, item Item) tea.Cmd {
 func WindowSwapCommand(ctx Context, first, second Item) tea.Cmd {
 	return func() tea.Msg {
 		events.Window.Swap(first.ID, second.ID)
-		if err := swapWindowsFn(ctx.SocketPath, first.ID, second.ID); err != nil {
+		if err := swapWindowsFn(ctx.SocketPath, ctx.windowTarget(first.ID), ctx.windowTarget(second.ID)); err != nil {
 			return ActionResult{Err: err}
 		}
 		firstLabel := first.Label
