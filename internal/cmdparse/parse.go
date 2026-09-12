@@ -190,18 +190,19 @@ func stripBrackets(s string) string {
 }
 
 // isBoolCluster returns true if the token looks like [-abc] — a bracketed
-// dash followed by letters with no spaces.
+// dash followed by flag characters with no spaces. tmux accepts letters and
+// digits as flag characters (isalnum), e.g. [-1aNr] or [-2].
 func isBoolCluster(tok string) bool {
 	inner := stripBrackets(tok)
 	if !strings.HasPrefix(inner, "-") {
 		return false
 	}
-	// bool cluster: -X where X is all letters (no spaces in inner)
+	// bool cluster: -X where X is all flag characters (no spaces in inner)
 	if strings.Contains(inner, " ") {
 		return false
 	}
 	for _, r := range inner[1:] {
-		if !isLetter(r) {
+		if !isFlagChar(r) {
 			return false
 		}
 	}
@@ -266,4 +267,8 @@ func parsePositionals(tokens []string) []PositionalDef {
 
 func isLetter(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func isFlagChar(r rune) bool {
+	return isLetter(r) || (r >= '0' && r <= '9')
 }

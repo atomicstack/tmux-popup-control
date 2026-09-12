@@ -289,3 +289,47 @@ func argFlagsEqual(a, b []ArgFlagDef) bool {
 	}
 	return true
 }
+
+// tmux accepts digits as flag letters (isalnum), so a bool cluster such as
+// [-1aNr] must parse as flags rather than falling through to positionals.
+func TestParseDigitBoolCluster(t *testing.T) {
+	cases := []struct {
+		line     string
+		wantBool []rune
+		wantArgs []ArgFlagDef
+		wantPos  []string
+	}{
+		{
+			line:     "list-keys (lsk) [-1aNr] [-F format] [-O order] [-P prefix-string] [-T key-table] [key]",
+			wantBool: []rune{'1', 'a', 'N', 'r'},
+			wantArgs: []ArgFlagDef{{'F', "format"}, {'O', "order"}, {'P', "prefix-string"}, {'T', "key-table"}},
+			wantPos:  []string{"key"},
+		},
+		{
+			line:     "send-prefix [-2] [-t target-pane]",
+			wantBool: []rune{'2'},
+			wantArgs: []ArgFlagDef{{'t', "target-pane"}},
+		},
+	}
+	for _, tc := range cases {
+		s, err := ParseSynopsis(tc.line)
+		if err != nil {
+			t.Fatalf("ParseSynopsis(%q) failed: %v", tc.line, err)
+		}
+		if !runesEqual(s.BoolFlags, tc.wantBool) {
+			t.Errorf("%q: bool flags = %q, want %q", tc.line, string(s.BoolFlags), string(tc.wantBool))
+		}
+		if !argFlagsEqual(s.ArgFlags, tc.wantArgs) {
+			t.Errorf("%q: arg flags = %v, want %v", tc.line, s.ArgFlags, tc.wantArgs)
+		}
+		if len(s.Positionals) != len(tc.wantPos) {
+			t.Errorf("%q: positionals = %+v, want %v", tc.line, s.Positionals, tc.wantPos)
+			continue
+		}
+		for i, name := range tc.wantPos {
+			if s.Positionals[i].Name != name {
+				t.Errorf("%q: positional[%d] = %q, want %q", tc.line, i, s.Positionals[i].Name, name)
+			}
+		}
+	}
+}
