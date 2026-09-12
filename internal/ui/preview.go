@@ -203,7 +203,7 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 	case previewKindTree:
 		return m.treePreviewCmd(levelID, target, seq, socket)
 	case previewKindPane:
-		return capturePaneCmd(levelID, kind, target, target, seq, socket)
+		return capturePaneCmd(levelID, kind, target, m.paneCaptureTarget(target), seq, socket)
 	case previewKindSession:
 		paneID := m.previewPaneIDForSession(level, target)
 		if paneID == "" {
@@ -285,13 +285,57 @@ func (m *Model) activePaneIDForSession(session string) string {
 			continue
 		}
 		if entry.Current {
-			return entry.ID
+			return paneCaptureID(entry)
 		}
 		if fallback == "" {
-			fallback = entry.ID
+			fallback = paneCaptureID(entry)
 		}
 	}
 	return fallback
+}
+
+// paneCaptureID is the target to hand capture-pane for an entry: the %N pane
+// id when known, since display ids ("session:index.pane") cannot be parsed by
+// tmux when the session name contains ':' or '.'.
+func paneCaptureID(entry menu.PaneEntry) string {
+	if id := strings.TrimSpace(entry.PaneID); id != "" {
+		return id
+	}
+	return entry.ID
+}
+
+// paneCaptureTarget resolves a pane display id (or %N id) from the pane store
+// to its capture target; unknown ids pass through unchanged.
+func (m *Model) paneCaptureTarget(displayOrID string) string {
+	key := strings.TrimSpace(displayOrID)
+	for _, entry := range m.panes.Entries() {
+		if entry.ID == key || (entry.PaneID != "" && entry.PaneID == key) {
+			return paneCaptureID(entry)
+		}
+	}
+	return key
+}
+
+// windowEntryByAnyID finds a window by display id or @N id.
+func (m *Model) windowEntryByAnyID(key string) (menu.WindowEntry, bool) {
+	key = strings.TrimSpace(key)
+	for _, entry := range m.windows.Entries() {
+		if entry.ID == key || (entry.InternalID != "" && entry.InternalID == key) {
+			return entry, true
+		}
+	}
+	return menu.WindowEntry{}, false
+}
+
+// sessionNameByAnyID finds a session name by name or $N id.
+func (m *Model) sessionNameByAnyID(key string) string {
+	key = strings.TrimSpace(key)
+	for _, entry := range m.sessions.Entries() {
+		if entry.Name == key || (entry.ID != "" && entry.ID == key) {
+			return entry.Name
+		}
+	}
+	return key
 }
 
 // activePaneIDForWindow returns the pane item ID to capture for a window preview.
@@ -307,10 +351,10 @@ func (m *Model) activePaneIDForWindow(window string) string {
 			continue
 		}
 		if entry.Current {
-			return entry.ID
+			return paneCaptureID(entry)
 		}
 		if fallback == "" {
-			fallback = entry.ID
+			fallback = paneCaptureID(entry)
 		}
 	}
 	return fallback
@@ -366,27 +410,31 @@ func (m *Model) treePreviewCmd(levelID, target string, seq int, socket string) t
 	kind := menu.TreeItemKind(target)
 	switch kind {
 	case "pane":
-		// tree:p:session:windowIndex:paneDisplayID
-		parts := strings.SplitN(strings.TrimPrefix(target, menu.TreePrefixPane), ":", 3)
-		if len(parts) < 3 {
+		// tree:p:%N (a legacy display id passes through unchanged).
+		key := strings.TrimPrefix(target, menu.TreePrefixPane)
+		if key == "" {
 			return nil
 		}
-		paneTarget := parts[2] // display ID like "test00:0.0"
-		return capturePaneCmd(levelID, previewKindPane, target, paneTarget, seq, socket)
+		return capturePaneCmd(levelID, previewKindPane, target, m.paneCaptureTarget(key), seq, socket)
 	case "window":
-		// tree:w:session:windowIndex
-		session, windowIdx, ok := strings.Cut(strings.TrimPrefix(target, menu.TreePrefixWindow), ":")
-		if !ok {
+		// tree:w:@N; the topology and pane stores are keyed by the
+		// "session:index" display id, so resolve the entry first.
+		key := strings.TrimPrefix(target, menu.TreePrefixWindow)
+		if key == "" {
 			return nil
 		}
-		windowTarget := session + ":" + windowIdx
+		windowTarget := key
+		if entry, ok := m.windowEntryByAnyID(key); ok && entry.ID != "" {
+			windowTarget = entry.ID
+		}
 		paneID := m.previewPaneIDForWindow(level, windowTarget)
 		if paneID == "" {
 			return staticLinesCmd(levelID, previewKindWindow, target, seq, m.windowPreviewLines(windowTarget))
 		}
 		return capturePaneCmd(levelID, previewKindWindow, target, paneID, seq, socket)
 	case "session":
-		session := strings.TrimPrefix(target, menu.TreePrefixSession)
+		// tree:s:$N; stores are keyed by session name.
+		session := m.sessionNameByAnyID(strings.TrimPrefix(target, menu.TreePrefixSession))
 		paneID := m.previewPaneIDForSession(level, session)
 		if paneID == "" {
 			return staticLinesCmd(levelID, previewKindSession, target, seq, m.sessionPreviewLines(session))

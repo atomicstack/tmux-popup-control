@@ -97,8 +97,8 @@ func TestSessionTreeStartsOnCurrentWindowWhenVisibleViaLoadedMsg(t *testing.T) {
 	if current.Cursor != 2 {
 		t.Fatalf("expected cursor on current window at index 2, got %d", current.Cursor)
 	}
-	if got := current.Items[current.Cursor].ID; got != menu.TreeWindowID("alpha", 1) {
-		t.Fatalf("expected current item %q, got %q", menu.TreeWindowID("alpha", 1), got)
+	if got := current.Items[current.Cursor].ID; got != menu.TreeWindowID("alpha:1") {
+		t.Fatalf("expected current item %q, got %q", menu.TreeWindowID("alpha:1"), got)
 	}
 }
 
@@ -126,8 +126,8 @@ func TestSessionTreeStartsOnCurrentPaneWhenVisibleViaLoadedMsg(t *testing.T) {
 	if current.Cursor != 3 {
 		t.Fatalf("expected cursor on current pane at index 3, got %d", current.Cursor)
 	}
-	if got := current.Items[current.Cursor].ID; got != menu.TreePaneID("alpha", 0, "%1") {
-		t.Fatalf("expected current item %q, got %q", menu.TreePaneID("alpha", 0, "%1"), got)
+	if got := current.Items[current.Cursor].ID; got != menu.TreePaneID("%1") {
+		t.Fatalf("expected current item %q, got %q", menu.TreePaneID("%1"), got)
 	}
 }
 
@@ -213,8 +213,8 @@ func TestSessionTreeRootMenuStartupSelectsCurrentPaneAfterBackendLoad(t *testing
 	if current.Cursor != 3 {
 		t.Fatalf("expected cursor on current pane at index 3, got %d", current.Cursor)
 	}
-	if got := current.Items[current.Cursor].ID; got != menu.TreePaneID("alpha", 0, "%1") {
-		t.Fatalf("expected current item %q, got %q", menu.TreePaneID("alpha", 0, "%1"), got)
+	if got := current.Items[current.Cursor].ID; got != menu.TreePaneID("%1") {
+		t.Fatalf("expected current item %q, got %q", menu.TreePaneID("%1"), got)
 	}
 }
 
@@ -758,7 +758,7 @@ func TestBuildTreeDFSOrder(t *testing.T) {
 	expectedIDs := []string{
 		"tree:s:a",
 		"tree:w:a:0",
-		"tree:p:a:0:%0",
+		"tree:p:%0",
 		"tree:s:b",
 		"tree:w:b:0",
 	}

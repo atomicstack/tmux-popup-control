@@ -56,7 +56,7 @@ func buildTree(
 	hasPanes := len(paneCounts) > 0
 	root := tree.New()
 	for _, sess := range sessions {
-		sid := menu.TreeSessionID(sess.Name)
+		sid := menu.TreeSessionID(menu.TreeSessionKey(sess))
 		indicator := treeExpandIndicator(state, sid)
 		wc := windowCounts[sess.Name]
 		sessionSuffix := ""
@@ -69,7 +69,7 @@ func buildTree(
 
 		if state != nil && state.IsExpanded(sid) {
 			for _, win := range winBySession[sess.Name] {
-				wid := menu.TreeWindowID(sess.Name, win.Index)
+				wid := menu.TreeWindowID(menu.TreeWindowKey(win))
 				wLabel := menu.TreeWindowLabel(win)
 				currentSuffix := ""
 				if win.Current {
@@ -274,7 +274,7 @@ func (m *Model) initialSessionTreeCursor(items []menu.Item) int {
 			if session == "" {
 				break
 			}
-			candidates = append(candidates, menu.TreePaneID(session, pane.WindowIdx, pane.ID))
+			candidates = append(candidates, menu.TreePaneID(menu.TreePaneKey(pane)))
 			break
 		}
 	}
@@ -293,13 +293,20 @@ func (m *Model) initialSessionTreeCursor(items []menu.Item) int {
 			if session == "" {
 				break
 			}
-			candidates = append(candidates, menu.TreeWindowID(session, window.Index))
+			candidates = append(candidates, menu.TreeWindowID(menu.TreeWindowKey(window)))
 			break
 		}
 	}
 
 	if session := strings.TrimSpace(m.sessions.Current()); session != "" {
-		candidates = append(candidates, menu.TreeSessionID(session))
+		key := session
+		for _, entry := range m.sessions.Entries() {
+			if entry.Name == session {
+				key = menu.TreeSessionKey(entry)
+				break
+			}
+		}
+		candidates = append(candidates, menu.TreeSessionID(key))
 	}
 
 	for _, candidate := range candidates {
@@ -466,7 +473,7 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 func filterTreeSessions(sessions []menu.SessionEntry, idSet map[string]bool) []menu.SessionEntry {
 	result := make([]menu.SessionEntry, 0, len(sessions))
 	for _, s := range sessions {
-		if idSet[menu.TreeSessionID(s.Name)] {
+		if idSet[menu.TreeSessionID(menu.TreeSessionKey(s))] {
 			result = append(result, s)
 		}
 	}
@@ -477,7 +484,7 @@ func filterTreeSessions(sessions []menu.SessionEntry, idSet map[string]bool) []m
 func filterTreeWindows(windows []menu.WindowEntry, idSet map[string]bool) []menu.WindowEntry {
 	result := make([]menu.WindowEntry, 0, len(windows))
 	for _, w := range windows {
-		if idSet[menu.TreeWindowID(w.Session, w.Index)] {
+		if idSet[menu.TreeWindowID(menu.TreeWindowKey(w))] {
 			result = append(result, w)
 		}
 	}
@@ -488,7 +495,7 @@ func filterTreeWindows(windows []menu.WindowEntry, idSet map[string]bool) []menu
 func filterTreePanes(panes []menu.PaneEntry, idSet map[string]bool) []menu.PaneEntry {
 	result := make([]menu.PaneEntry, 0, len(panes))
 	for _, p := range panes {
-		if idSet[menu.TreePaneID(p.Session, p.WindowIdx, p.ID)] {
+		if idSet[menu.TreePaneID(menu.TreePaneKey(p))] {
 			result = append(result, p)
 		}
 	}
