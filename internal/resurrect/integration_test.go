@@ -702,3 +702,113 @@ func TestRestoreWithUserConfigIntegration(t *testing.T) {
 		t.Errorf("expected %d sessions, got %d: %v", expectedCount, len(afterSessions), afterSessions)
 	}
 }
+
+// TestSaveRestoreFloatingPaneIntegration saves a window that contains a
+// floating pane and restores it on a second server. tmux next-3.9 sends
+// JSON (v2) layouts to control clients that set the new-layouts flag, and
+// those layouts carry the floating cell, so the restored window must end up
+// with the same pane count and exactly one floating pane. Skipped on a tmux
+// without floating panes or without JSON layouts.
+func TestSaveRestoreFloatingPaneIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+
+	socket1, cleanup1, logDir1 := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup1()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
+
+	if err := tmuxCmd(socket1, "rename-session", "-t", "tmux-popup-control-test", "float").Run(); err != nil {
+		t.Fatalf("rename to float: %v", err)
+	}
+	if err := tmuxCmd(socket1, "split-window", "-t", "float:0", "-d").Run(); err != nil {
+		t.Fatalf("split float:0: %v", err)
+	}
+	if out, err := tmuxCmd(socket1, "new-pane", "-d", "-t", "float:0", "-x", "30", "-y", "8", "-X", "5", "-Y", "5").CombinedOutput(); err != nil {
+		t.Skipf("skipping: tmux has no floating panes (new-pane): %v %s", err, out)
+	}
+	layoutOut, err := tmuxCmd(socket1, "display-message", "-p", "-t", "float:0", "#{window_layout}").Output()
+	if err != nil {
+		t.Fatalf("display-message: %v", err)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(string(layoutOut)), "{") {
+		t.Skipf("skipping: tmux does not emit json layouts (got %q)", strings.TrimSpace(string(layoutOut)))
+	}
+	if n := countPanes(t, socket1, "float:0"); n != 3 {
+		t.Fatalf("source window has %d panes, want 3", n)
+	}
+	srcFloating := countFloatingPanes(t, socket1, "float:0")
+	if srcFloating != 1 {
+		t.Fatalf("source window has %d floating panes, want 1", srcFloating)
+	}
+
+	saveDir := t.TempDir()
+	for ev := range Save(t.Context(), Config{SocketPath: socket1, SaveDir: saveDir, Name: "floating"}) {
+		t.Logf("save: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("save error: %v", ev.Err)
+		}
+	}
+	entries, err := ListSaves(saveDir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no save file: err=%v entries=%d", err, len(entries))
+	}
+	sf, err := ReadSaveFile(entries[0].Path)
+	if err != nil {
+		t.Fatalf("read save file: %v", err)
+	}
+	win := sf.Sessions[0].Windows[0]
+	if !strings.HasPrefix(win.Layout, "{") {
+		t.Fatalf("saved layout is not json: %q", win.Layout)
+	}
+	if strings.Contains(win.Layout, `"I"`) {
+		t.Fatalf("saved layout still carries pane ids: %q", win.Layout)
+	}
+	floatingSaved := 0
+	for _, p := range win.Panes {
+		if p.Floating {
+			floatingSaved++
+		}
+	}
+	if len(win.Panes) != 3 || floatingSaved != 1 {
+		t.Fatalf("saved panes=%d floating=%d, want 3/1: %+v", len(win.Panes), floatingSaved, win.Panes)
+	}
+	tmux.Shutdown()
+
+	socket2, cleanup2, logDir2 := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup2()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
+
+	for ev := range Restore(t.Context(), Config{SocketPath: socket2, SaveDir: saveDir}, entries[0].Path) {
+		t.Logf("restore: [%d/%d] %s", ev.Step, ev.Total, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("restore error: %v", ev.Err)
+		}
+		if ev.Kind == "error" {
+			t.Errorf("restore warning: %s", ev.Message)
+		}
+	}
+	tmux.Shutdown()
+	time.Sleep(200 * time.Millisecond)
+
+	if n := countPanes(t, socket2, "float:0"); n != 3 {
+		t.Fatalf("restored window has %d panes, want 3", n)
+	}
+	if n := countFloatingPanes(t, socket2, "float:0"); n != 1 {
+		t.Fatalf("restored window has %d floating panes, want 1", n)
+	}
+}
+
+// countFloatingPanes returns how many panes in a window are floating.
+func countFloatingPanes(t *testing.T, socket, target string) int {
+	t.Helper()
+	out, err := tmuxCmd(socket, "list-panes", "-t", target, "-F", "#{pane_floating_flag}").Output()
+	if err != nil {
+		t.Fatalf("list-panes %s: %v", target, err)
+	}
+	n := 0
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if strings.TrimSpace(line) == "1" {
+			n++
+		}
+	}
+	return n
+}

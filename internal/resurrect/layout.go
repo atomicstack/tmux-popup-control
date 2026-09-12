@@ -1,15 +1,21 @@
 package resurrect
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
 // selectableLayout converts saved tmux layouts into the portable form accepted
 // by select-layout. Exact layouts include source pane IDs, but tmux can parse
-// the same cells without them and assign the restored panes in order.
+// the same cells without them and assign the restored panes in order. Both
+// layout formats are handled: the JSON (v2) form tmux next-3.9 sends to control
+// clients that set the new-layouts flag, and the older checksummed v1 form.
 func selectableLayout(layout string) string {
 	layout = strings.TrimSpace(layout)
+	if isJSONLayout(layout) {
+		return stripJSONLayoutPaneIDs(layout)
+	}
 	if !isExactLayout(layout) {
 		return layout
 	}
@@ -23,6 +29,43 @@ func selectableLayout(layout string) string {
 		return layout
 	}
 	return fmt.Sprintf("%04x,%s", layoutChecksum(rewritten), rewritten)
+}
+
+// isJSONLayout reports whether the layout uses the tmux next-3.9 JSON subset
+// format ({"V":2,"L":{...}}). tmux sniffs the same way: a leading brace.
+func isJSONLayout(layout string) bool {
+	return strings.HasPrefix(strings.TrimSpace(layout), "{")
+}
+
+// stripJSONLayoutPaneIDs removes the "I" (source pane id) keys from every cell
+// of a JSON layout. tmux assigns panes to cells in order when the ids do not
+// match, so a layout saved on one server can be applied to freshly split panes
+// on another. Malformed input is returned unchanged so tmux reports the error.
+func stripJSONLayoutPaneIDs(layout string) string {
+	var root any
+	if err := json.Unmarshal([]byte(layout), &root); err != nil {
+		return layout
+	}
+	dropJSONKey(root, "I")
+	out, err := json.Marshal(root)
+	if err != nil {
+		return layout
+	}
+	return string(out)
+}
+
+func dropJSONKey(node any, key string) {
+	switch v := node.(type) {
+	case map[string]any:
+		delete(v, key)
+		for _, child := range v {
+			dropJSONKey(child, key)
+		}
+	case []any:
+		for _, child := range v {
+			dropJSONKey(child, key)
+		}
+	}
 }
 
 func isExactLayout(layout string) bool {

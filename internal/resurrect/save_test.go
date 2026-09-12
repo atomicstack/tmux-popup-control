@@ -533,3 +533,64 @@ func filterByKind(events []ProgressEvent, kind string) []ProgressEvent {
 	}
 	return out
 }
+
+// TestSaveMarksFloatingPanes verifies that floating panes are recorded in the
+// save file. tmux next-3.8 keeps floating panes in the ordinary pane list, so
+// without the mark a restore cannot tell them apart from tiled panes.
+func TestSaveMarksFloatingPanes(t *testing.T) {
+	dir := t.TempDir()
+
+	sessions := makeSessions("alpha")
+	windows := makeWindows("alpha", 0)
+	panes := makePanes("alpha", 0)
+	panes.Panes = append(panes.Panes, tmux.Pane{
+		ID:        "alpha:0.1",
+		PaneID:    "%float",
+		Session:   "alpha",
+		WindowIdx: 0,
+		Index:     1,
+		Command:   "htop",
+		Path:      "/home/user",
+		Width:     28,
+		Height:    6,
+		Floating:  true,
+	})
+
+	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return sessions, nil })
+	defer restoreFetchSessions()
+	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return windows, nil })
+	defer restoreFetchWindows()
+	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return panes, nil })
+	defer restoreFetchPanes()
+	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) {
+		return map[string]bool{}, nil
+	})
+	defer restoreWindowOpts()
+	restoreClientInfo := withClientInfoFn(func(string, string) (clientSession, clientLastSession string) {
+		return "alpha", ""
+	})
+	defer restoreClientInfo()
+
+	events := collectEvents(Save(t.Context(), Config{SaveDir: dir}))
+	if last := events[len(events)-1]; !last.Done || last.Err != nil {
+		t.Fatalf("save failed: %+v", last)
+	}
+	entries, err := ListSaves(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("ListSaves: err=%v entries=%d", err, len(entries))
+	}
+	sf, err := ReadSaveFile(entries[0].Path)
+	if err != nil {
+		t.Fatalf("ReadSaveFile: %v", err)
+	}
+	got := sf.Sessions[0].Windows[0].Panes
+	if len(got) != 2 {
+		t.Fatalf("saved panes = %d, want 2", len(got))
+	}
+	if got[0].Floating {
+		t.Fatalf("tiled pane marked floating: %+v", got[0])
+	}
+	if !got[1].Floating {
+		t.Fatalf("floating pane not marked: %+v", got[1])
+	}
+}

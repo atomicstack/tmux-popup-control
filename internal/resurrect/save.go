@@ -228,6 +228,7 @@ func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 						Width:      p.Width,
 						Height:     p.Height,
 						Active:     p.Active,
+						Floating:   p.Floating,
 					})
 				}
 				sess.Windows = append(sess.Windows, Window{

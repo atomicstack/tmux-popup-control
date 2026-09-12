@@ -555,7 +555,18 @@ func (r *restoreRun) finalizeSession(sess Session, indexMap map[int]int, replayW
 		winTarget := fmt.Sprintf("%s:%d", sess.Name, targetIdx)
 		r.step++
 		if err := restoreDeps.SelectLayoutTarget(r.cfg.SocketPath, winTarget, selectableLayout(win.Layout)); err != nil {
-			return sendError(r.ctx, r.ch, "applying layout for %s: %w", winTarget, err)
+			// The panes already exist; a layout tmux cannot apply (for
+			// example a v1 layout saved before floating panes were
+			// recorded, whose cell count no longer matches) should not
+			// abandon the rest of the restore.
+			if !r.emit(ProgressEvent{
+				Step:    r.step,
+				Message: fmt.Sprintf("could not apply layout for %s, keeping the default arrangement: %v", winTarget, err),
+				Kind:    "error",
+				ID:      sess.Name,
+			}) {
+				return r.ctx.Err()
+			}
 		}
 	}
 

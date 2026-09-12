@@ -1397,3 +1397,78 @@ func TestPaneStartupCommandOmitsSocketWhenUnknown(t *testing.T) {
 		t.Errorf("expected %q, got %q", want, got)
 	}
 }
+
+// ── TestRestoreContinuesWhenLayoutApplyFails ─────────────────────────────────
+
+// TestRestoreContinuesWhenLayoutApplyFails covers save files whose layout
+// cannot be applied (for example a v1 layout saved before tmux started
+// omitting floating panes, so the pane count no longer matches the cell
+// count). The panes already exist at that point, so a bad layout must be
+// reported as a warning and the restore must still complete.
+func TestRestoreContinuesWhenLayoutApplyFails(t *testing.T) {
+	dir := t.TempDir()
+
+	r1 := withCreateSessionFn(noopSession)
+	defer r1()
+	r2 := withCreateWindowFn(noopWindow)
+	defer r2()
+	r3 := withRenameWindowFn(noopRename)
+	defer r3()
+	r4 := withSplitPaneFn(noopSplit)
+	defer r4()
+	r5 := withSelectLayoutTargetFn(func(_, _, _ string) error {
+		return errors.New("have 3 panes but need 2")
+	})
+	defer r5()
+	r6 := withSelectPaneFn(noopPane)
+	defer r6()
+	r7 := withSelectWindowFn(noopSelectWindow)
+	defer r7()
+	r8 := withSwitchClientFn(noopSwitch)
+	defer r8()
+	r9 := withExistingSessionsFn(func(_ string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{}, nil
+	})
+	defer r9()
+	r10 := withDefaultCommandFn(noopDefaultCommand)
+	defer r10()
+	r11 := withExistingWindowIndicesFn(func(_, _ string) (map[int]bool, error) {
+		return map[int]bool{}, nil
+	})
+	defer r11()
+	r12, r13 := withStatefulSessionOptionFns(nil)
+	defer r12()
+	defer r13()
+	r14 := withRespawnPaneFn(noopRespawn)
+	defer r14()
+	r15 := withWaitForFn(noopWait)
+	defer r15()
+
+	sf := buildSaveFile(Session{
+		Name: "pi",
+		Windows: []Window{
+			{Index: 0, Name: "all", Layout: "5dcb,179x58,0,0{89x58,0,0,89x58,90,0}", Active: true,
+				Panes: []Pane{
+					{Index: 0, WorkingDir: "/home", Active: true},
+					{Index: 1, WorkingDir: "/tmp"},
+					{Index: 2, WorkingDir: "/var", Floating: true},
+				}},
+		},
+	})
+	path := writeSaveFile(t, dir, "layout-mismatch", sf)
+
+	events := collectRestoreEvents(Restore(t.Context(), Config{SaveDir: dir}, path))
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("restore must complete despite a layout failure: done=%v err=%v", last.Done, last.Err)
+	}
+	warned := false
+	for _, ev := range events {
+		if ev.Kind == "error" && !ev.Done && strings.Contains(ev.Message, "layout") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("expected a non-fatal layout warning event, got %+v", events)
+	}
+}

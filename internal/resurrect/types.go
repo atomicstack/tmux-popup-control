@@ -2,7 +2,9 @@ package resurrect
 
 import "time"
 
-const currentVersion = 2
+// currentVersion is bumped when the save file gains fields a restore depends
+// on. Version 3 records floating panes and stores tmux next-3.9 JSON layouts.
+const currentVersion = 3
 
 type SaveKind string
 
@@ -62,6 +64,10 @@ type Pane struct {
 	Width      int    `json:"width"`
 	Height     int    `json:"height"`
 	Active     bool   `json:"active"`
+	// Floating marks a floating pane (tmux next-3.8+). With a JSON layout the
+	// layout string itself carries the floating cell; the mark lets a restore
+	// onto a tmux without JSON layouts know which panes the v1 layout omits.
+	Floating bool `json:"floating,omitempty"`
 }
 
 // ProgressEvent is sent on the channel during save/restore.
