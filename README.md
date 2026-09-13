@@ -1,6 +1,6 @@
 # tmux-popup-control
 
-Current version: **v0.17.0** — see the [release
+Current version: **v0.17.1** — see the [release
 notes](https://github.com/atomicstack/tmux-popup-control/releases/latest)
 for the latest changes.
 
