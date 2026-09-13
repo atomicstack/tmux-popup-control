@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -845,5 +846,54 @@ func TestResolveThemeColourIntegration(t *testing.T) {
 	}
 	if _, ok := ResolveThemeColour(socket, client, "red"); ok {
 		t.Fatal("basic colour names must not resolve through the theme path")
+	}
+}
+
+// TestUserOptionsIncludesHookRegisteredOptionsIntegration proves UserOptions
+// lists "@"-prefixed options that are registered as hooks, not just plain
+// user options. Since tmux 7277712c ("Switch show-options over to using a
+// format and add -F") show-options hides hook-registered user options unless
+// -H is passed, so on a newer server the completion dropdown silently lost
+// every @-option the user had declared with set-hook. gotmuxcc v0.4.0 asks
+// for -H; against v0.3.0 this test sees only the plain option.
+func TestUserOptionsIncludesHookRegisteredOptionsIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, logDir := testutil.StartTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() {
+		testutil.AssertNoServerCrash(t, logDir)
+	})
+	t.Setenv("TMUX_TMPDIR", filepath.Dir(socket))
+
+	session := "user-options-test"
+	if _, err := NewSession(socket, session); err != nil {
+		t.Skipf("skipping: unable to create session (%v)", err)
+	}
+	waitForSession(t, socket, session)
+
+	Shutdown()
+	t.Cleanup(Shutdown)
+
+	const (
+		plain  = "@tmux-popup-control-plain-opt"
+		hooked = "@tmux-popup-control-hooked-opt"
+	)
+	if out, err := testutil.TmuxCommand(socket, "set-option", "-g", plain, "1").CombinedOutput(); err != nil {
+		t.Fatalf("set-option %s: %v (%s)", plain, err, strings.TrimSpace(string(out)))
+	}
+	if out, err := testutil.TmuxCommand(socket, "set-hook", "-g", hooked, "display-message hooked").CombinedOutput(); err != nil {
+		t.Skipf("skipping: this tmux cannot register %q as a hook (%v: %s)", hooked, err, strings.TrimSpace(string(out)))
+	}
+
+	names, err := UserOptions(socket)
+	if err != nil {
+		t.Fatalf("UserOptions: %v", err)
+	}
+	t.Logf("UserOptions returned %d @-options", len(names))
+
+	for _, want := range []string{plain, hooked} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("expected %q in UserOptions, got %v", want, names)
+		}
 	}
 }

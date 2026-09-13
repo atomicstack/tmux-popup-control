@@ -33,12 +33,13 @@ func setupWeirdSession(t *testing.T, socket string) weirdSessionFixture {
 	tmuxRun(t, socket, "select-window", "-t", tmp+":0")
 	tmuxRun(t, socket, "select-pane", "-t", tmp+":0.0")
 
-	// The name deliberately sorts after the pooled keepalive session:
-	// gotmuxcc's control bridge attaches to the alphabetically-first
-	// session by *name* (discoverAttachTarget), which fails outright when
-	// that name contains ':'. That is a gotmuxcc bug tracked separately;
-	// keeping the weird session last means the connection still comes up.
-	fx := weirdSessionFixture{socket: socket, name: "zz:weird"}
+	// The name deliberately sorts *before* the pooled keepalive session.
+	// gotmuxcc's control bridge attaches to the first session listed by
+	// list-sessions, which tmux orders by name, so this fixture is the one
+	// it picks. Since gotmuxcc v0.4.0 discoverAttachTarget asks for
+	// #{session_id} rather than #{session_name}, a ':' in the name no
+	// longer makes that target unparseable and the connection comes up.
+	fx := weirdSessionFixture{socket: socket, name: "aa:weird"}
 	fx.sessionID = tmuxOut(t, socket, "display-message", "-t", tmp, "-p", "#{session_id}")
 	for _, line := range strings.Split(tmuxOut(t, socket, "list-panes", "-s", "-t", tmp,
 		"-F", "#{window_index}\t#{window_id}\t#{pane_index}\t#{pane_id}"), "\n") {
@@ -153,9 +154,9 @@ func runActionResult(t *testing.T, what string, cmd func() any) ActionResult {
 
 // TestActionsTargetSessionWithColonInNameIntegration drives the window
 // switch, pane switch, session switch, and session-tree paths against a
-// live tmux server whose session is named "zz:weird". Every tmux target the
+// live tmux server whose session is named "aa:weird". Every tmux target the
 // actions build must be an id ($N/@N/%N); a name-derived target such as
-// "zz:weird:1" makes tmux look for session "zz" window "weird" and fail.
+// "aa:weird:1" makes tmux look for session "aa" window "weird" and fail.
 func TestActionsTargetSessionWithColonInNameIntegration(t *testing.T) {
 	testutil.RequireTmux(t)
 	socket, cleanup, logDir := testutil.StartTmuxServer(t)
