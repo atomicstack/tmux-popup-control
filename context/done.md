@@ -2,6 +2,12 @@
 
 Here’s what’s happened so far:
 
+- gotmuxcc updated to v0.4.0 (2026-09-13, `eb01ba9`): six upstream fixes, two of which change behaviour this app depends on.
+  - `discoverAttachTarget` lists `#{session_id}` instead of `#{session_name}`, so the control connection no longer fails when the alphabetically-first session has a `:` or `.` in its name (tmux relaxed name validation in `166267c8`; `attach-session` reads those as the `session:window.pane` separators). The `internal/menu` weird-session fixture dropped its workaround — it was named `zz:weird` to sort *last* and dodge the bug, and is now `aa:weird` so it sorts first and exercises the fixed path.
+  - `Options()` passes `-H` to `show-options`. Since tmux `7277712c`, `show-options` hides `@`-prefixed user options that are registered as hooks unless `-H` is given, so `tmux.UserOptions` silently dropped every `@`-option declared with `set-hook` and the command-prompt completion dropdown lost them too. New `TestUserOptionsIncludesHookRegisteredOptionsIntegration` covers it: 1 of 2 options against v0.3.0, both against v0.4.0.
+  - The remaining four are internal and needed no changes here: positional `%layout-change` parsing (empty raw-flags and empty layout fields are no longer lost), hook guard blocks are never paired with a queued request, arguments tmux would lex as a conditional keyword (`%0:on`) are quoted, and flag docs corrected.
+  - No API removals. The new `WindowLayout*` constants (`main-vertical` and the mirrored layouts) and the documented `new-layouts` control flag are additive; our `client.Options`/`SetControlFlags` call sites compile unchanged. `make test` and `make build` green.
+
 - Released v0.17.0 (2026-09-12, tag on `5ba5196`): tmux next-3.9 support (json layouts, floating-pane resurrect, theme colour swatches, id-based targets), catalog-driven command completion, gotmuxcc v0.3.0, and the merged lifecycle/restore-safety/plugin-install work. `make release` now accepts `RELEASE_NOTES=<file>`; README bumped. Notes: https://github.com/atomicstack/tmux-popup-control/releases/tag/v0.17.0
 
 - tmux next-3.9 follow-ups implemented (2026-09-12, `2f27883`..`b80e126`):
