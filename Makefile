@@ -15,7 +15,7 @@ GO_ENV_TRACED := GOTMUXCC_TRACE=1 GOTMUXCC_TRACE_FILE=$(CURDIR)/gotmuxcc_trace.l
 
 .SILENT:
 
-.PHONY: build run tidy fmt test test-trace clean-cache ensure-dirs cover update-gotmuxcc update-deps release
+.PHONY: build run tidy fmt test test-trace clean-cache ensure-dirs cover update-gotmuxcc update-deps release codesign-darwin notarize-darwin
 
 ensure-dirs:
 	mkdir -p $(GOCACHE) $(GOMODCACHE)
@@ -76,6 +76,43 @@ RELEASE_DIR := dist
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 RELEASE_SUPPORT_FILES := README.md main.sh main.tmux
 
+# --- macOS signing / notarisation (opt-in) ---------------------------------
+# SIGN_IDENTITY must name a "Developer ID Application" identity. An "Apple
+# Development" certificate signs fine locally but the notary service rejects
+# it, so the check that matters is:
+#   security find-identity -v -p codesigning | grep "Developer ID Application"
+#
+# NOTARY_PROFILE names a notarytool keychain profile, stored once with:
+#   xcrun notarytool store-credentials <profile> --apple-id <apple-id> \
+#       --team-id <TEAMID> --password <app-specific-password>
+#
+# Apple can only staple a ticket to a .app/.dmg/.pkg, never to a bare
+# executable, so the binaries ship unstapled and Gatekeeper resolves the
+# ticket online on first run. Both variables are optional: with neither set,
+# `make release` ships unsigned binaries exactly as it did before.
+SIGN_IDENTITY ?=
+NOTARY_PROFILE ?=
+DARWIN_BINARIES := $(RELEASE_DIR)/$(BINARY)-darwin-amd64 $(RELEASE_DIR)/$(BINARY)-darwin-arm64
+
+codesign-darwin:
+	test -n "$(SIGN_IDENTITY)" || { echo "codesign-darwin: SIGN_IDENTITY is not set"; exit 1; }
+	for f in $(DARWIN_BINARIES); do \
+		echo "Signing $$f..."; \
+		codesign --force --options runtime --timestamp \
+			--sign "$(SIGN_IDENTITY)" "$$f" || exit 1; \
+		codesign --verify --strict "$$f" || exit 1; \
+	done
+
+notarize-darwin:
+	test -n "$(NOTARY_PROFILE)" || { echo "notarize-darwin: NOTARY_PROFILE is not set"; exit 1; }
+	rm -rf $(RELEASE_DIR)/notarize $(RELEASE_DIR)/notarize.zip
+	mkdir -p $(RELEASE_DIR)/notarize
+	cp $(DARWIN_BINARIES) $(RELEASE_DIR)/notarize/
+	ditto -c -k $(RELEASE_DIR)/notarize $(RELEASE_DIR)/notarize.zip
+	xcrun notarytool submit $(RELEASE_DIR)/notarize.zip \
+		--keychain-profile "$(NOTARY_PROFILE)" --wait
+	rm -rf $(RELEASE_DIR)/notarize $(RELEASE_DIR)/notarize.zip
+
 release: ensure-dirs
 	rm -rf $(RELEASE_DIR)
 	mkdir -p $(RELEASE_DIR)
@@ -87,6 +124,8 @@ release: ensure-dirs
 			go build $(LDFLAGS) -o $(RELEASE_DIR)/$(BINARY)-$(GOOS)-$(GOARCH) . && \
 	) true
 	chmod +x $(RELEASE_DIR)/$(BINARY)-*
+	$(if $(SIGN_IDENTITY),$(MAKE) codesign-darwin SIGN_IDENTITY="$(SIGN_IDENTITY)",true)
+	$(if $(NOTARY_PROFILE),$(MAKE) notarize-darwin NOTARY_PROFILE="$(NOTARY_PROFILE)",true)
 	cd $(RELEASE_DIR) && for f in $(BINARY)-*; do \
 		stage_dir="$$(mktemp -d ./release.XXXXXX)"; \
 		cp "$$f" "$$stage_dir/$(BINARY)"; \
