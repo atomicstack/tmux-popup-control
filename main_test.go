@@ -9,6 +9,7 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/app"
 	"github.com/atomicstack/tmux-popup-control/internal/config"
 	"github.com/atomicstack/tmux-popup-control/internal/resurrect"
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 func TestCollectTTYDetailsIncludesStandardDescriptors(t *testing.T) {
@@ -187,11 +188,24 @@ func TestCommandHandlersIncludesAutosaveAlias(t *testing.T) {
 	}
 }
 
-// TestShowPopupRejectsEmptyClient guards the popup launcher: since tmux
-// af3e4d2e, display-popup aimed at a control-mode client (which is what an
-// empty -c target resolves to when the command arrives over control mode)
-// returns success without opening anything. Refusing an empty client name
-// turns that silent no-op into an error.
+func TestPopupArgsOpensModalFloatingPaneOnClientSession(t *testing.T) {
+	style := tmux.PopupStyle{BorderLines: "rounded"}
+	got := popupArgs("/dev/ttys001", style, "/bin/tpc --root-menu x")
+	want := []string{
+		"new-pane", "-t", "/dev/ttys001:", "-O", "-K", "-W",
+		"-x", "50%", "-y", "50%", "-X", "25%", "-Y", "25%",
+		"-B", "rounded",
+		"/bin/tpc --root-menu x",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected args\n got: %q\nwant: %q", got, want)
+	}
+}
+
+// TestShowPopupRejectsEmptyClient guards the popup launcher: the popup is
+// targeted at "<client>:", which tmux resolves to that client's session. An
+// empty name would instead resolve relative to our control-mode connection
+// and open the popup somewhere the user isn't looking, so it is refused.
 func TestShowPopupRejectsEmptyClient(t *testing.T) {
 	err := showPopup("/nonexistent/tmux.sock", "  ")
 	if err == nil || !strings.Contains(err.Error(), "client") {

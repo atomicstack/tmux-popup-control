@@ -5,7 +5,7 @@ notes](https://github.com/atomicstack/tmux-popup-control/releases/latest)
 for the latest changes.
 
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
-inside a `tmux display-popup`. Built with [Bubble
+inside a modal tmux floating pane (`new-pane -O`). Built with [Bubble
 Tea](https://github.com/charmbracelet/bubbletea) and [Lip
 Gloss](https://github.com/charmbracelet/lipgloss) (v2), using a persistent
 control-mode connection via
@@ -316,6 +316,9 @@ make release VERSION=0.7.0 # release a specific version tag
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` | `@tmux-popup-control-autosave-max` | maximum number of retained autosaves; manual saves are never pruned |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | status-right icon shown while a save is in progress |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS` | `@tmux-popup-control-autosave-icon-seconds` | any value `> 0` enables the autosave icon; `0` or unset hides it. the icon appears when the save starts and clears one second after it finishes |
+| | `TMUX_POPUP_CONTROL_POPUP_BORDER_LINES` | `@tmux-popup-control-popup-border-lines` | border lines for the popup pane (`new-pane -B`, see `pane-border-lines`); unset uses tmux's default |
+| | `TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE` | `@tmux-popup-control-popup-border-style` | border style for the popup pane (`new-pane -S`/`-R`); unset uses `pane-border-style`/`pane-active-border-style` |
+| | `TMUX_POPUP_CONTROL_POPUP_STYLE` | `@tmux-popup-control-popup-style` | content style for the popup pane (`new-pane -s`); unset uses `window-style` |
 
 ### Keybindings
 
@@ -344,7 +347,7 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 | `restore-sessions [--from NAME]` | restore sessions from a snapshot; opens a progress popup |
 | `autosave [--socket PATH]` | internal helper for tmux `#()` status snippets; runs the autosave cadence and optional status icon |
 | `install-and-init-plugins` | sources installed plugins at tmux startup; opens a deferred install popup for any missing plugins |
-| `deferred-install` | internal helper invoked via `run-shell -b`; waits for tmux startup, then opens the install UI in a `display-popup` |
+| `deferred-install` | internal helper invoked via `run-shell -b`; waits for tmux startup, then opens the install UI in a popup pane |
 | `--version` | prints the version string and exits |
 
 ### Automatic session saves

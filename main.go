@@ -551,21 +551,32 @@ func buildSelfCommand(args ...string) (string, error) {
 	return shquote.JoinCommand(append([]string{binary}, args...)...), nil
 }
 
-// showPopup opens this binary in a display-popup on the user's terminal
-// client. The client must be a real TTY client: since tmux af3e4d2e a
-// display-popup whose target client is a control-mode client (which is what an
-// empty -c resolves to when the command arrives over our control-mode
-// connection) returns success without opening anything, so an empty name is
-// refused here rather than silently doing nothing.
+// showPopup opens this binary in a modal floating pane in the session the
+// user's terminal client is attached to. The client must be a real TTY client:
+// an empty name would resolve relative to our control-mode connection instead,
+// so it is refused rather than opening the popup somewhere unexpected.
 func showPopup(socketPath, clientName string, args ...string) error {
 	clientName = strings.TrimSpace(clientName)
 	if clientName == "" {
-		return fmt.Errorf("display-popup needs a terminal client (tmux ignores popups aimed at a control-mode client)")
+		return fmt.Errorf("popup needs a terminal client (a control-mode client has no session the user is looking at)")
 	}
 	popupCmd, err := buildSelfCommand(args...)
 	if err != nil {
 		return err
 	}
-	_, err = tmux.RunCommand(socketPath, "display-popup", "-c", clientName, "-E", popupCmd)
+	_, err = tmux.RunCommand(socketPath, popupArgs(clientName, tmux.ResolvePopupStyle(socketPath), popupCmd)...)
 	return err
+}
+
+// popupArgs builds the new-pane command for a centred, modal (-O) floating
+// pane that captures every key (-K) and blocks until popupCmd exits (-W). The
+// "<client>:" target makes tmux resolve the client to its attached session,
+// and from there to that session's current window and active pane.
+func popupArgs(clientName string, style tmux.PopupStyle, popupCmd string) []string {
+	args := []string{
+		"new-pane", "-t", clientName + ":", "-O", "-K", "-W",
+		"-x", "50%", "-y", "50%", "-X", "25%", "-Y", "25%",
+	}
+	args = append(args, style.Args()...)
+	return append(args, popupCmd)
 }
