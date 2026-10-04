@@ -3968,7 +3968,7 @@
       "control-notify.c",
       "*.c"
     ],
-    "tmux_git_commit": "e880cf63e0a9fe095d7c5d313761520fb1a8653c"
+    "tmux_git_commit": "8f25579c5aef8d93924a20681f394e2a582fd3ad"
   },
   "manpage_differences": {
     "manpage_only_options": [],
@@ -4202,9 +4202,6 @@
       "pane-status-current-style",
       "pane-status-style",
       "pane-title-changed",
-      "popup-border-lines",
-      "popup-border-style",
-      "popup-style",
       "prefix-timeout",
       "prompt-command-cursor-colour",
       "prompt-command-cursor-style",
@@ -10275,133 +10272,6 @@
     {
       "alternative_names": [],
       "array": false,
-      "colour_option": false,
-      "default_source": {
-        "kind": "string",
-        "value": "bg=themedarkgrey,fg=themewhite"
-      },
-      "description": "Default style of popups.",
-      "documented_scope": "window",
-      "kind": "option",
-      "name": "popup-style",
-      "scope": {
-        "default_inferred_scope": "window",
-        "scopes": [
-          "window"
-        ]
-      },
-      "scope_mismatch_with_manpage": false,
-      "separator": ",",
-      "style_option": true,
-      "summary": "Popup style",
-      "syntax_name": "popup-style",
-      "type": "string",
-      "value": {
-        "domain": "style",
-        "menu": {
-          "kind": "freeform",
-          "shared_domain_ref": "style"
-        },
-        "notes": [
-          "If the value has no #{...} expansion, tmux validates it with style_parse at set time.",
-          "If #{...} appears, validation is deferred until runtime expansion."
-        ],
-        "set_time_validation": "style_parse_if_no_format_expansion",
-        "static_checkability": "static-partial"
-      }
-    },
-    {
-      "alternative_names": [],
-      "array": false,
-      "colour_option": false,
-      "default_source": {
-        "kind": "string",
-        "value": "bg=themedarkgrey,fg=themelightgrey"
-      },
-      "description": "Default style of popup borders.",
-      "documented_scope": "window",
-      "kind": "option",
-      "name": "popup-border-style",
-      "scope": {
-        "default_inferred_scope": "window",
-        "scopes": [
-          "window"
-        ]
-      },
-      "scope_mismatch_with_manpage": false,
-      "separator": ",",
-      "style_option": true,
-      "summary": "Popup border style",
-      "syntax_name": "popup-border-style",
-      "type": "string",
-      "value": {
-        "domain": "style",
-        "menu": {
-          "kind": "freeform",
-          "shared_domain_ref": "style"
-        },
-        "notes": [
-          "If the value has no #{...} expansion, tmux validates it with style_parse at set time.",
-          "If #{...} appears, validation is deferred until runtime expansion."
-        ],
-        "set_time_validation": "style_parse_if_no_format_expansion",
-        "static_checkability": "static-partial"
-      }
-    },
-    {
-      "alternative_names": [],
-      "array": false,
-      "choices": [
-        "single",
-        "double",
-        "heavy",
-        "simple",
-        "rounded",
-        "padded",
-        "none"
-      ],
-      "colour_option": false,
-      "default_source": {
-        "kind": "expression",
-        "value": "BOX_LINES_SINGLE"
-      },
-      "description": "Type of characters used to draw popup border lines. Some of these are only supported on terminals with UTF-8 support.",
-      "documented_scope": "window",
-      "kind": "option",
-      "name": "popup-border-lines",
-      "scope": {
-        "default_inferred_scope": "window",
-        "scopes": [
-          "window"
-        ]
-      },
-      "scope_mismatch_with_manpage": false,
-      "style_option": false,
-      "summary": "Popup border line style",
-      "syntax_name": "popup-border-lines",
-      "type": "choice",
-      "value": {
-        "domain": "choice",
-        "menu": {
-          "kind": "enum",
-          "values": [
-            "single",
-            "double",
-            "heavy",
-            "simple",
-            "rounded",
-            "padded",
-            "none"
-          ]
-        },
-        "set_time_validation": "strict_enum",
-        "static_checkability": "static-exact",
-        "toggle_without_value": true
-      }
-    },
-    {
-      "alternative_names": [],
-      "array": false,
       "choices": [
         "off",
         "on",
@@ -16100,6 +15970,7 @@
     },
     "terminal_features": [
       "256",
+      "appesc",
       "bpaste",
       "ccolour",
       "clipboard",
@@ -16256,6 +16127,10 @@
         "value_type": "string"
       },
       {
+        "name": "Dsesc",
+        "value_type": "string"
+      },
+      {
         "name": "Dsfcs",
         "value_type": "string"
       },
@@ -16297,6 +16172,10 @@
       },
       {
         "name": "Eneks",
+        "value_type": "string"
+      },
+      {
+        "name": "Enesc",
         "value_type": "string"
       },
       {
@@ -18261,7 +18140,7 @@
         {
           "after_hook_name": null,
           "alias": "popup",
-          "argument_template": "Bb:Cc:d:e:Eh:kNs:S:t:T:w:x:y:",
+          "argument_template": "Bb:Cc:d:e:Eh:ks:S:t:T:w:x:y:",
           "description": "show a popup running a command",
           "flags": [
             {
@@ -18319,12 +18198,6 @@
               "value_name": null
             },
             {
-              "description": "clear prior close flags",
-              "name": "-N",
-              "value_mode": "none",
-              "value_name": null
-            },
-            {
               "description": "popup style",
               "name": "-s",
               "value_mode": "required",
@@ -18372,7 +18245,7 @@
             "maximum": -1,
             "minimum": 0
           },
-          "usage": "display-popup [-BCEkN] [-b border-lines] [-c target-client] [-d start-directory] [-e environment] [-h height] [-s style] [-S border-style] [-t target-pane] [-T title] [-w width] [-x position] [-y position] [shell-command [argument ...]]"
+          "usage": "display-popup [-BCEk] [-b border-lines] [-c target-client] [-d start-directory] [-e environment] [-h height] [-s style] [-S border-style] [-t target-pane] [-T title] [-w width] [-x position] [-y position] [shell-command [argument ...]]"
         },
         {
           "after_hook_name": null,
