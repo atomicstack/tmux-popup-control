@@ -407,9 +407,13 @@ func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
 	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
 
 	// Create sessions with distinct names and windows whose names do NOT
-	// contain the session name, so we can verify per-item filtering.
+	// contain the session name, so we can verify per-item filtering. Their
+	// panes start in "/": a shell titles its pane with its working directory,
+	// and pane titles are filter targets, so inheriting the test's cwd made the
+	// result depend on the checkout path ("…/.worktrees/<branch>/internal/
+	// testutil zsh" fuzzy-matches "shells").
 	for _, name := range []string{"shells", "devbox"} {
-		if err := TmuxCommand(socket, "new-session", "-d", "-s", name).Run(); err != nil {
+		if err := TmuxCommand(socket, "new-session", "-d", "-s", name, "-c", "/").Run(); err != nil {
 			t.Fatalf("create session %s: %v", name, err)
 		}
 	}
@@ -417,7 +421,7 @@ func TestTreeFilterShowsOnlyMatchingItems(t *testing.T) {
 	if err := TmuxCommand(socket, "rename-window", "-t", "shells:0", "vim").Run(); err != nil {
 		t.Fatalf("rename window: %v", err)
 	}
-	if err := TmuxCommand(socket, "new-window", "-t", "shells", "-n", "htop").Run(); err != nil {
+	if err := TmuxCommand(socket, "new-window", "-t", "shells", "-n", "htop", "-c", "/").Run(); err != nil {
 		t.Fatalf("new-window htop: %v", err)
 	}
 	if err := TmuxCommand(socket, "rename-window", "-t", "devbox:0", "code").Run(); err != nil {
