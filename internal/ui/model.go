@@ -80,6 +80,10 @@ func newLevel(id, title string, items []menu.Item, node *menu.Node) *level {
 
 // Model implements the Bubble Tea model for the tmux popup menu.
 type Model struct {
+	// titlePane is the popup's own pane, retitled with the breadcrumb as the
+	// menu changes; lastPaneTitle is the title most recently sent to it.
+	titlePane                  string
+	lastPaneTitle              string
 	ctx                        context.Context
 	cancel                     context.CancelFunc
 	stack                      []*level
@@ -188,26 +192,28 @@ func NewModel(cfg ModelConfig) *Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Model{
 		ctx: ctx, cancel: cancel,
-		stack:        []*level{root},
-		registry:     registry,
-		bus:          command.New(),
-		backend:      cfg.Watcher,
-		backendState: map[backend.Kind]error{},
-		showFooter:   cfg.ShowFooter,
-		verbose:      cfg.Verbose,
-		noPreview:    cfg.NoPreview,
-		mode:         ModeMenu,
-		rootTitle:    defaultRootTitle,
-		menuArgs:     cfg.MenuArgs,
-		socketPath:   cfg.SocketPath,
-		clientID:     cfg.ClientID,
-		sessionName:  cfg.SessionName,
-		sessions:     sessions,
-		windows:      windows,
-		panes:        panes,
-		dispatcher:   dispatcher.New(sessions, windows, panes),
-		preview:      make(map[string]*previewData),
-		commandHelp:  cmdhelp.Commands(),
+		stack:         []*level{root},
+		registry:      registry,
+		bus:           command.New(),
+		backend:       cfg.Watcher,
+		backendState:  map[backend.Kind]error{},
+		showFooter:    cfg.ShowFooter,
+		verbose:       cfg.Verbose,
+		noPreview:     cfg.NoPreview,
+		mode:          ModeMenu,
+		rootTitle:     defaultRootTitle,
+		titlePane:     popupPaneID(),
+		lastPaneTitle: paneTitleBase,
+		menuArgs:      cfg.MenuArgs,
+		socketPath:    cfg.SocketPath,
+		clientID:      cfg.ClientID,
+		sessionName:   cfg.SessionName,
+		sessions:      sessions,
+		windows:       windows,
+		panes:         panes,
+		dispatcher:    dispatcher.New(sessions, windows, panes),
+		preview:       make(map[string]*previewData),
+		commandHelp:   cmdhelp.Commands(),
 	}
 	m.applyNodeSettings(root)
 	m.syncViewport(root)
@@ -393,6 +399,9 @@ func (m *Model) handlerFor(msg tea.Msg) msgHandler {
 }
 
 func (m *Model) finishUpdate(cmds []tea.Cmd) tea.Cmd {
+	if cmd := m.syncPaneTitleCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if m.previewBlinkDirty {
 		m.previewBlinkDirty = false
 		if cmd := m.previewBlink.Blink(); cmd != nil {

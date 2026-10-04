@@ -89,7 +89,9 @@ func (m *Model) View() (view tea.View) {
 		span.End(nil)
 	}()
 
-	header := m.menuHeader()
+	// The breadcrumb lives in the popup pane's title (see pane_title.go),
+	// not in a header row.
+	header := ""
 	var content string
 	switch m.mode {
 	case ModePaneForm:
