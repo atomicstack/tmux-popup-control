@@ -4,6 +4,11 @@ Current version: **v0.18.0** — see the [release
 notes](https://github.com/atomicstack/tmux-popup-control/releases/latest)
 for the latest changes.
 
+Built and tested against tmux `next-3.9` at
+[`5e860c4e`](https://github.com/tmux/tmux/commit/5e860c4e6c0a4a5d85d123eb3c671c574635180b)
+(2026-09-22). tmux-popup-control tracks tmux HEAD; older releases of tmux
+are not supported.
+
 A terminal UI for managing tmux sessions, windows, panes, and plugins from
 inside a modal tmux floating pane (`new-pane -O`). Built with [Bubble
 Tea](https://github.com/charmbracelet/bubbletea) and [Lip
