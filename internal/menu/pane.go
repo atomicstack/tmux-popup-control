@@ -309,9 +309,15 @@ func PaneRenameCommand(req RenameRequest) tea.Cmd {
 	}
 }
 
+// PaneEntriesFromTmux converts fetched panes into menu entries. The popup's
+// own pane is left out: tmux opens it as a floating pane in the user's
+// window, but it is this tool, not one of the user's panes.
 func PaneEntriesFromTmux(panes []tmux.Pane) []PaneEntry {
 	entries := make([]PaneEntry, 0, len(panes))
 	for _, p := range panes {
+		if p.Popup {
+			continue
+		}
 		entries = append(entries, PaneEntry{
 			ID:        p.ID,
 			Label:     p.Label,
