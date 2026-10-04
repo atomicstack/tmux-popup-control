@@ -219,7 +219,9 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 		// The tmux format "session_attached" is true for all attached
 		// sessions, so line.current may be set for panes outside the
 		// popup's host session. Narrow it to the host session only.
-		current := line.current && (hostSession == "" || session == hostSession)
+		// The popup is the active pane of the window it floats in, but it is
+		// never the user's current pane.
+		current := line.current && !line.popup && (hostSession == "" || session == hostSession)
 		entry := Pane{
 			ID:        line.displayID,
 			PaneID:    line.paneID,

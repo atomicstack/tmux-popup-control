@@ -924,3 +924,53 @@ func TestSessionOptionNamesIntegration(t *testing.T) {
 		t.Fatalf("names = %q, want no global options", names)
 	}
 }
+
+// TestPopupPaneIsNeverTheActivePaneIntegration pins that the popup — a modal
+// floating pane, and therefore the active pane of the window it opens in —
+// is never reported as that window's active pane nor as the current pane.
+// The current pane is the one main.sh recorded in TMUX_POPUP_CONTROL_PANE_ID.
+// Previews of the current session or window otherwise captured the popup.
+func TestPopupPaneIsNeverTheActivePaneIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, _ := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup()
+	defer Shutdown()
+
+	session := "tmux-popup-control-test"
+	hostOut, err := exec.Command("tmux", "-S", socket, "display-message", "-p", "-t", session+":", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("display-message: %v", err)
+	}
+	host := strings.TrimSpace(string(hostOut))
+	popupOut, err := exec.Command("tmux", "-S", socket, "new-pane", "-d", "-P", "-F", "#{pane_id}", "-t", host,
+		"-O", "-x", "50%", "-y", "50%", "-X", "25%", "-Y", "25%").Output()
+	if err != nil {
+		t.Fatalf("new-pane: %v", err)
+	}
+	popup := strings.TrimSpace(string(popupOut))
+	if err := MarkPopupPane(socket, popup); err != nil {
+		t.Fatalf("MarkPopupPane: %v", err)
+	}
+
+	topology, err := FetchPreviewTopology(socket)
+	if err != nil {
+		t.Fatalf("FetchPreviewTopology: %v", err)
+	}
+	if got := topology.ActivePaneIDForWindow(session + ":0"); got == popup {
+		t.Fatalf("window active pane is the popup %q", popup)
+	}
+	if got := topology.ActivePaneIDForSession(session); got == popup {
+		t.Fatalf("session active pane is the popup %q", popup)
+	}
+
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", host)
+	snap, err := FetchPanes(socket)
+	if err != nil {
+		t.Fatalf("FetchPanes: %v", err)
+	}
+	for _, p := range snap.Panes {
+		if want := p.PaneID == host; p.Current != want {
+			t.Fatalf("pane %s Current=%v, want %v (host %s, popup %s)", p.PaneID, p.Current, want, host, popup)
+		}
+	}
+}

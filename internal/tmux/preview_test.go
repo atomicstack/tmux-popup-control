@@ -284,10 +284,10 @@ func TestFetchPreviewTopology(t *testing.T) {
 
 	fake := &fakeClient{
 		listPanesFormatLines: []string{
-			"%1\tdev\t0\t0\t0",
-			"%2\tdev\t0\t1\t0",
-			"%3\tdev\t1\t0\t1",
-			"%4\tdev\t1\t1\t1",
+			"%1\tdev\t0\t0\t0\t0",
+			"%2\tdev\t0\t1\t0\t0",
+			"%3\tdev\t1\t0\t1\t0",
+			"%4\tdev\t1\t1\t1\t0",
 		},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })

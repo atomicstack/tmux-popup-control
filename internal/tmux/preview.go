@@ -39,6 +39,7 @@ func FetchPreviewTopology(socketPath string) (PreviewTopology, error) {
 		"#{window_index}",
 		"#{?pane_active,1,0}",
 		"#{?window_active,1,0}",
+		"#{?" + PopupPaneOption + ",1,0}",
 	}, "\t")
 	lines, err := client.ListPanesFormat("", "", format)
 	if err != nil {
@@ -79,8 +80,12 @@ func parsePreviewTopology(lines []string) PreviewTopology {
 		if line == "" {
 			continue
 		}
-		paneID, session, windowIndex, paneActive, windowActive, ok := parsePreviewTopologyLine(line)
-		if !ok {
+		paneID, session, windowIndex, paneActive, windowActive, popup, ok := parsePreviewTopologyLine(line)
+		// The popup is a modal floating pane, so tmux reports it as the
+		// active pane of the window it opens in; it is never what a preview
+		// should show. Leaving that window without an active pane makes the
+		// caller fall back to the current pane main.sh recorded.
+		if !ok || popup {
 			continue
 		}
 		windowTarget := fmt.Sprintf("%s:%d", session, windowIndex)
@@ -105,17 +110,18 @@ func parsePreviewTopology(lines []string) PreviewTopology {
 	return topology
 }
 
-func parsePreviewTopologyLine(line string) (paneID, session string, windowIndex int, paneActive, windowActive, ok bool) {
-	parts := splitTabLine(line, 5)
-	if len(parts) != 5 {
-		return "", "", 0, false, false, false
+func parsePreviewTopologyLine(line string) (paneID, session string, windowIndex int, paneActive, windowActive, popup, ok bool) {
+	parts := splitTabLine(line, 6)
+	if len(parts) != 6 {
+		return "", "", 0, false, false, false, false
 	}
 	paneID = parts[0]
 	session = parts[1]
 	windowIndex = atoiOr0(parts[2])
 	paneActive = parts[3] == "1"
 	windowActive = parts[4] == "1"
-	return paneID, session, windowIndex, paneActive, windowActive, paneID != "" && session != ""
+	popup = parts[5] == "1"
+	return paneID, session, windowIndex, paneActive, windowActive, popup, paneID != "" && session != ""
 }
 
 // PanePreview captures the contents of a pane for display via control-mode.
