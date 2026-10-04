@@ -2,6 +2,8 @@ package tmux
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -196,11 +198,25 @@ func TestKillSessionsAcceptsSessionID(t *testing.T) {
 	}
 	fake.useSessionHandles(t, map[string]*stubSessionHandle{"we:ird": handle})
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	// KillSessions confirms the kill with `tmux has-session` and falls back to
+	// `tmux kill-session` via exec. With no socket those reached whatever
+	// server $TMUX named — the user's — and killed its session $3. Stub them:
+	// has-session failing means the session is gone.
+	var execs [][]string
+	withStubCommander(t, func(name string, args ...string) commander {
+		execs = append(execs, append([]string{name}, args...))
+		return stubCommander{err: errors.New("can't find session")}
+	})
 	if err := KillSessions("", []string{"$3"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if handle.killCalls != 1 {
 		t.Fatalf("expected kill call via session id, got %d", handle.killCalls)
+	}
+	for _, argv := range execs {
+		if slices.Contains(argv, "kill-session") {
+			t.Fatalf("fell back to exec kill-session %q after the handle killed the session", argv)
+		}
 	}
 }
 

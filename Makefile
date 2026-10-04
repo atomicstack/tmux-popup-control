@@ -13,6 +13,21 @@ LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
 GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=off
 GO_ENV_TRACED := GOTMUXCC_TRACE=1 GOTMUXCC_TRACE_FILE=$(CURDIR)/gotmuxcc_trace.log $(GO_ENV)
 
+# Tests must never reach the tmux server `make` was started from: code under
+# test treats an empty socket as "the current server" ($TMUX, else the default
+# socket under $TMUX_TMPDIR — the user's own server either way), and a test
+# that once fell through to a real `tmux kill-session` destroyed live user
+# sessions. ISOLATED_TEST runs a command with $TMUX/$TMUX_PANE removed and
+# TMUX_TMPDIR pointing at a fresh empty directory, so a stray socketless tmux
+# call finds no server at all. Every test package's TestMain applies the same
+# isolation (testutil.IsolateFromUserServer); this is the second, independent
+# layer.
+define ISOLATED_TEST
+tmpdir=$$(mktemp -d /tmp/tmux-popup-control-noserver.XXXXXX) && \
+env -u TMUX -u TMUX_PANE TMUX_TMPDIR=$$tmpdir $(1); \
+rc=$$?; rm -rf $$tmpdir; exit $$rc
+endef
+
 .SILENT:
 
 .PHONY: build run tidy fmt test test-trace clean-cache ensure-dirs cover update-gotmuxcc update-deps release codesign-darwin notarize-darwin
@@ -43,13 +58,13 @@ test: ensure-dirs
 	# concurrently with each other but the rest of the suite fills
 	# remaining slots one-at-a-time, keeping per-test contention low.
 	# Cold cache: ~7s. Warm cache (no source changes): <1s.
-	$(GO_ENV) go test -p 4 ./...
+	$(call ISOLATED_TEST,$(GO_ENV) go test -p 4 ./...)
 
 test-trace: ensure-dirs
 	# Same as `make test` but with gotmuxcc command tracing enabled.
 	# Trace lines land in $(CURDIR)/gotmuxcc_trace.log. Roughly 4x
 	# slower than `make test`; use only when you need the trace.
-	$(GO_ENV_TRACED) go test -p 4 ./...
+	$(call ISOLATED_TEST,$(GO_ENV_TRACED) go test -p 4 ./...)
 
 GO_ENV_ONLINE := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=direct
 
@@ -68,7 +83,7 @@ clean-cache:
 
 cover:
 	@echo "==> Generating coverage report"
-	$(GO) test ./... -coverprofile=coverage.out
+	$(call ISOLATED_TEST,$(GO) test ./... -coverprofile=coverage.out)
 	@echo "Coverage summary:"
 	$(GO) tool cover -func=coverage.out
 
