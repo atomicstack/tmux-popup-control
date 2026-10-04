@@ -143,7 +143,10 @@ func (m *Model) handleExtractKey(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.extractModePopup.moveDown()
 		return tea.Batch(m.applyExtractModeCursor(), timer), true
 	case "ctrl+g":
-		return m.openExtractAreaPopup(), true
+		// Same as ctrl+f: open the area popup and advance one area.
+		timer := m.openExtractAreaPopup()
+		m.extractAreaPopup.moveDown()
+		return tea.Batch(m.applyExtractAreaCursor(), timer), true
 	case "tab", "ctrl+y":
 		return m.extractCopy(), true
 	case "shift+tab":

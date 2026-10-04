@@ -45,12 +45,12 @@ func extractSelectCategory(t *testing.T, h *Harness, target extract.Category) {
 	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter}) // confirm + close popup
 }
 
-// extractSelectArea opens the area popup (first ctrl-g) and cycles to target
-// (subsequent ctrl-g presses), then confirms with enter — leaving the extract
-// level on that area with the popup closed.
+// extractSelectArea presses ctrl-g (each press advances one area, the first
+// also opening the popup) until target is reached, then confirms with enter —
+// leaving the extract level on that area with the popup closed.
 func extractSelectArea(t *testing.T, h *Harness, target extract.GrabArea) {
 	t.Helper()
-	h.Send(ctrlG()) // open popup at current area (no change)
+	h.Send(ctrlG()) // open popup and advance one area
 	for guard := 0; h.Model().extractGrabArea != target; guard++ {
 		if guard > 20 {
 			t.Fatalf("could not reach area %v via ctrl-g", target)
@@ -1105,10 +1105,9 @@ func TestExtractBufferErrorDoesNotQuit(t *testing.T) {
 
 // --- area selector popup ---
 
-// TestExtractAreaCtrlGOpensPopupAtCurrentArea verifies the first ctrl-g opens
-// the area popup without changing the active area, mirroring the mode
-// popup's opening behaviour.
-func TestExtractAreaCtrlGOpensPopupAtCurrentArea(t *testing.T) {
+// TestExtractAreaCtrlGOpensPopupAndAdvances verifies the first ctrl-g both
+// opens the area popup and advances one area, mirroring the mode popup.
+func TestExtractAreaCtrlGOpensPopupAndAdvances(t *testing.T) {
 	restore := menu.SetExtractCaptureForTest(func(sock, target string) (string, error) {
 		return "please make build", nil
 	})
@@ -1123,8 +1122,8 @@ func TestExtractAreaCtrlGOpensPopupAtCurrentArea(t *testing.T) {
 		t.Fatalf("area popup should not be open before ctrl-g")
 	}
 	h.Send(ctrlG())
-	if got := h.Model().extractGrabArea; got != extract.Viewport {
-		t.Fatalf("opening the area popup should not change the area, got %v", got)
+	if got := h.Model().extractGrabArea; got != extract.PaneHistory {
+		t.Fatalf("first ctrl-g should advance to pane-history, got %v", got)
 	}
 	if !h.Model().extractAreaPopupVisible() {
 		t.Fatalf("first ctrl-g should open the area popup")
@@ -1141,18 +1140,17 @@ func TestExtractAreaCtrlGAdvancesWithWrap(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
 	h := NewHarness(m)
 
-	h.Send(ctrlG()) // open at viewport
-	h.Send(ctrlG()) // advance to pane-history
+	h.Send(ctrlG()) // open and advance to pane-history
 	if got := h.Model().extractGrabArea; got != extract.PaneHistory {
-		t.Fatalf("after second ctrl-g area = %v, want pane-history", got)
+		t.Fatalf("after first ctrl-g area = %v, want pane-history", got)
 	}
 	h.Send(ctrlG()) // advance to window
 	if got := h.Model().extractGrabArea; got != extract.Window {
-		t.Fatalf("after third ctrl-g area = %v, want window", got)
+		t.Fatalf("after second ctrl-g area = %v, want window", got)
 	}
 	h.Send(ctrlG()) // advance to window-history
 	if got := h.Model().extractGrabArea; got != extract.WindowHistory {
-		t.Fatalf("after fourth ctrl-g area = %v, want window-history", got)
+		t.Fatalf("after third ctrl-g area = %v, want window-history", got)
 	}
 	h.Send(ctrlG()) // wraps back to viewport
 	if got := h.Model().extractGrabArea; got != extract.Viewport {
@@ -1170,7 +1168,11 @@ func TestExtractAreaPopupUpWrapsToPreviousArea(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
 	h := NewHarness(m)
 
-	h.Send(ctrlG())                          // open at viewport (index 0)
+	h.Send(ctrlG())                          // open and advance to pane-history
+	h.Send(tea.KeyPressMsg{Code: tea.KeyUp}) // back to viewport (index 0)
+	if h.Model().extractGrabArea != extract.Viewport {
+		t.Fatalf("up from pane-history should return to viewport, got %v", h.Model().extractGrabArea)
+	}
 	h.Send(tea.KeyPressMsg{Code: tea.KeyUp}) // up wraps to the last area (window-history)
 	if h.Model().extractGrabArea != extract.WindowHistory {
 		t.Fatalf("up from viewport should wrap to window-history, got %v", h.Model().extractGrabArea)
@@ -1187,8 +1189,7 @@ func TestExtractAreaPopupEnterKeepsArea(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
 	h := NewHarness(m)
 
-	h.Send(ctrlG())
-	h.Send(ctrlG()) // advance to pane-history
+	h.Send(ctrlG()) // open and advance to pane-history
 	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if h.Model().extractAreaPopupVisible() {
 		t.Fatalf("enter should close the area popup")
@@ -1212,8 +1213,7 @@ func TestExtractAreaPopupEscRevertsToPrePopupArea(t *testing.T) {
 	m := NewModel(ModelConfig{Width: 80, Height: 24, RootMenu: "extract", SocketPath: "x"})
 	h := NewHarness(m)
 
-	h.Send(ctrlG()) // open at viewport
-	h.Send(ctrlG()) // advance to pane-history
+	h.Send(ctrlG()) // open and advance from viewport to pane-history
 	if h.Model().extractGrabArea != extract.PaneHistory {
 		t.Fatalf("want pane-history after advance, got %v", h.Model().extractGrabArea)
 	}
