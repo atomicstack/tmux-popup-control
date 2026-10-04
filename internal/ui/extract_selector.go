@@ -136,7 +136,12 @@ func (m *Model) handleExtractKey(keyMsg tea.KeyPressMsg) (tea.Cmd, bool) {
 	// No popup open.
 	switch key {
 	case "ctrl+f":
-		return m.openExtractModePopup(), true
+		// One press, one step: open the mode popup and advance to the next
+		// mode straight away. esc still reverts to the mode active before
+		// the popup opened.
+		timer := m.openExtractModePopup()
+		m.extractModePopup.moveDown()
+		return tea.Batch(m.applyExtractModeCursor(), timer), true
 	case "ctrl+g":
 		return m.openExtractAreaPopup(), true
 	case "tab", "ctrl+y":

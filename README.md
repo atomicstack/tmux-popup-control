@@ -165,9 +165,10 @@ list plus the env vars and tmux options that override each default.
   default), **pane-history** (current pane, full scrollback), **window** (every
   pane in the current window, viewport), and **window-history** (every pane,
   full scrollback)
-- `Ctrl-F` opens the token-mode selector popup and `Ctrl-G` opens the grab-area
-  selector popup; the bottom bar shows both as `mode: <current> <^f>   area:
-  <current> <^g>`. Each hotkey or the arrow keys cycle its selector, re-extracting
+- `Ctrl-F` opens the token-mode selector popup and advances to the next mode in
+  the same press, and `Ctrl-G` opens the grab-area selector popup; the bottom bar
+  shows both as `mode: <current> <^f>   area: <current> <^g>`. Each further hotkey
+  press or the arrow keys cycle its selector, re-extracting
   in place while preserving your filter query. The popup auto-dismisses after 1s
   or on `Enter`; `Esc` reverts to the previous value (only one popup opens at a time)
 - `Enter` inserts the selection into the originating pane; `Tab` / `Ctrl-Y`

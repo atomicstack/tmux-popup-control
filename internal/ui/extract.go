@@ -102,8 +102,8 @@ func (m *Model) handleExtractReloadMsg(msg tea.Msg) tea.Cmd {
 // (SelectorValue); the angle-bracketed key names (^f, ^g, Enter, Tab) render a
 // slightly lighter grey (SelectorHintKey) than the "mode:"/"area:"/hint labels,
 // the "<"/">" brackets, and the gaps between segments, which are all dimmed
-// (FilterPlaceholder). Pressing ctrl-f/ctrl-g opens the respective selector
-// popup. Built from the same chrome constants extractAreaAnchorCol uses, so the
+// (FilterPlaceholder). Pressing ctrl-f opens the mode selector and advances
+// one mode; ctrl-g opens the area selector. Built from the same chrome constants extractAreaAnchorCol uses, so the
 // popup's anchor column can never drift from this rendering. The returned
 // string embeds ANSI escapes from lipgloss Style.Render calls, so callers
 // placing it in a styledLine must mark that line raw (see

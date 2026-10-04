@@ -30,12 +30,12 @@ func extractMark(h *Harness) {
 	h.Send(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 }
 
-// extractSelectCategory opens the mode popup (first ctrl-f) and cycles to
-// target (subsequent ctrl-f presses), then confirms with enter — leaving the
-// extract level on that category with the popup closed.
+// extractSelectCategory presses ctrl-f (each press advances one mode, the
+// first also opening the popup) until target is reached, then confirms with
+// enter — leaving the extract level on that category with the popup closed.
 func extractSelectCategory(t *testing.T, h *Harness, target extract.Category) {
 	t.Helper()
-	h.Send(ctrlF()) // open popup at current category (no change)
+	h.Send(ctrlF()) // open popup and advance one mode
 	for guard := 0; h.Model().extractCategory != target; guard++ {
 		if guard > 20 {
 			t.Fatalf("could not reach category %v via ctrl-f", target)
@@ -77,19 +77,14 @@ func TestExtractCycleAdvancesCategoryAndReloads(t *testing.T) {
 		t.Fatalf("expected extract level to be current, got %+v", current)
 	}
 
-	// First ctrl-f opens the mode popup without changing the category.
+	// The first ctrl-f both opens the mode popup and advances to the next
+	// mode (path), re-extracting live — one press, one step.
 	h.Send(ctrlF())
-	if got := h.Model().extractCategory; got != extract.Word {
-		t.Fatalf("opening the mode popup should not change the category, got %v", got)
-	}
 	if !h.Model().extractModePopupVisible() {
 		t.Fatalf("first ctrl-f should open the mode popup")
 	}
-	// Subsequent ctrl-f advances to the next mode (path) and re-extracts live.
-	h.Send(ctrlF())
-
 	if got := h.Model().extractCategory; got != extract.Path {
-		t.Fatalf("after second ctrl+f category = %v, want path", got)
+		t.Fatalf("after first ctrl+f category = %v, want path", got)
 	}
 
 	current = h.Model().currentLevel()
@@ -801,8 +796,7 @@ func TestExtractModePopupEscRevertsToPrePopupMode(t *testing.T) {
 	h := NewHarness(m)
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	h.Send(ctrlF()) // open at word
-	h.Send(ctrlF()) // advance to path
+	h.Send(ctrlF()) // open and advance from word to path
 	if h.Model().extractCategory != extract.Path {
 		t.Fatalf("want path after advance, got %v", h.Model().extractCategory)
 	}
@@ -827,8 +821,7 @@ func TestExtractModePopupEnterKeepsMode(t *testing.T) {
 	h := NewHarness(m)
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	h.Send(ctrlF())
-	h.Send(ctrlF()) // advance to path
+	h.Send(ctrlF()) // open and advance to path
 	h.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if h.Model().extractModePopupVisible() {
 		t.Fatalf("enter should close the popup")
@@ -850,7 +843,11 @@ func TestExtractModePopupUpWrapsToPreviousMode(t *testing.T) {
 	h := NewHarness(m)
 	h.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	h.Send(ctrlF())                          // open at word (index 0)
+	h.Send(ctrlF())                          // open and advance from word to path
+	h.Send(tea.KeyPressMsg{Code: tea.KeyUp}) // back to word (index 0)
+	if h.Model().extractCategory != extract.Word {
+		t.Fatalf("up from path should return to word, got %v", h.Model().extractCategory)
+	}
 	h.Send(tea.KeyPressMsg{Code: tea.KeyUp}) // up wraps to the last mode (all)
 	if h.Model().extractCategory != extract.All {
 		t.Fatalf("up from word should wrap to all, got %v", h.Model().extractCategory)
