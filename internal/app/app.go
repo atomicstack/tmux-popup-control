@@ -21,6 +21,7 @@ var (
 	resolvePaneContentsFn = resurrect.ResolvePaneContents
 	resolveSaveDirFn      = resurrect.ResolveDir
 	latestSaveFn          = resurrect.LatestSave
+	markPopupPaneFn       = tmux.MarkPopupPane
 )
 
 // Config describes user-provided application options.
@@ -50,6 +51,7 @@ func Run(cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("resolve socket path: %w", err)
 	}
+	markOwnPane(socketPath)
 	clientID := strings.TrimSpace(cfg.ClientID)
 	if clientID == "" {
 		clientID = tmux.CurrentClientID(socketPath)
@@ -103,6 +105,20 @@ func Run(cfg Config) error {
 		return nil
 	}
 	return err
+}
+
+// markOwnPane tags the pane this process runs in as the popup. tmux opens
+// display-popup as a floating pane in the user's current window, so without
+// the tag a save made while the popup is open (including an autosave firing
+// meanwhile) would record the popup as part of that window.
+func markOwnPane(socketPath string) {
+	pane := strings.TrimSpace(os.Getenv("TMUX_PANE"))
+	if pane == "" {
+		return
+	}
+	if err := markPopupPaneFn(socketPath, pane); err != nil {
+		logging.Error(fmt.Errorf("marking popup pane %s: %w", pane, err))
+	}
 }
 
 func programOptions() []tea.ProgramOption {

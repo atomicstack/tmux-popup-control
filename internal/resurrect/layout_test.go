@@ -78,3 +78,27 @@ func fmtJSON(t *testing.T, v any) string {
 	}
 	return string(b)
 }
+
+func TestDropLayoutPanesCollapsesSingleChildNode(t *testing.T) {
+	layout := `{"L":{"c":[{"h":66,"i":0,"t":"p","w":195,"x":0,"y":0},{"a":true,"h":50,"i":1,"t":"p","w":173,"x":11,"y":7,"z":0}],"h":66,"t":"v","w":195,"x":0,"y":0},"V":2}`
+	got := dropLayoutPanes(layout, map[int]bool{1: true})
+	if want := `{"L":{"h":66,"i":0,"t":"p","w":195,"x":0,"y":0},"V":2}`; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+func TestDropLayoutPanesKeepsMultiChildNode(t *testing.T) {
+	layout := `{"L":{"c":[{"h":66,"i":0,"t":"p","w":97,"x":0,"y":0},{"h":66,"i":1,"t":"p","w":97,"x":98,"y":0},{"h":20,"i":2,"t":"p","w":40,"x":5,"y":5,"z":0}],"h":66,"t":"h","w":195,"x":0,"y":0},"V":2}`
+	got := dropLayoutPanes(layout, map[int]bool{2: true})
+	if want := `{"L":{"c":[{"h":66,"i":0,"t":"p","w":97,"x":0,"y":0},{"h":66,"i":1,"t":"p","w":97,"x":98,"y":0}],"h":66,"t":"h","w":195,"x":0,"y":0},"V":2}`; got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+func TestDropLayoutPanesLeavesV1LayoutUnchanged(t *testing.T) {
+	// v1 layouts never carry floating cells, so there is nothing to drop.
+	layout := "b25f,80x24,0,0,1"
+	if got := dropLayoutPanes(layout, map[int]bool{1: true}); got != layout {
+		t.Fatalf("got %s, want unchanged", got)
+	}
+}

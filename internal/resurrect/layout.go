@@ -54,6 +54,63 @@ func stripJSONLayoutPaneIDs(layout string) string {
 	return string(out)
 }
 
+// dropLayoutPanes removes the leaf cells for the given pane indices from a
+// JSON layout, so the layout still matches the window once those panes are
+// left out. tmux requires every node to have at least two children, so a node
+// left with a single child is replaced by that child. v1 layouts never carry
+// floating cells and malformed input is returned unchanged.
+func dropLayoutPanes(layout string, indices map[int]bool) string {
+	if len(indices) == 0 || !isJSONLayout(layout) {
+		return layout
+	}
+	var root map[string]any
+	if err := json.Unmarshal([]byte(layout), &root); err != nil {
+		return layout
+	}
+	cell, ok := root["L"].(map[string]any)
+	if !ok {
+		return layout
+	}
+	pruned := pruneLayoutCell(cell, indices)
+	if pruned == nil {
+		return layout
+	}
+	root["L"] = pruned
+	out, err := json.Marshal(root)
+	if err != nil {
+		return layout
+	}
+	return string(out)
+}
+
+// pruneLayoutCell returns cell without the dropped panes, or nil when nothing
+// of it remains.
+func pruneLayoutCell(cell map[string]any, indices map[int]bool) map[string]any {
+	children, isNode := cell["c"].([]any)
+	if !isNode {
+		if idx, ok := cell["i"].(float64); ok && indices[int(idx)] {
+			return nil
+		}
+		return cell
+	}
+	var kept []any
+	for _, child := range children {
+		if c, ok := child.(map[string]any); ok {
+			if pruned := pruneLayoutCell(c, indices); pruned != nil {
+				kept = append(kept, pruned)
+			}
+		}
+	}
+	switch len(kept) {
+	case 0:
+		return nil
+	case 1:
+		return kept[0].(map[string]any)
+	}
+	cell["c"] = kept
+	return cell
+}
+
 func dropJSONKey(node any, key string) {
 	switch v := node.(type) {
 	case map[string]any:

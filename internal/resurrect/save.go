@@ -131,14 +131,27 @@ func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 	}
 	panesByWindow := make(map[sessionWindow][]tmux.Pane)
 	panesBySession := make(map[string][]tmux.Pane, nSessions)
+	popupsByWindow := make(map[sessionWindow]map[int]bool)
 	for _, p := range paneSnap.Panes {
 		key := sessionWindow{session: p.Session, windowIdx: p.WindowIdx}
+		if p.Popup {
+			// The popup is a floating pane in the current window; it is
+			// this tool, not part of the user's layout.
+			if popupsByWindow[key] == nil {
+				popupsByWindow[key] = make(map[int]bool)
+			}
+			popupsByWindow[key][p.Index] = true
+			continue
+		}
 		panesByWindow[key] = append(panesByWindow[key], p)
 		panesBySession[p.Session] = append(panesBySession[p.Session], p)
 	}
 
 	nWindows := len(windowSnap.Windows)
-	nPanes := len(paneSnap.Panes)
+	nPanes := 0
+	for _, panes := range panesBySession {
+		nPanes += len(panes)
+	}
 
 	total := nSessions + nWindows
 	if cfg.CapturePaneContents {
@@ -229,7 +242,7 @@ func runSave(ctx context.Context, cfg Config, ch chan<- ProgressEvent) error {
 				sess.Windows = append(sess.Windows, Window{
 					Index:           w.Index,
 					Name:            w.Name,
-					Layout:          selectableLayout(w.Layout),
+					Layout:          dropLayoutPanes(selectableLayout(w.Layout), popupsByWindow[key]),
 					Active:          w.Active,
 					AutomaticRename: autoRename,
 					Panes:           savedPanes,

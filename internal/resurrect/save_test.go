@@ -594,3 +594,59 @@ func TestSaveMarksFloatingPanes(t *testing.T) {
 		t.Fatalf("floating pane not marked: %+v", got[1])
 	}
 }
+
+// TestSaveSkipsPopupPane pins that the popup pane (tagged by the app on
+// startup; tmux now opens display-popup as a floating pane in the current
+// window) is left out of a save: not listed, not captured, and its cell is
+// removed from the window layout.
+func TestSaveSkipsPopupPane(t *testing.T) {
+	dir := t.TempDir()
+
+	sessions := makeSessions("alpha")
+	windows := makeWindows("alpha", 0)
+	windows.Windows[0].Layout = `{"L":{"c":[{"I":"%0","h":66,"i":0,"t":"p","w":195,"x":0,"y":0},{"I":"%9","a":true,"h":50,"i":1,"t":"p","w":173,"x":11,"y":7,"z":0}],"h":66,"t":"v","w":195,"x":0,"y":0},"V":2}`
+	panes := makePanes("alpha", 0)
+	panes.Panes = append(panes.Panes, tmux.Pane{
+		ID:        "alpha:0.1",
+		PaneID:    "%9",
+		Session:   "alpha",
+		WindowIdx: 0,
+		Index:     1,
+		Command:   "tmux-popup-cont",
+		Floating:  true,
+		Popup:     true,
+	})
+
+	t.Cleanup(withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return sessions, nil }))
+	t.Cleanup(withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return windows, nil }))
+	t.Cleanup(withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return panes, nil }))
+	var captured []string
+	t.Cleanup(withCapturePaneContentsFn(func(_, target string) (string, error) {
+		captured = append(captured, target)
+		return "content", nil
+	}))
+	t.Cleanup(withClientInfoFn(func(string, string) (string, string) { return "alpha", "" }))
+
+	events := collectEvents(Save(t.Context(), Config{SaveDir: dir, CapturePaneContents: true}))
+	if last := events[len(events)-1]; !last.Done || last.Err != nil {
+		t.Fatalf("save failed: %+v", last)
+	}
+	entries, err := ListSaves(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("ListSaves: err=%v entries=%d", err, len(entries))
+	}
+	sf, err := ReadSaveFile(entries[0].Path)
+	if err != nil {
+		t.Fatalf("ReadSaveFile: %v", err)
+	}
+	win := sf.Sessions[0].Windows[0]
+	if len(win.Panes) != 1 || win.Panes[0].Index != 0 {
+		t.Fatalf("saved panes = %+v, want only the tiled pane", win.Panes)
+	}
+	if want := `{"L":{"h":66,"i":0,"t":"p","w":195,"x":0,"y":0},"V":2}`; win.Layout != want {
+		t.Fatalf("layout = %s, want %s", win.Layout, want)
+	}
+	if len(captured) != 1 || captured[0] != "alpha:0.0" {
+		t.Fatalf("captured = %q, want only alpha:0.0", captured)
+	}
+}

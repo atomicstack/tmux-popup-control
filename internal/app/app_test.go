@@ -120,3 +120,23 @@ func TestBuildResurrectStartIgnoresResolveDirErrors(t *testing.T) {
 		t.Fatalf("expected empty save file, got %q", start.SaveFile)
 	}
 }
+
+func TestMarkOwnPaneTagsTmuxPane(t *testing.T) {
+	var gotSocket, gotPane string
+	orig := markPopupPaneFn
+	markPopupPaneFn = func(socket, pane string) error { gotSocket, gotPane = socket, pane; return nil }
+	t.Cleanup(func() { markPopupPaneFn = orig })
+
+	t.Setenv("TMUX_PANE", "%42")
+	markOwnPane("/tmp/sock")
+	if gotSocket != "/tmp/sock" || gotPane != "%42" {
+		t.Fatalf("marked (%q, %q), want (/tmp/sock, %%42)", gotSocket, gotPane)
+	}
+
+	gotPane = ""
+	t.Setenv("TMUX_PANE", "")
+	markOwnPane("/tmp/sock")
+	if gotPane != "" {
+		t.Fatalf("marked %q with no TMUX_PANE", gotPane)
+	}
+}

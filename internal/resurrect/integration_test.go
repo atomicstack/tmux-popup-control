@@ -812,3 +812,94 @@ func countFloatingPanes(t *testing.T, socket, target string) int {
 	}
 	return n
 }
+
+// TestSaveRestoreSkipsPopupPaneIntegration pins that the popup — which tmux
+// now opens as a floating pane in the current window — is left out of a save,
+// while an ordinary floating pane in the same window survives the round trip.
+// MarkPopupPane must also refuse to tag a tiled pane, so running the binary in
+// an ordinary pane never hides that pane from saves.
+func TestSaveRestoreSkipsPopupPaneIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+
+	socket1, cleanup1, logDir1 := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup1()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
+
+	if err := tmuxCmd(socket1, "rename-session", "-t", "tmux-popup-control-test", "float").Run(); err != nil {
+		t.Fatalf("rename to float: %v", err)
+	}
+	if err := tmuxCmd(socket1, "split-window", "-t", "float:0", "-d").Run(); err != nil {
+		t.Fatalf("split float:0: %v", err)
+	}
+	newFloating := func(x, y string) string {
+		out, err := tmuxCmd(socket1, "new-pane", "-d", "-P", "-F", "#{pane_id}", "-t", "float:0", "-x", "30", "-y", "8", "-X", x, "-Y", y).Output()
+		if err != nil {
+			t.Fatalf("new-pane: %v", err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	newFloating("5", "5")
+	popup := newFloating("40", "10")
+	tiledOut, err := tmuxCmd(socket1, "display-message", "-p", "-t", "float:0.0", "#{pane_id}").Output()
+	if err != nil {
+		t.Fatalf("display-message: %v", err)
+	}
+	tiled := strings.TrimSpace(string(tiledOut))
+
+	if err := tmux.MarkPopupPane(socket1, tiled); err != nil {
+		t.Fatalf("MarkPopupPane(tiled): %v", err)
+	}
+	if err := tmux.MarkPopupPane(socket1, popup); err != nil {
+		t.Fatalf("MarkPopupPane(popup): %v", err)
+	}
+	snap, err := tmux.FetchPanes(socket1)
+	if err != nil {
+		t.Fatalf("FetchPanes: %v", err)
+	}
+	for _, p := range snap.Panes {
+		if want := p.PaneID == popup; p.Popup != want {
+			t.Fatalf("pane %s Popup=%v, want %v", p.PaneID, p.Popup, want)
+		}
+	}
+
+	saveDir := t.TempDir()
+	for ev := range Save(t.Context(), Config{SocketPath: socket1, SaveDir: saveDir, Name: "popup", CapturePaneContents: true}) {
+		if ev.Err != nil {
+			t.Fatalf("save error: %v", ev.Err)
+		}
+	}
+	entries, err := ListSaves(saveDir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no save file: err=%v entries=%d", err, len(entries))
+	}
+	sf, err := ReadSaveFile(entries[0].Path)
+	if err != nil {
+		t.Fatalf("read save file: %v", err)
+	}
+	if panes := sf.Sessions[0].Windows[0].Panes; len(panes) != 3 {
+		t.Fatalf("saved panes = %d, want 3 (popup excluded): %+v", len(panes), panes)
+	}
+	tmux.Shutdown()
+
+	socket2, cleanup2, logDir2 := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup2()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
+
+	for ev := range Restore(t.Context(), Config{SocketPath: socket2, SaveDir: saveDir}, entries[0].Path) {
+		if ev.Err != nil {
+			t.Fatalf("restore error: %v", ev.Err)
+		}
+		if ev.Kind == "error" {
+			t.Errorf("restore warning: %s", ev.Message)
+		}
+	}
+	tmux.Shutdown()
+	time.Sleep(200 * time.Millisecond)
+
+	if n := countPanes(t, socket2, "float:0"); n != 3 {
+		t.Fatalf("restored window has %d panes, want 3", n)
+	}
+	if n := countFloatingPanes(t, socket2, "float:0"); n != 1 {
+		t.Fatalf("restored window has %d floating panes, want 1", n)
+	}
+}

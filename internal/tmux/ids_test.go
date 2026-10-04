@@ -165,7 +165,7 @@ func TestFetchPanesCarriesIDsForColonSession(t *testing.T) {
 	fake := &fakeClient{
 		panes: []*gotmux.Pane{{Id: "%9", Title: "top", Active: true}},
 		listPanesFormatLines: []string{
-			"%9\t@7\t$3\twe:ird:1.0\tlabel\twe:ird\tdo.tted\t1\t0\t1",
+			"%9\t@7\t$3\twe:ird:1.0\tlabel\twe:ird\tdo.tted\t1\t0\t1\t0",
 		},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })

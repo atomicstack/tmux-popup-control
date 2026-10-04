@@ -56,6 +56,8 @@ type Pane struct {
 	X        int
 	Y        int
 	Z        int
+	// Popup marks the pane running this binary's popup (see MarkPopupPane).
+	Popup bool
 }
 
 type PaneSnapshot struct {

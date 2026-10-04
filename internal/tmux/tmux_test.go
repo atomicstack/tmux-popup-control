@@ -757,8 +757,8 @@ func TestFallbackWindowLines(t *testing.T) {
 func TestFetchPaneLinesParsesOutput(t *testing.T) {
 	fake := &fakeClient{
 		listPanesFormatLines: []string{
-			"%0\t@0\t$1\tdev:0.0\tlabel\tdev\tmain\t0\t0\t1",
-			"%1\t@0\t$1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
+			"%0\t@0\t$1\tdev:0.0\tlabel\tdev\tmain\t0\t0\t1\t0",
+			"%1\t@0\t$1\tdev:0.1\t\tdev\tmain\t0\t1\t0\t1",
 		},
 	}
 	lines, err := fetchPaneLines(context.Background(), "", fake)
@@ -773,6 +773,9 @@ func TestFetchPaneLinesParsesOutput(t *testing.T) {
 	}
 	if lines[1].label != "dev:0.1" {
 		t.Fatalf("expected fallback label, got %q", lines[1].label)
+	}
+	if lines[0].popup || !lines[1].popup {
+		t.Fatalf("popup flags wrong: %#v", lines)
 	}
 }
 
@@ -1034,8 +1037,8 @@ func TestFetchPanesParsesOutput(t *testing.T) {
 			{Id: "%1", Title: "tail", CurrentCommand: "tail", Width: 80, Height: 20, Active: false},
 		},
 		listPanesFormatLines: []string{
-			"%0\t@0\t$1\tdev:0.0\tlabel0\tdev\tmain\t0\t0\t1",
-			"%1\t@0\t$1\tdev:0.1\t\tdev\tmain\t0\t1\t0",
+			"%0\t@0\t$1\tdev:0.0\tlabel0\tdev\tmain\t0\t0\t1\t0",
+			"%1\t@0\t$1\tdev:0.1\t\tdev\tmain\t0\t1\t0\t1",
 		},
 	}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
@@ -1058,6 +1061,9 @@ func TestFetchPanesParsesOutput(t *testing.T) {
 	}
 	if snap.Panes[0].Title != "top" {
 		t.Fatalf("expected pane title top, got %q", snap.Panes[0].Title)
+	}
+	if snap.Panes[0].Popup || !snap.Panes[1].Popup {
+		t.Fatalf("popup flags wrong: %+v", snap.Panes)
 	}
 }
 

@@ -241,6 +241,7 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 			X:         pane.X,
 			Y:         pane.Y,
 			Z:         pane.Z,
+			Popup:     line.popup,
 		}
 		if entry.Current {
 			snapshot.CurrentID = entry.ID
@@ -351,6 +352,7 @@ type paneLine struct {
 	windowIndex int
 	paneIndex   int
 	current     bool
+	popup       bool
 }
 
 func fetchWindowLines(ctx context.Context, socketPath string, client tmuxClient) ([]windowLine, error) {
@@ -411,11 +413,11 @@ func fetchPaneLines(ctx context.Context, socketPath string, client tmuxClient) (
 		formatExpr = "[#{window_name}:#{pane_title}] #{pane_current_command}  [#{pane_width}x#{pane_height}] [history #{history_size}/#{history_limit}, #{history_bytes} bytes] #{?pane_active,[active],[inactive]}"
 	}
 	labelFormat := fmt.Sprintf("#S:#{window_index}.#{pane_index}: %s", formatExpr)
-	format := fmt.Sprintf("#{pane_id}\t#{window_id}\t#{session_id}\t#S:#{window_index}.#{pane_index}\t%s\t#{session_name}\t#{window_name}\t#{window_index}\t#{pane_index}\t#{?pane_active&&window_active&&session_attached,1,0}", labelFormat)
+	format := fmt.Sprintf("#{pane_id}\t#{window_id}\t#{session_id}\t#S:#{window_index}.#{pane_index}\t%s\t#{session_name}\t#{window_name}\t#{window_index}\t#{pane_index}\t#{?pane_active&&window_active&&session_attached,1,0}\t#{?%s,1,0}", labelFormat, PopupPaneOption)
 	listFn := func(filter, format string) ([]string, error) {
 		return client.ListPanesFormatContext(ctx, "", filter, format)
 	}
-	rows, err := fetchFormattedLines(listFn, filter, format, 10, 10)
+	rows, err := fetchFormattedLines(listFn, filter, format, 11, 11)
 	if err != nil {
 		return nil, err
 	}
@@ -437,6 +439,7 @@ func fetchPaneLines(ctx context.Context, socketPath string, client tmuxClient) (
 			windowIndex: atoiOr0(parts[7]),
 			paneIndex:   atoiOr0(parts[8]),
 			current:     parts[9] == "1",
+			popup:       parts[10] == "1",
 		})
 	}
 	return result, nil
