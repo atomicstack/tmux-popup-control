@@ -2,13 +2,12 @@ package resurrect
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -32,7 +31,7 @@ type RestoreDeps struct {
 	ExistingSessions      func(socketPath string) (tmux.SessionSnapshot, error)
 	DefaultCommand        func(socketPath string) string
 	ExistingWindowIndices func(socketPath, sessionName string) (map[int]bool, error)
-	SessionOption         func(socketPath, session, option string) string
+	SessionOptionNames    func(socketPath, session string) ([]string, error)
 	SetSessionOption      func(socketPath, session, option, value string) error
 }
 
@@ -52,7 +51,7 @@ var restoreDeps = RestoreDeps{
 	ExistingSessions:      tmux.FetchSessions,
 	DefaultCommand:        tmux.DefaultCommand,
 	ExistingWindowIndices: tmux.WindowIndices,
-	SessionOption:         tmux.SessionOption,
+	SessionOptionNames:    tmux.SessionOptionNames,
 	SetSessionOption:      tmux.SetSessionOption,
 }
 
@@ -64,17 +63,46 @@ var restoreDeps = RestoreDeps{
 // clear error instead of blocking forever.
 const replayWaitTimeout = 30 * time.Second
 
-// restoreMarkerKey returns the tmux session option name used to record that
-// a saved session has already been merged into an existing session.
-func restoreMarkerKey(sessionName, saveIdentity string) string {
-	return fmt.Sprintf("@tmux-popup-control-session-restored-%x", sha256.Sum256([]byte(sessionName+"\x00"+saveIdentity)))
+// restoreMarkerKey is the session option a restore sets on every session it
+// creates or merges into. A session carrying it — or one of the per-snapshot
+// variants older builds wrote, which share it as a prefix — is skipped by any
+// later restore: consecutive snapshots share most of their windows, so merging
+// another one into an already-restored session duplicates them.
+const restoreMarkerKey = "@tmux-popup-control-session-restored"
+
+// sessionRestored reports whether a restore already populated the session.
+func sessionRestored(socketPath, session string) (bool, error) {
+	names, err := restoreDeps.SessionOptionNames(socketPath, session)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(names, func(name string) bool {
+		return strings.HasPrefix(name, restoreMarkerKey)
+	}), nil
 }
 
-func restoreSaveIdentity(sf *SaveFile) string {
-	copy := *sf
-	copy.Kind = normalizeSaveKind(copy.Kind)
-	data, _ := json.Marshal(copy)
-	return fmt.Sprintf("%x", sha256.Sum256(data))
+// popupCommand is pane_current_command for this binary; tmux truncates it to
+// the 15 characters the kernel keeps.
+const popupCommand = "tmux-popup-cont"
+
+// dropSavedPopups removes the popup panes captured by saves made before the
+// popup tagged its own pane: tmux opens display-popup as a floating pane, so
+// such a save recorded the popup as part of the window it floated over.
+func dropSavedPopups(sf *SaveFile) {
+	for si := range sf.Sessions {
+		for wi := range sf.Sessions[si].Windows {
+			win := &sf.Sessions[si].Windows[wi]
+			dropped := make(map[int]bool)
+			win.Panes = slices.DeleteFunc(win.Panes, func(p Pane) bool {
+				if p.Floating && strings.HasPrefix(p.Command, popupCommand) {
+					dropped[p.Index] = true
+					return true
+				}
+				return false
+			})
+			win.Layout = dropLayoutPanes(win.Layout, dropped)
+		}
+	}
 }
 
 // with* helpers replace the package-level vars for the duration of a test and
@@ -158,10 +186,10 @@ func withExistingWindowIndicesFn(fn func(string, string) (map[int]bool, error)) 
 	return func() { restoreDeps.ExistingWindowIndices = orig }
 }
 
-func withSessionOptionFn(fn func(string, string, string) string) func() {
-	orig := restoreDeps.SessionOption
-	restoreDeps.SessionOption = fn
-	return func() { restoreDeps.SessionOption = orig }
+func withSessionOptionNamesFn(fn func(string, string) ([]string, error)) func() {
+	orig := restoreDeps.SessionOptionNames
+	restoreDeps.SessionOptionNames = fn
+	return func() { restoreDeps.SessionOptionNames = orig }
 }
 
 func withSetSessionOptionFn(fn func(string, string, string, string) error) func() {
@@ -221,7 +249,6 @@ func paneReplayWaitChannel(sessName string, winIdx, paneIdx int) string {
 // helpers: the cancellation context, configuration, the progress channel, the
 // precomputed total, the pane-content lookup, and a running step counter.
 type restoreRun struct {
-	saveIdentity  string
 	pendingReplay map[string]bool
 	ctx           context.Context
 	cfg           Config
@@ -245,6 +272,7 @@ func runRestore(ctx context.Context, cfg Config, file string, ch chan<- Progress
 	if err != nil {
 		return fmt.Errorf("reading save file: %w", err)
 	}
+	dropSavedPopups(sf)
 
 	contentDir, lookupPaneCmd, err := preparePaneContent(cfg, file)
 	if err != nil {
@@ -265,9 +293,7 @@ func runRestore(ctx context.Context, cfg Config, file string, ch chan<- Progress
 		existingNames[s.Name] = true
 	}
 
-	identity := restoreSaveIdentity(sf)
 	run := &restoreRun{
-		saveIdentity:  identity,
 		pendingReplay: make(map[string]bool),
 		ctx:           ctx,
 		cfg:           cfg,
@@ -444,9 +470,12 @@ func (r *restoreRun) createOrMergeSession(sess Session, merge bool) (map[int]int
 		return indexMap, false, nil
 	}
 
-	// merge path: idempotency — skip if this slot was already merged.
-	markerKey := restoreMarkerKey(sess.Name, r.saveIdentity)
-	if restoreDeps.SessionOption(r.cfg.SocketPath, sess.Name, markerKey) != "" {
+	// merge path: idempotency — skip a session an earlier restore populated.
+	restored, err := sessionRestored(r.cfg.SocketPath, sess.Name)
+	if err != nil {
+		return nil, false, fmt.Errorf("checking restore marker for session %s: %w", sess.Name, err)
+	}
+	if restored {
 		r.step += sessionStepCount(sess)
 		if !r.emit(ProgressEvent{
 			Step:    r.step,
@@ -659,8 +688,7 @@ func (r *restoreRun) finalizeSession(sess Session, indexMap map[int]int, replayW
 	}
 
 	// mark restored sessions so re-running the same restore is idempotent
-	markerKey := restoreMarkerKey(sess.Name, r.saveIdentity)
-	if err := restoreDeps.SetSessionOption(r.cfg.SocketPath, sess.Name, markerKey, "1"); err != nil {
+	if err := restoreDeps.SetSessionOption(r.cfg.SocketPath, sess.Name, restoreMarkerKey, "1"); err != nil {
 		return fmt.Errorf("setting restore marker for session %s: %w", sess.Name, err)
 	}
 	return nil

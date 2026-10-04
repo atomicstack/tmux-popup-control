@@ -897,3 +897,30 @@ func TestUserOptionsIncludesHookRegisteredOptionsIntegration(t *testing.T) {
 		}
 	}
 }
+
+// TestSessionOptionNamesIntegration verifies that SessionOptionNames lists the
+// options set on a session, and not the global ones it inherits.
+func TestSessionOptionNamesIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+	socket, cleanup, _ := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup()
+	defer Shutdown()
+
+	session := "tmux-popup-control-test"
+	if err := SetSessionOption(socket, session, "@tmux-popup-control-session-restored-abc", "1"); err != nil {
+		t.Fatalf("SetSessionOption: %v", err)
+	}
+	if err := exec.Command("tmux", "-S", socket, "set-option", "-g", "@global-only", "1").Run(); err != nil {
+		t.Fatalf("set global option: %v", err)
+	}
+	names, err := SessionOptionNames(socket, session)
+	if err != nil {
+		t.Fatalf("SessionOptionNames: %v", err)
+	}
+	if !slices.Contains(names, "@tmux-popup-control-session-restored-abc") {
+		t.Fatalf("names = %q, want the session marker", names)
+	}
+	if slices.Contains(names, "@global-only") {
+		t.Fatalf("names = %q, want no global options", names)
+	}
+}

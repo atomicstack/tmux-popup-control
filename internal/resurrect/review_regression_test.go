@@ -79,7 +79,12 @@ func TestAtomicSaveWritesReplaceSymlink(t *testing.T) {
 	}
 }
 
-func TestRestoreDifferentSnapshotsSameSession(t *testing.T) {
+// TestRestoreSkipsSessionRestoredFromAnotherSnapshot pins that once any
+// snapshot has restored a session, restoring a different snapshot of it (for
+// example the next autosave) skips it instead of appending every saved window
+// again. Consecutive snapshots share most of their windows, so merging each one
+// duplicated whole sessions.
+func TestRestoreSkipsSessionRestoredFromAnotherSnapshot(t *testing.T) {
 	t.Cleanup(installNoopRestoreFns(t))
 	t.Cleanup(withExistingSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("alpha"), nil }))
 	created := 0
@@ -95,8 +100,72 @@ func TestRestoreDifferentSnapshotsSameSession(t *testing.T) {
 			}
 		}
 	}
-	if created != 2 {
-		t.Fatalf("created %d windows, want two distinct snapshots restored once each", created)
+	if created != 1 {
+		t.Fatalf("created %d windows, want only the first snapshot merged", created)
+	}
+}
+
+// TestRestoreSkipsSessionWithSnapshotKeyedMarker pins that sessions marked by
+// the per-snapshot markers older builds wrote still count as restored.
+func TestRestoreSkipsSessionWithSnapshotKeyedMarker(t *testing.T) {
+	t.Cleanup(installNoopRestoreFns(t))
+	t.Cleanup(withExistingSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("alpha"), nil }))
+	r1, r2 := withStatefulSessionOptionFns(map[string]string{
+		"@tmux-popup-control-session-restored-3f1c9a2b": "1",
+	})
+	t.Cleanup(r1)
+	t.Cleanup(r2)
+	created := 0
+	t.Cleanup(withCreateWindowFn(func(tmux.WindowSpec) error { created++; return nil }))
+	sf := buildSaveFile(Session{Name: "alpha", Windows: []Window{{Name: "one", Panes: []Pane{{}}}}})
+	file := writeSaveFile(t, t.TempDir(), "one", sf)
+	for ev := range Restore(t.Context(), Config{}, file) {
+		if ev.Err != nil {
+			t.Fatal(ev.Err)
+		}
+	}
+	if created != 0 {
+		t.Fatalf("created %d windows, want the marked session skipped", created)
+	}
+}
+
+// TestRestoreDropsSavedPopupPane pins that a floating pane running this
+// binary — the popup itself, captured by a save made while it was open — is
+// not recreated, and its cell is removed from the layout handed to tmux.
+func TestRestoreDropsSavedPopupPane(t *testing.T) {
+	t.Cleanup(installNoopRestoreFns(t))
+	splits := 0
+	t.Cleanup(withSplitPaneFn(func(tmux.PaneSpec) error { splits++; return nil }))
+	var layouts []string
+	t.Cleanup(withSelectLayoutTargetFn(func(_, _, layout string) error { layouts = append(layouts, layout); return nil }))
+	var selected []string
+	t.Cleanup(withSelectPaneFn(func(_, target string) error { selected = append(selected, target); return nil }))
+
+	sf := buildSaveFile(Session{Name: "alpha", Windows: []Window{{
+		Index:  0,
+		Name:   "zsh",
+		Active: true,
+		Layout: `{"L":{"c":[{"h":66,"i":0,"l":0,"t":"p","w":195,"x":0,"y":0},{"a":true,"h":50,"i":1,"t":"p","w":173,"x":11,"y":7,"z":0}],"h":66,"t":"v","w":195,"x":0,"y":0},"V":2}`,
+		Panes: []Pane{
+			{Index: 0, Command: "zsh"},
+			{Index: 1, Command: "tmux-popup-cont", Active: true, Floating: true},
+		},
+	}}})
+	file := writeSaveFile(t, t.TempDir(), "popup", sf)
+	for ev := range Restore(t.Context(), Config{}, file) {
+		if ev.Err != nil {
+			t.Fatal(ev.Err)
+		}
+	}
+	if splits != 0 {
+		t.Fatalf("split %d panes, want the popup pane dropped", splits)
+	}
+	want := `{"L":{"h":66,"i":0,"l":0,"t":"p","w":195,"x":0,"y":0},"V":2}`
+	if len(layouts) != 1 || layouts[0] != want {
+		t.Fatalf("layouts = %q, want [%q]", layouts, want)
+	}
+	if len(selected) != 1 || selected[0] != "alpha:0.0" {
+		t.Fatalf("selected panes = %q, want [alpha:0.0]", selected)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -100,13 +101,13 @@ func collectRestoreEvents(ch <-chan ProgressEvent) []ProgressEvent {
 }
 
 // withStatefulSessionOptionFns installs paired session option stubs that share
-// state — values set via setSessionOptionFn are returned by sessionOptionFn.
+// state — options set via setSessionOptionFn are listed by sessionOptionNamesFn.
 // Optionally, pre-populate the map to simulate pre-existing markers.
 func withStatefulSessionOptionFns(initial map[string]string) (func(), func()) {
 	store := make(map[string]string)
 	maps.Copy(store, initial)
-	r1 := withSessionOptionFn(func(_, _, option string) string {
-		return store[option]
+	r1 := withSessionOptionNamesFn(func(_, _ string) ([]string, error) {
+		return slices.Collect(maps.Keys(store)), nil
 	})
 	r2 := withSetSessionOptionFn(func(_, _, option, value string) error {
 		store[option] = value
@@ -1177,8 +1178,7 @@ func TestRestoreMergeIdempotent(t *testing.T) {
 	})
 	path := writeSaveFile(t, dir, "repeat", sf)
 	// simulate that the marker was already set from a prior restore
-	markerKey := restoreMarkerKey("work", restoreSaveIdentity(sf))
-	r12, r13 := withStatefulSessionOptionFns(map[string]string{markerKey: "1"})
+	r12, r13 := withStatefulSessionOptionFns(map[string]string{restoreMarkerKey: "1"})
 	defer r12()
 	defer r13()
 
@@ -1252,8 +1252,8 @@ func TestRestoreMergeSetsMarker(t *testing.T) {
 
 	// no marker yet — use stateful stubs but also record calls
 	store := make(map[string]string)
-	r12 := withSessionOptionFn(func(_, _, option string) string {
-		return store[option]
+	r12 := withSessionOptionNamesFn(func(_, _ string) ([]string, error) {
+		return slices.Collect(maps.Keys(store)), nil
 	})
 	defer r12()
 	r13 := withSetSessionOptionFn(func(_, session, option, value string) error {
@@ -1288,8 +1288,7 @@ func TestRestoreMergeSetsMarker(t *testing.T) {
 	if setOptions[0].session != "dev" {
 		t.Errorf("marker session: got %q, want %q", setOptions[0].session, "dev")
 	}
-	wantKey := restoreMarkerKey("dev", restoreSaveIdentity(sf))
-	if setOptions[0].option != wantKey {
+	if wantKey := restoreMarkerKey; setOptions[0].option != wantKey {
 		t.Errorf("marker key: got %q, want %q", setOptions[0].option, wantKey)
 	}
 }
@@ -1333,8 +1332,8 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 	defer r14()
 	// no marker check for new sessions (merge=false), but set IS called
 	store := make(map[string]string)
-	r12 := withSessionOptionFn(func(_, _, option string) string {
-		return store[option]
+	r12 := withSessionOptionNamesFn(func(_, _ string) ([]string, error) {
+		return slices.Collect(maps.Keys(store)), nil
 	})
 	defer r12()
 	r13 := withSetSessionOptionFn(func(_, session, option, value string) error {
@@ -1365,8 +1364,7 @@ func TestRestoreNewSessionSetsMarker(t *testing.T) {
 	if len(setOptions) != 1 {
 		t.Fatalf("expected 1 set-option call, got %d", len(setOptions))
 	}
-	wantKey := restoreMarkerKey("fresh", restoreSaveIdentity(sf))
-	if setOptions[0].option != wantKey {
+	if wantKey := restoreMarkerKey; setOptions[0].option != wantKey {
 		t.Errorf("marker key: got %q, want %q", setOptions[0].option, wantKey)
 	}
 }

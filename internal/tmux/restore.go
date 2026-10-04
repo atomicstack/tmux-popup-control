@@ -241,6 +241,50 @@ func SessionOption(socketPath, session, option string) string {
 	return strings.TrimSpace(out)
 }
 
+// SessionOptionNames lists the names of the options set directly on a
+// session (not inherited from the global table).
+func SessionOptionNames(socketPath, session string) ([]string, error) {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return nil, err
+	}
+	out, err := client.Command("show-options", "-t", session)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for line := range strings.Lines(out) {
+		if name, _, _ := strings.Cut(strings.TrimSpace(line), " "); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
+// PopupPaneOption is the pane option that marks the pane running this binary
+// as a popup. tmux opens display-popup as a floating pane in the current
+// window, so without the mark a save would capture the popup itself.
+const PopupPaneOption = "@tmux-popup-control-popup"
+
+// MarkPopupPane tags paneID with PopupPaneOption when it is a floating pane.
+// A tiled pane is left alone: the binary was started in an ordinary pane, and
+// that pane must stay in saves.
+func MarkPopupPane(socketPath, paneID string) error {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	floating, err := client.Command("display-message", "-p", "-t", paneID, "#{pane_floating_flag}")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(floating) != "1" {
+		return nil
+	}
+	_, err = client.Command("set-option", "-p", "-t", paneID, PopupPaneOption, "1")
+	return err
+}
+
 // SetSessionOption sets a session-level option.
 func SetSessionOption(socketPath, session, option, value string) error {
 	client, err := newTmux(socketPath)
