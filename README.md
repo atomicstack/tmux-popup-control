@@ -1,6 +1,6 @@
 # tmux-popup-control
 
-Current version: **v0.18.2** — see the [release
+Current version: **v0.19.0** — see the [release
 notes](https://github.com/atomicstack/tmux-popup-control/releases/latest)
 for the latest changes.
 
@@ -184,7 +184,8 @@ list plus the env vars and tmux options that override each default.
 
 ### UI
 - Fuzzy-search filtering on every menu level
-- Breadcrumb navigation with push/pop menu stack
+- Breadcrumb navigation with push/pop menu stack; the breadcrumb is shown in the
+  popup pane's title (tmux draws it in the pane border) rather than a header row
 - Side-by-side preview panel with ANSI rendering and mouse-wheel scrolling
 - Background polling keeps menu data in sync with tmux state
 - Multi-select with Tab for bulk operations
