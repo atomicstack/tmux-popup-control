@@ -194,6 +194,7 @@ func TestPopupArgsOpensModalFloatingPaneOnClientSession(t *testing.T) {
 	want := []string{
 		"new-pane", "-t", "/dev/ttys001:", "-O", "-K", "-W",
 		"-x", "50%", "-y", "50%", "-X", "25%", "-Y", "25%",
+		"-T", "tmux-popup-control",
 		"-B", "rounded",
 		"/bin/tpc --root-menu x",
 	}

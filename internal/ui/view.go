@@ -854,15 +854,20 @@ func (m *Model) headerSegments() []string {
 	if depth == 0 {
 		return nil
 	}
+	// The app's own name is the popup pane's title (new-pane -T), drawn by
+	// tmux in the pane border, so it is never repeated as a breadcrumb.
 	root := strings.TrimSpace(m.rootTitle)
-	if root == "" {
-		root = defaultRootTitle
+	if root == defaultRootTitle {
+		root = ""
 	}
 	if depth == 1 {
+		if root == "" {
+			return nil
+		}
 		return []string{root}
 	}
 	segments := make([]string, 0, depth)
-	if m.rootMenuID != "" {
+	if m.rootMenuID != "" && root != "" {
 		segments = append(segments, root)
 	}
 	for i := 1; i < depth; i++ {
@@ -872,7 +877,7 @@ func (m *Model) headerSegments() []string {
 		}
 		segments = append(segments, segment)
 	}
-	if len(segments) == 0 {
+	if len(segments) == 0 && root != "" {
 		return []string{root}
 	}
 	return segments

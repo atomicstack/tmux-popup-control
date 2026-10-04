@@ -21,12 +21,12 @@ func TestSessionSwitchItemsFiltersCurrent(t *testing.T) {
 	}
 }
 
+// TestMenuHeaderRootLevel pins that the root menu draws no header: the app's
+// name is shown by tmux as the popup pane's title (new-pane -T) instead.
 func TestMenuHeaderRootLevel(t *testing.T) {
 	m := NewModel(ModelConfig{})
-	got := m.menuHeader()
-	want := defaultRootTitle
-	if got != want {
-		t.Fatalf("expected %q, got %q", want, got)
+	if got := m.menuHeader(); got != "" {
+		t.Fatalf("expected no root header, got %q", got)
 	}
 }
 

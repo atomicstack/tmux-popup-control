@@ -568,6 +568,10 @@ func showPopup(socketPath, clientName string, args ...string) error {
 	return err
 }
 
+// popupTitle is the popup pane's title. tmux shows it in the pane border, so
+// the app no longer draws its own name as a header.
+const popupTitle = "tmux-popup-control"
+
 // popupArgs builds the new-pane command for a centred, modal (-O) floating
 // pane that captures every key (-K) and blocks until popupCmd exits (-W). The
 // "<client>:" target makes tmux resolve the client to its attached session,
@@ -576,6 +580,7 @@ func popupArgs(clientName string, style tmux.PopupStyle, popupCmd string) []stri
 	args := []string{
 		"new-pane", "-t", clientName + ":", "-O", "-K", "-W",
 		"-x", "50%", "-y", "50%", "-X", "25%", "-Y", "25%",
+		"-T", popupTitle,
 	}
 	args = append(args, style.Args()...)
 	return append(args, popupCmd)

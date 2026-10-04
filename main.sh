@@ -37,6 +37,7 @@ popup_style="${TMUX_POPUP_CONTROL_POPUP_STYLE:-$OPT_STYLE}"
 # until the command exits and returns its exit status.
 tmux new-pane -t "$POPUP_PANE_ID" -O -K -W \
   -x 90% -y 80% -X 5% -Y 10% \
+  -T tmux-popup-control \
   "${STYLE_ARGS[@]}" \
   -e "TMUX_POPUP_CONTROL_CLIENT=$POPUP_CLIENT" \
   -e "TMUX_POPUP_CONTROL_SESSION=$POPUP_SESSION" \
