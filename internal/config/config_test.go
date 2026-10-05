@@ -109,3 +109,20 @@ func TestVersionRequested(t *testing.T) {
 		t.Fatalf("expected ErrVersionRequested, got %v", err)
 	}
 }
+
+func TestTreeStyleFlagAndEnvVar(t *testing.T) {
+	cfg, err := LoadArgs(nil, []string{"TMUX_POPUP_CONTROL_TREE_STYLE=arrow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.App.TreeStyle != "arrow" {
+		t.Fatalf("expected TreeStyle=arrow from env, got %q", cfg.App.TreeStyle)
+	}
+	cfg, err = LoadArgs([]string{"--tree-style", "box"}, []string{"TMUX_POPUP_CONTROL_TREE_STYLE=arrow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.App.TreeStyle != "box" {
+		t.Fatalf("expected flag to win with TreeStyle=box, got %q", cfg.App.TreeStyle)
+	}
+}

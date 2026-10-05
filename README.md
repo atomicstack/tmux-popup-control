@@ -91,6 +91,19 @@ list plus the env vars and tmux options that override each default.
   multi-word fuzzy filtering across the tree, and per-node live previews;
   marks the currently-attached window with a `(current)` suffix and
   singularises the pane count for single-pane windows
+- **Tree styles** — five connector styles for the tree, set with
+  `--tree-style` / `@tmux-popup-control-tree-style`; press `ctrl+t` in the
+  tree to cycle through them live:
+
+  ```
+  classic   ├─ ▶ claude      arrow   ├─▶ claude      box   ├─⊞ claude
+            ├─ ▼ work                ├─▼ work              ├─⊟ work
+            │   └─ ▶ 0: vim          │ └─▶ 0: vim          │ └─⊞ 0: vim
+
+  compact   ├▸ claude        rounded ├─▸ claude
+            ├▾ work                  ├─┬ work
+            │└▸ 0: vim               │ ╰─▸ 0: vim
+  ```
 
 ### Resurrect (save / restore)
 - **Save** sessions — auto-timestamped or named snapshots of all sessions,
@@ -303,6 +316,7 @@ make release VERSION=0.7.0 # release a specific version tag
 | `--footer` | `TMUX_POPUP_CONTROL_FOOTER` | `@tmux-popup-control-footer` | show keybinding hint row |
 | `--verbose` | `TMUX_POPUP_CONTROL_VERBOSE` | | print success messages for actions |
 | `--no-preview` | `TMUX_POPUP_CONTROL_NO_PREVIEW` | | disable the side-by-side preview panel |
+| `--tree-style` | `TMUX_POPUP_CONTROL_TREE_STYLE` | `@tmux-popup-control-tree-style` | session tree connector style: `classic` (default), `arrow`, `box`, `compact`, `rounded`; `ctrl+t` cycles them in the tree |
 | `--log-file` | `TMUX_POPUP_CONTROL_LOG_FILE` | | log file path |
 | `--trace` | `TMUX_POPUP_CONTROL_TRACE` | | enable verbose JSON trace logging |
 | `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |

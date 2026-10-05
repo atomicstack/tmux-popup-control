@@ -6,8 +6,8 @@ CMD="$CURRENT_DIR/tmux-popup-control"
 # One round trip for the launch context and the popup styling options. Fields
 # are separated by \x1f because style values routinely contain commas.
 IFS=$'\x1f' read -r POPUP_CLIENT POPUP_SESSION POPUP_SESSION_ID POPUP_PANE_ID \
-  OPT_BORDER_LINES OPT_BORDER_STYLE OPT_STYLE < <(
-  tmux display-message -p "#{client_tty}"$'\x1f'"#{session_name}"$'\x1f'"#{session_id}"$'\x1f'"#{pane_id}"$'\x1f'"#{@tmux-popup-control-popup-border-lines}"$'\x1f'"#{@tmux-popup-control-popup-border-style}"$'\x1f'"#{@tmux-popup-control-popup-style}"
+  OPT_BORDER_LINES OPT_BORDER_STYLE OPT_STYLE OPT_TREE_STYLE < <(
+  tmux display-message -p "#{client_tty}"$'\x1f'"#{session_name}"$'\x1f'"#{session_id}"$'\x1f'"#{pane_id}"$'\x1f'"#{@tmux-popup-control-popup-border-lines}"$'\x1f'"#{@tmux-popup-control-popup-border-style}"$'\x1f'"#{@tmux-popup-control-popup-style}"$'\x1f'"#{@tmux-popup-control-tree-style}"
 )
 
 # Options that the Go binary reads only from env vars (no ShowOption fallback)
@@ -21,6 +21,11 @@ EXTRA_ENV=()
 if [[ -z "$TMUX_POPUP_CONTROL_FOOTER" ]]; then
   val="$(tmux show-option -gqv @tmux-popup-control-footer 2>/dev/null)"
   [[ -n "$val" ]] && EXTRA_ENV+=(-e "TMUX_POPUP_CONTROL_FOOTER=$val")
+fi
+
+# Tree style is read in config.go from env/flag only, so propagate it.
+if [[ -z "$TMUX_POPUP_CONTROL_TREE_STYLE" && -n "$OPT_TREE_STYLE" ]]; then
+  EXTRA_ENV+=(-e "TMUX_POPUP_CONTROL_TREE_STYLE=$OPT_TREE_STYLE")
 fi
 
 # Popup styling: env vars win over the tmux options; anything left unset is

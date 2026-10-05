@@ -38,6 +38,7 @@ type Config struct {
 	SessionStorageDir   string
 	RestorePaneContents bool
 	NoPreview           bool
+	TreeStyle           string
 	// ResurrectOp is set to "save" or "restore" when launched as a popup
 	// instance for the save/restore-sessions CLI subcommand.
 	ResurrectOp   string
@@ -78,6 +79,7 @@ func Run(cfg Config) error {
 		ShowFooter:  cfg.ShowFooter,
 		Verbose:     cfg.Verbose,
 		NoPreview:   cfg.NoPreview,
+		TreeStyle:   cfg.TreeStyle,
 		Watcher:     watcher,
 		RootMenu:    cfg.RootMenu,
 		MenuArgs:    cfg.MenuArgs,

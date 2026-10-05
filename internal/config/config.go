@@ -50,6 +50,7 @@ const (
 	envSessionStorageDir   = "TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR"
 	envRestorePaneContents = "TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS"
 	envNoPreview           = "TMUX_POPUP_CONTROL_NO_PREVIEW"
+	envTreeStyle           = "TMUX_POPUP_CONTROL_TREE_STYLE"
 )
 
 // Load parses configuration from CLI arguments and environment variables.
@@ -72,6 +73,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	debugToSQLite := fs.Bool("debug-to-sqlite", false, "write structured debug events and spans to a sqlite database next to the binary")
 	verbose := fs.Bool("verbose", envOrBool(env, envVerbose, false), "print success messages for actions")
 	noPreview := fs.Bool("no-preview", envOrBool(env, envNoPreview, false), "disable the preview panel")
+	treeStyle := fs.String("tree-style", envOrDefault(env, envTreeStyle, ""), "session tree connector style: classic, arrow, box, compact, rounded")
 	logFile := fs.String("log-file", envOrDefault(env, envLogFile, ""), "path to the log file")
 	rootMenu := fs.String("root-menu", envOrDefault(env, envRootMenu, ""), "open directly into the specified menu path")
 	menuArgs := fs.String("menu-args", envOrDefault(env, envMenuArgs, ""), "arguments for the target menu (e.g. 'expanded' for session:tree)")
@@ -106,6 +108,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			SessionStorageDir:   envOrDefault(env, envSessionStorageDir, ""),
 			RestorePaneContents: envOrBool(env, envRestorePaneContents, false),
 			NoPreview:           *noPreview,
+			TreeStyle:           strings.TrimSpace(*treeStyle),
 		},
 		Logging: Logging{
 			FilePath:      *logFile,
@@ -126,6 +129,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			"logFile":       *logFile,
 			"rootMenu":      strings.TrimSpace(*rootMenu),
 			"menuArgs":      strings.TrimSpace(*menuArgs),
+			"treeStyle":     strings.TrimSpace(*treeStyle),
 		},
 		Args:    slices.Clone(args),
 		Command: slices.Clone(fs.Args()),

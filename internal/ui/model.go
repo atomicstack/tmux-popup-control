@@ -117,6 +117,7 @@ type Model struct {
 	completion                 *completionState
 	completionSuppressedFilter string
 	noPreview                  bool
+	treeStyle                  TreeStyle
 	previewBlink               cursor.Model
 	previewBlinkDirty          bool
 	commandOutputTitle         string
@@ -171,6 +172,7 @@ type ModelConfig struct {
 	ShowFooter  bool
 	Verbose     bool
 	NoPreview   bool
+	TreeStyle   string
 	Watcher     *backend.Watcher
 	RootMenu    string
 	MenuArgs    string
@@ -200,6 +202,7 @@ func NewModel(cfg ModelConfig) *Model {
 		showFooter:    cfg.ShowFooter,
 		verbose:       cfg.Verbose,
 		noPreview:     cfg.NoPreview,
+		treeStyle:     resolveTreeStyle(cfg.TreeStyle),
 		mode:          ModeMenu,
 		rootTitle:     defaultRootTitle,
 		titlePane:     popupPaneID(),

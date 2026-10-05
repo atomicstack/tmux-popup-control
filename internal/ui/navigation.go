@@ -370,6 +370,12 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	case "esc":
 		return m.handleEscapeKey()
 	}
+	if keyMsg.String() == treeStyleCycleKey {
+		if current := m.currentLevel(); current != nil && isTreeLevel(current.ID) {
+			m.cycleTreeStyle()
+			return nil
+		}
+	}
 	if handled, cmd := m.handleTextInput(keyMsg); handled {
 		return cmd
 	}

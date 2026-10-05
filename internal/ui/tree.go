@@ -42,7 +42,19 @@ func buildTree(
 	state *menu.TreeState,
 	windowCounts map[string]int,
 	paneCounts map[string]int,
+	style TreeStyle,
 ) *tree.Tree {
+	states := treeNodeStates{}
+	indicatorFor := func(id string) string {
+		if style.labelIndicators() {
+			return treeExpandIndicator(state, id)
+		}
+		return ""
+	}
+	isExpanded := func(id string) bool {
+		return state != nil && state.IsExpanded(id)
+	}
+
 	winBySession := make(map[string][]menu.WindowEntry)
 	for _, w := range windows {
 		winBySession[w.Session] = append(winBySession[w.Session], w)
@@ -57,7 +69,7 @@ func buildTree(
 	root := tree.New()
 	for _, sess := range sessions {
 		sid := menu.TreeSessionID(menu.TreeSessionKey(sess))
-		indicator := treeExpandIndicator(state, sid)
+		indicator := indicatorFor(sid)
 		wc := windowCounts[sess.Name]
 		sessionSuffix := ""
 		if sess.Current {
@@ -66,8 +78,9 @@ func buildTree(
 		label := fmt.Sprintf("%s%s (%d windows)%s", indicator, sess.Name, wc, sessionSuffix)
 
 		sessionNode := tree.Root(label)
+		states[sessionNode] = isExpanded(sid)
 
-		if state != nil && state.IsExpanded(sid) {
+		if isExpanded(sid) {
 			for _, win := range winBySession[sess.Name] {
 				wid := menu.TreeWindowID(menu.TreeWindowKey(win))
 				wLabel := menu.TreeWindowLabel(win)
@@ -76,7 +89,7 @@ func buildTree(
 					currentSuffix = " (current)"
 				}
 				if hasPanes {
-					wIndicator := treeExpandIndicator(state, wid)
+					wIndicator := indicatorFor(wid)
 					pk := fmt.Sprintf("%s\x00%d", sess.Name, win.Index)
 					pc := paneCounts[pk]
 					paneWord := "panes"
@@ -86,8 +99,9 @@ func buildTree(
 					wLabel = fmt.Sprintf("%s%s (%d %s)%s", wIndicator, wLabel, pc, paneWord, currentSuffix)
 
 					windowNode := tree.Root(wLabel)
+					states[windowNode] = isExpanded(wid)
 
-					if state.IsExpanded(wid) {
+					if isExpanded(wid) {
 						for _, pane := range paneByWindow[fmt.Sprintf("%s\x00%d", sess.Name, win.Index)] {
 							windowNode.Child(menu.TreePaneLabel(pane))
 						}
@@ -101,7 +115,7 @@ func buildTree(
 		root.Child(sessionNode)
 	}
 
-	root.Enumerator(minimalEnumerator)
+	style.apply(root, states)
 
 	return root
 }
@@ -418,6 +432,7 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 		renderState,
 		windowCounts,
 		paneCounts,
+		m.treeStyle,
 	)
 
 	rendered := t.String()
