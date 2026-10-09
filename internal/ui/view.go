@@ -181,6 +181,7 @@ func (m *Model) renderMenuLines(current *level, width int) []styledLine {
 		lines = append(lines, styledLine{text: msg, style: styles.Info})
 	} else if isTreeLevel(current.ID) {
 		ts, _ := current.Data.(*menu.TreeState)
+		move, _ := current.Data.(*menu.WindowMoveState)
 		lines = append(lines, m.renderTreeView(treeRenderOptions{
 			LevelID:        current.ID,
 			Items:          current.Items,
@@ -189,6 +190,7 @@ func (m *Model) renderMenuLines(current *level, width int) []styledLine {
 			Width:          width,
 			ViewportOffset: current.ViewportOffset,
 			MaxVisible:     m.maxVisibleItems(),
+			Move:           move,
 		})...)
 	} else {
 		scrollCells := renderScrollbar(len(current.Items), len(displayItems), start)
@@ -474,7 +476,9 @@ func (m *Model) renderBottomBarLines() []styledLine {
 	}
 	lines = append(lines, m.bottomSeparatorLine())
 	promptText, _ := m.filterPrompt()
-	lines = append(lines, styledLine{text: promptText})
+	// The prompt is pre-styled; raw keeps applyWidth's truncation ANSI-aware
+	// so escape sequences don't count towards the visible width.
+	lines = append(lines, styledLine{text: promptText, raw: true})
 	return applyWidth(lines, m.width)
 }
 

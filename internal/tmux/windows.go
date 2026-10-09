@@ -103,6 +103,39 @@ func MoveWindow(socketPath, source, targetSession string) error {
 	return nil
 }
 
+// WindowPlacement selects how MoveWindowTo interprets its target.
+type WindowPlacement int
+
+const (
+	// PlaceAt moves the window to the exact "session:index" target.
+	PlaceAt WindowPlacement = iota
+	// PlaceAfter inserts the window after the target window (-a).
+	PlaceAfter
+	// PlaceBefore inserts the window before the target window (-b).
+	PlaceBefore
+)
+
+// MoveWindowTo runs move-window for source. With PlaceAfter/PlaceBefore,
+// tmux shuffles later windows up to make room next to the target window.
+func MoveWindowTo(socketPath, source, target string, placement WindowPlacement) error {
+	client, err := newTmux(socketPath)
+	if err != nil {
+		return err
+	}
+	args := []string{"move-window"}
+	switch placement {
+	case PlaceAfter:
+		args = append(args, "-a")
+	case PlaceBefore:
+		args = append(args, "-b")
+	}
+	args = append(args, "-s", source, "-t", target)
+	if _, err := client.Command(args...); err != nil {
+		return fmt.Errorf("failed to move window %s to %s: %w", source, target, err)
+	}
+	return nil
+}
+
 func SwapWindows(socketPath, first, second string) error {
 	client, err := newTmux(socketPath)
 	if err != nil {

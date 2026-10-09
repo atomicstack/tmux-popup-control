@@ -123,7 +123,11 @@ list plus the env vars and tmux options that override each default.
 - **Rename** windows via inline form
 - **Kill** windows (multi-select)
 - **Swap** windows
-- **Move** windows between sessions
+- **Move** windows between sessions (push/pull)
+- **Move** the current window interactively — it is pinned to the highlight
+  bar in a session/window tree, up/down walks it through every slot in every
+  session (showing the index it, and any shuffled neighbours, will land on),
+  enter performs the move and esc cancels
 - **Link** windows into other sessions
 - **Layout** presets with live preview (even-horizontal, even-vertical,
   main-horizontal, main-vertical, tiled)

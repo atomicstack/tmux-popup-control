@@ -231,6 +231,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 
 	// Refresh tree level if any data source changed.
 	if res.SessionsUpdated || res.WindowsUpdated || res.PanesUpdated {
+		m.refreshWindowMove()
 		if lvl := m.findLevelByID("session:tree"); lvl != nil {
 			m.treeSessions = ctx.Sessions
 			m.treeWindows = ctx.Windows

@@ -33,6 +33,7 @@ func loadWindowMenu(Context) ([]Item, error) {
 		"rename",
 		"layout",
 		"swap",
+		"move",
 		"push-to-session",
 		"pull-from-session",
 		"link",

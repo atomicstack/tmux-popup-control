@@ -306,6 +306,11 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 			return cmd
 		}
 	}
+	if current := m.currentLevel(); current != nil && current.ID == windowMoveLevelID {
+		if cmd, handled := m.handleWindowMoveKey(keyMsg); handled {
+			return cmd
+		}
+	}
 	if m.completionVisible() {
 		switch keyMsg.String() {
 		case "up":
@@ -512,6 +517,9 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 		level.Cursor = 0
 		m.populatePullTreeData()
 	}
+	if update.id == windowMoveLevelID {
+		m.initWindowMove(level)
+	}
 	if update.id == extractLevelID {
 		// Category was already reset to DefaultCategory when navigation into
 		// extract was initiated (handleEnterKey / applyRootMenuOverride),
@@ -660,6 +668,9 @@ func (m *Model) applyRootMenuOverride(requested string) {
 		root.Data = menu.NewTreeState(false)
 		root.Cursor = 0
 		m.populatePullTreeData()
+	}
+	if node.ID == windowMoveLevelID {
+		m.initWindowMove(root)
 	}
 	if node.ID == extractLevelID {
 		// Category was already reset above, before the loader ran. Only the

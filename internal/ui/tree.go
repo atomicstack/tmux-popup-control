@@ -20,7 +20,7 @@ func minimalEnumerator(children tree.Children, index int) string {
 
 // isTreeLevel returns true if the given level ID uses tree rendering.
 func isTreeLevel(id string) bool {
-	return id == "session:tree" || id == "window:pull-from-session"
+	return id == "session:tree" || id == "window:pull-from-session" || id == windowMoveLevelID
 }
 
 // treeExpandIndicator returns ▼ or ▶ based on expand state, with a trailing space.
@@ -373,6 +373,7 @@ type treeRenderOptions struct {
 	Width          int
 	ViewportOffset int
 	MaxVisible     int
+	Move           *menu.WindowMoveState
 }
 
 // renderTreeView renders the tree as styled lines for display.
@@ -393,10 +394,20 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 	var allSessions []menu.SessionEntry
 	var allWindows []menu.WindowEntry
 	var allPanes []menu.PaneEntry
-	if opts.LevelID == "window:pull-from-session" {
+	renderState := opts.State
+	switch opts.LevelID {
+	case "window:pull-from-session":
 		allSessions = m.pullTreeSessions
 		allWindows = m.pullTreeWindows
-	} else {
+	case windowMoveLevelID:
+		// The pinned window is spliced into its slot by the move state;
+		// every session stays expanded so all slots are visible.
+		if opts.Move != nil {
+			input := opts.Move.TreeInput()
+			allSessions, allWindows = input.Sessions, input.Windows
+		}
+		renderState = menu.NewTreeState(true)
+	default:
 		allSessions = m.treeSessions
 		allWindows = m.treeWindows
 		allPanes = m.treePanes
@@ -409,7 +420,6 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 
 	// When a filter is active, override expand state so all matching
 	// nodes are visible (FilterTreeItems already computed the correct set).
-	renderState := opts.State
 	if current := m.currentLevel(); current != nil && current.Filter != "" {
 		renderState = menu.NewTreeState(true)
 	}

@@ -1577,3 +1577,30 @@ func TestEnvOrOptionReturnsEmptyWhenBothUnset(t *testing.T) {
 		t.Fatalf("expected empty, got %q", result)
 	}
 }
+
+func TestMoveWindowToPlacementFlags(t *testing.T) {
+	cases := []struct {
+		placement WindowPlacement
+		want      []string
+	}{
+		{PlaceAt, []string{"move-window", "-s", "@1", "-t", "$0:4"}},
+		{PlaceAfter, []string{"move-window", "-a", "-s", "@1", "-t", "$0:4"}},
+		{PlaceBefore, []string{"move-window", "-b", "-s", "@1", "-t", "$0:4"}},
+	}
+	for _, tc := range cases {
+		fake := &fakeClient{}
+		withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+		if err := MoveWindowTo("", "@1", "$0:4", tc.placement); err != nil {
+			t.Fatalf("placement %d: unexpected error: %v", tc.placement, err)
+		}
+		if len(fake.commandCalls) != 1 || !slices.Equal(fake.commandCalls[0], tc.want) {
+			t.Fatalf("placement %d: got %#v, want %#v", tc.placement, fake.commandCalls, tc.want)
+		}
+	}
+
+	fake := &fakeClient{commandErr: errors.New("index in use")}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	if err := MoveWindowTo("", "@1", "$0:4", PlaceAt); err == nil || !strings.Contains(err.Error(), "failed to move window") {
+		t.Fatalf("expected wrapped error, got %v", err)
+	}
+}

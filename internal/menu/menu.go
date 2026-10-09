@@ -205,6 +205,7 @@ func ActionLoaders() map[string]Loader {
 		"window:pull-from-session": loadWindowPullFromSessionMenu,
 		"window:push-to-session":   loadWindowPushToSessionMenu,
 		"window:swap":              loadWindowSwapMenu,
+		"window:move":              loadWindowMoveMenu,
 		"window:rename":            loadWindowRenameMenu,
 		"window:kill":              loadWindowKillMenu,
 		"window:layout":            loadWindowLayoutMenu,

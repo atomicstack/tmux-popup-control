@@ -215,6 +215,10 @@ func (m *Model) filterPrompt() (string, *lipgloss.Style) {
 		prompt = styles.FilterPrompt.Render(prompt)
 	}
 	text := current.Filter
+	if current.ID == windowMoveLevelID {
+		// The move level has no filter; its prompt row carries the key hint.
+		return prompt + render(styles.FilterPlaceholder, windowMoveHint), nil
+	}
 	if text == "" {
 		// Render the placeholder in full; the terminal cursor sits on top.
 		return prompt + render(styles.FilterPlaceholder, "(type to search)"), nil

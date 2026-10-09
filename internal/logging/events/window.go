@@ -51,6 +51,11 @@ func (WindowTracer) PushToSession(source, session string) {
 	logging.Trace("window.push-to-session", map[string]any{"source": source, "session": session})
 }
 
+// Move records moving a window next to, or onto, a target.
+func (WindowTracer) Move(source, target string) {
+	logging.Trace("window.move", map[string]any{"source": source, "target": target})
+}
+
 // SwapSelect records selecting the first window in a swap operation.
 func (WindowTracer) SwapSelect(first string) {
 	logging.Trace("window.swap.select", map[string]any{"first": first})
