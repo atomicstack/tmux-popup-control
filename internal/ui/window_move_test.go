@@ -134,3 +134,41 @@ func TestWindowMoveHintIsNotTruncatedByStyling(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowMoveRefreshesFromBackendData(t *testing.T) {
+	m := seedWindowMoveModel(t)
+	m.applyRootMenuOverride(windowMoveLevelID)
+	m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyDown}) // top of zed
+
+	windows := append(m.windows.Entries(), menu.WindowEntry{
+		ID: "zed:1", Label: "zed:1: fresh", Name: "fresh", Session: "zed", Index: 1, InternalID: "@3",
+	})
+	m.windows.SetEntries(windows)
+	m.refreshWindowMove()
+	current := m.currentLevel()
+	if got := current.Items[len(current.Items)-1].Label; got != "2: fresh" {
+		t.Fatalf("last row = %q, want the new window (shuffled to 2)", got)
+	}
+	if got := pinnedLabel(m); got != menu.WindowMoveMarker+"0: runner" {
+		t.Fatalf("pinned label = %q, want it still at the top of zed", got)
+	}
+}
+
+func TestWindowMoveReportsVanishedWindow(t *testing.T) {
+	m := seedWindowMoveModel(t)
+	m.applyRootMenuOverride(windowMoveLevelID)
+	var remaining []menu.WindowEntry
+	for _, w := range m.windows.Entries() {
+		if w.InternalID != "@1" {
+			remaining = append(remaining, w)
+		}
+	}
+	m.windows.SetEntries(remaining)
+	m.refreshWindowMove()
+	if len(m.currentLevel().Items) != 0 || !strings.Contains(m.errMsg, "runner no longer exists") {
+		t.Fatalf("items = %d err = %q", len(m.currentLevel().Items), m.errMsg)
+	}
+	if cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
+		t.Fatal("enter must do nothing once the window is gone")
+	}
+}

@@ -233,3 +233,75 @@ func TestWindowMoveStateShowsShuffledIndices(t *testing.T) {
 		t.Fatalf("labels = %q, want %q", got, want)
 	}
 }
+
+func TestWindowMoveStateOriginIgnoresInputOrder(t *testing.T) {
+	ctx := windowMoveTestContext()
+	ctx.Windows[0], ctx.Windows[2] = ctx.Windows[2], ctx.Windows[0] // three, two, one
+	s, _ := NewWindowMoveState(ctx)
+	if s.Moved() || s.Cursor() != 2 {
+		t.Fatalf("cursor = %d moved = %v, want the pinned window at its real position", s.Cursor(), s.Moved())
+	}
+}
+
+func TestWindowMoveStateRefreshKeepsAnchor(t *testing.T) {
+	ctx := windowMoveTestContext()
+	s, _ := NewWindowMoveState(ctx)
+	s.Step(3) // beta, between four (1) and five (5)
+
+	// A new beta window appears before four, and five is renamed.
+	ctx.Windows = append(ctx.Windows, WindowEntry{
+		ID: "beta:0", Label: "beta:0: zero", Name: "zero", Session: "beta", SessionID: "$1", Index: 0, InternalID: "@9",
+	})
+	ctx.Windows[4].Label = "beta:5: renamed"
+	if !s.Refresh(ctx) {
+		t.Fatal("refresh lost the pinned window")
+	}
+	want := []string{"tree:s:$0", "tree:w:@1", "tree:w:@3", "tree:s:$1", "tree:w:@9", "tree:w:@4", "tree:w:@2", "tree:w:@5"}
+	if got := itemIDs(s.Items()); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("items = %v, want %v", got, want)
+	}
+	if got := s.Items()[7].Label; got != "5: renamed" {
+		t.Fatalf("refreshed label = %q", got)
+	}
+	if got := s.Plan().Target; got != "$1:2" {
+		t.Fatalf("plan target = %q, want $1:2 (still right after four)", got)
+	}
+}
+
+func TestWindowMoveStateRefreshFallsBackWhenAnchorVanishes(t *testing.T) {
+	ctx := windowMoveTestContext()
+	s, _ := NewWindowMoveState(ctx)
+	s.StepEnd()                   // after five in beta
+	ctx.Windows = ctx.Windows[:4] // five is gone
+	if !s.Refresh(ctx) {
+		t.Fatal("refresh lost the pinned window")
+	}
+	if got := s.Plan(); got.TargetSession != "beta" || got.Index != 2 {
+		t.Fatalf("plan = %+v, want the end of beta (index 2)", got)
+	}
+}
+
+func TestWindowMoveStateRefreshFollowsUnmovedWindow(t *testing.T) {
+	ctx := windowMoveTestContext()
+	s, _ := NewWindowMoveState(ctx)
+	// Window two is moved to the end of alpha elsewhere (index 9).
+	ctx.Windows[1].Index = 9
+	ctx.Windows[1].Label = "alpha:9: two"
+	ctx.Windows[1].ID = "alpha:9"
+	s.Refresh(ctx)
+	if s.Moved() {
+		t.Fatal("an untouched window must stay unmoved after refresh")
+	}
+	if got := s.Items()[s.Cursor()].Label; got != WindowMoveMarker+"9: two" {
+		t.Fatalf("pinned label = %q", got)
+	}
+}
+
+func TestWindowMoveStateRefreshFailsWhenSourceVanishes(t *testing.T) {
+	ctx := windowMoveTestContext()
+	s, _ := NewWindowMoveState(ctx)
+	ctx.Windows = append(ctx.Windows[:1:1], ctx.Windows[2:]...)
+	if s.Refresh(ctx) {
+		t.Fatal("expected refresh to report the pinned window is gone")
+	}
+}

@@ -84,3 +84,31 @@ func TestWindowMoveEscapeLeavesWindowIntegration(t *testing.T) {
 		t.Fatalf("mv-runner windows = %v, want %s still at index 0", got, movingID)
 	}
 }
+
+func TestWindowMoveTracksLiveWindowChangesIntegration(t *testing.T) {
+	socket, pane, exitFile, movingID := windowMoveFixture(t)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
+	defer cancel()
+	WaitForContent(t, ctx, socket, pane, "⇅ 0:")
+	SendKeys(t, socket, pane, "Up")
+	WaitForContent(t, ctx, socket, pane, "⇅ 2:")
+
+	// A window created elsewhere while the move screen is open must show up,
+	// and the pinned window must stay anchored after mv-dest's (old) last
+	// window, so it now lands between that window and the new one.
+	if err := TmuxCommand(socket, "new-window", "-d", "-t", "mv-dest:5", "-n", "fresh").Run(); err != nil {
+		t.Fatalf("new-window in dest: %v", err)
+	}
+	WaitForContent(t, ctx, socket, pane, "5: fresh")
+	SendKeys(t, socket, pane, "Enter")
+
+	if code := waitForExit(t, ctx, exitFile); code != "0" {
+		output, _ := CapturePane(t, socket, pane)
+		t.Fatalf("binary exited with code %s; pane output:\n%s", code, output)
+	}
+	got := windowIndexIDs(t, socket, "mv-dest")
+	if len(got) != 4 || got[2] != "2="+movingID {
+		t.Fatalf("mv-dest windows = %v, want %s at index 2", got, movingID)
+	}
+}

@@ -37,30 +37,45 @@ type WindowMoveState struct {
 	origin int
 }
 
-// NewWindowMoveState snapshots the context's sessions and windows and pins
-// the current window at its present position. ok is false when there is no
-// current window to move.
+// NewWindowMoveState builds the move tree from the context's sessions and
+// windows and pins the current window at its present position. ok is false
+// when there is no current window to move.
 func NewWindowMoveState(ctx Context) (*WindowMoveState, bool) {
 	source, ok := windowMoveSource(ctx)
 	if !ok {
 		return nil, false
 	}
+	return buildWindowMoveState(ctx, source)
+}
+
+// buildWindowMoveState lays out the slots for ctx with source pinned at its
+// own position. ok is false when source is not among ctx's windows.
+func buildWindowMoveState(ctx Context, source WindowEntry) (*WindowMoveState, bool) {
 	s := &WindowMoveState{source: source, sessions: ctx.Sessions}
 	s.others = make([][]WindowEntry, len(ctx.Sessions))
 	origin := -1
 	for i, sess := range ctx.Sessions {
 		var windows []WindowEntry
+		found := false
 		for _, w := range ctx.Windows {
 			if w.Session != sess.Name {
 				continue
 			}
 			if w.Session == source.Session && sameWindow(w, source) {
-				origin = len(s.slots) + len(windows)
+				s.source = w
+				found = true
 				continue
 			}
 			windows = append(windows, w)
 		}
 		sortWindowEntries(windows)
+		if found {
+			pos := 0
+			for pos < len(windows) && windows[pos].Index < s.source.Index {
+				pos++
+			}
+			origin = len(s.slots) + pos
+		}
 		s.others[i] = windows
 		for pos := 0; pos <= len(windows); pos++ {
 			s.slots = append(s.slots, windowMoveSlot{session: i, pos: pos})
@@ -72,6 +87,51 @@ func NewWindowMoveState(ctx Context) (*WindowMoveState, bool) {
 	s.origin = origin
 	s.slot = origin
 	return s, true
+}
+
+// Refresh rebuilds the tree from fresh backend data, keeping the same window
+// pinned. An unmoved window follows its real position; a moved one stays
+// anchored after the same window above it (or before the same window below
+// it), falling back to the same position in the same session. ok is false
+// when the pinned window no longer exists.
+func (s *WindowMoveState) Refresh(ctx Context) bool {
+	next, ok := buildWindowMoveState(ctx, s.source)
+	if !ok {
+		return false
+	}
+	if s.Moved() {
+		next.slot = next.anchoredSlot(s)
+	}
+	*s = *next
+	return true
+}
+
+// anchoredSlot finds the slot in s matching prev's current slot.
+func (s *WindowMoveState) anchoredSlot(prev *WindowMoveState) int {
+	slot := prev.slots[prev.slot]
+	prevSession := prev.sessions[slot.session]
+	prevWindows := prev.others[slot.session]
+	sess := slices.IndexFunc(s.sessions, func(e SessionEntry) bool {
+		if e.ID != "" && prevSession.ID != "" {
+			return e.ID == prevSession.ID
+		}
+		return e.Name == prevSession.Name
+	})
+	if sess < 0 {
+		return s.origin
+	}
+	windows := s.others[sess]
+	pos := min(slot.pos, len(windows))
+	if slot.pos > 0 {
+		if i := slices.IndexFunc(windows, func(w WindowEntry) bool { return sameWindow(w, prevWindows[slot.pos-1]) }); i >= 0 {
+			pos = i + 1
+		}
+	} else if slot.pos < len(prevWindows) {
+		if i := slices.IndexFunc(windows, func(w WindowEntry) bool { return sameWindow(w, prevWindows[slot.pos]) }); i >= 0 {
+			pos = i
+		}
+	}
+	return slices.Index(s.slots, windowMoveSlot{session: sess, pos: pos})
 }
 
 func windowMoveSource(ctx Context) (WindowEntry, bool) {

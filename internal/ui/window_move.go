@@ -12,10 +12,10 @@ const (
 	windowMoveHint    = "↑/↓ move window · enter to confirm · esc to cancel"
 )
 
-// initWindowMove snapshots the current sessions/windows into a move state and
+// initWindowMove builds the move state from the current sessions/windows and
 // pins the current window to the cursor. Without a current window (backend
-// data not yet arrived on direct invocation) the level is left empty and
-// initialised again by refreshWindowMove.
+// data not yet arrived on direct invocation) the level is left empty until
+// refreshWindowMove sees data.
 func (m *Model) initWindowMove(lvl *level) {
 	if lvl == nil {
 		return
@@ -29,18 +29,29 @@ func (m *Model) initWindowMove(lvl *level) {
 	m.syncWindowMove(lvl)
 }
 
-// refreshWindowMove initialises a window:move level that was opened before
-// backend data was available. Once initialised the snapshot is kept so the
-// user's position is not disturbed by polling.
+// refreshWindowMove rebuilds an open window:move level from fresh backend
+// data. The pinned window keeps its anchor between its neighbours (see
+// WindowMoveState.Refresh); if it disappears the level empties and reports
+// why. Refreshing is paused while the move itself is in flight.
 func (m *Model) refreshWindowMove() {
 	lvl := m.findLevelByID(windowMoveLevelID)
-	if lvl == nil {
+	if lvl == nil || (m.loading && m.pendingID == windowMoveLevelID) {
 		return
 	}
-	if _, ok := lvl.Data.(*menu.WindowMoveState); ok {
+	state, ok := lvl.Data.(*menu.WindowMoveState)
+	if !ok {
+		m.initWindowMove(lvl)
 		return
 	}
-	m.initWindowMove(lvl)
+	if !state.Refresh(m.menuContext()) {
+		lvl.Data = nil
+		lvl.Full = nil
+		lvl.Items = nil
+		lvl.Cursor = 0
+		m.errMsg = fmt.Sprintf("window %s no longer exists", state.Source().Name)
+		return
+	}
+	m.syncWindowMove(lvl)
 }
 
 func (m *Model) syncWindowMove(lvl *level) {
