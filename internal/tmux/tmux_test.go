@@ -1123,6 +1123,7 @@ func TestKillWindowsCommandError(t *testing.T) {
 }
 
 func TestRenameSessionValidation(t *testing.T) {
+	withStubTmux(t, func(string) (tmuxClient, error) { return &fakeClient{}, nil })
 	if err := RenameSession("", " ", "new"); err == nil || !strings.Contains(err.Error(), "session target required") {
 		t.Fatalf("expected target error, got %v", err)
 	}

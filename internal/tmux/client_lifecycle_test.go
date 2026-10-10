@@ -89,3 +89,31 @@ func TestShutdownCancelsConnectionInitialization(t *testing.T) {
 		})
 	}
 }
+
+// Unit-test packages hand the connection factory placeholder socket paths
+// ("x", "sock", ""); with the real dialer every such call runs the gotmuxcc
+// constructor against the host's tmux. The guard must short-circuit before
+// the dialer and restore it afterwards.
+func TestForbidDialForTestsBlocksDialer(t *testing.T) {
+	Shutdown()
+	oldDial := dialTmux
+	t.Cleanup(func() { Shutdown(); dialTmux = oldDial })
+	dialed := 0
+	dialTmux = func(context.Context, string) (tmuxClient, error) { dialed++; return &fakeClient{}, nil }
+
+	restore := ForbidDialForTests()
+	if _, err := newTmux("placeholder"); !errors.Is(err, ErrDialForbidden) {
+		t.Fatalf("newTmux under guard: err=%v, want ErrDialForbidden", err)
+	}
+	if dialed != 0 {
+		t.Fatalf("dialer ran %d times under guard, want 0", dialed)
+	}
+
+	restore()
+	if _, err := newTmux("placeholder"); err != nil {
+		t.Fatalf("newTmux after restore: %v", err)
+	}
+	if dialed != 1 {
+		t.Fatalf("dialer ran %d times after restore, want 1", dialed)
+	}
+}

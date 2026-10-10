@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -21,6 +22,28 @@ var (
 		return gotmux.NewTmuxContext(ctx, socketPath)
 	}
 )
+
+// ErrDialForbidden is returned by the shared connection factory while
+// ForbidDialForTests is in effect.
+var ErrDialForbidden = errors.New("tmux: control-mode dial forbidden in this test binary")
+
+// ForbidDialForTests makes every control-mode dial fail with ErrDialForbidden
+// instead of running the gotmuxcc constructor. Unit-test fixtures carry
+// placeholder socket paths ("sock", "x", ""); handed to the real dialer those
+// exec `tmux list-sessions` against the host and, before gotmuxcc v0.5.0,
+// started a stray server per call. Packages whose tests must never reach a
+// real tmux install this in TestMain. The returned func restores the dialer.
+func ForbidDialForTests() (restore func()) {
+	clientInitMu.Lock()
+	defer clientInitMu.Unlock()
+	prev := dialTmux
+	dialTmux = func(context.Context, string) (tmuxClient, error) { return nil, ErrDialForbidden }
+	return func() {
+		clientInitMu.Lock()
+		defer clientInitMu.Unlock()
+		dialTmux = prev
+	}
+}
 
 func sharedTmux(socketPath string) (tmuxClient, error) {
 	clientMu.Lock()
