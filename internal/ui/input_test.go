@@ -562,3 +562,55 @@ func TestExactMatchFlagCompletionStaysVisibleUntilCommitted(t *testing.T) {
 		t.Fatalf("expected selected flag -r, got %q", got)
 	}
 }
+
+// Bubble Tea v2 delivers a bracketed paste as one tea.PasteMsg instead of a
+// run of key presses; the filter must accept it as typed text.
+func TestPasteAppendsToFilter(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	node, ok := m.registry.Find("command")
+	if !ok {
+		t.Fatal("expected command node")
+	}
+	current := newLevel("command", "command", []menu.Item{
+		{ID: "kill-session", Label: "kill-session [-aC] [-t target-session]"},
+	}, node)
+	m.stack = []*level{current}
+	h := NewHarness(m)
+
+	h.Update(tea.PasteMsg{Content: "kill-session -t dev"})
+	if got := current.Filter; got != "kill-session -t dev" {
+		t.Fatalf("filter after paste = %q", got)
+	}
+	if got, want := current.FilterCursorPos(), len([]rune("kill-session -t dev")); got != want {
+		t.Fatalf("cursor after paste = %d, want %d", got, want)
+	}
+}
+
+// The prompt is a single line: newlines and tabs collapse to one space and
+// other control characters are dropped, matching the textinput-backed forms.
+func TestPasteCollapsesLineBreaksAndDropsControls(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	current := m.currentLevel()
+	h := NewHarness(m)
+
+	h.Update(tea.PasteMsg{Content: "ses\r\nsion\tone\x07"})
+	if got := current.Filter; got != "ses sion one" {
+		t.Fatalf("filter after paste = %q", got)
+	}
+}
+
+// A paste while a form is open belongs to the form's text input, not the
+// menu filter underneath it.
+func TestPasteGoesToActiveForm(t *testing.T) {
+	m := NewModel(ModelConfig{})
+	m.startSessionForm(menu.SessionPrompt{Action: "session:rename", Target: "original", Initial: ""})
+	h := NewHarness(m)
+
+	h.Update(tea.PasteMsg{Content: "renamed"})
+	if got := m.sessionForm.Value(); got != "renamed" {
+		t.Fatalf("form value after paste = %q", got)
+	}
+	if got := m.currentLevel().Filter; got != "" {
+		t.Fatalf("menu filter changed under an open form: %q", got)
+	}
+}

@@ -290,7 +290,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	handler := m.handlerFor(msg)
 	_, isKey := msg.(tea.KeyPressMsg)
 	_, isMouse := msg.(tea.MouseWheelMsg)
-	if handler == nil || isKey || isMouse {
+	_, isPaste := msg.(tea.PasteMsg)
+	if handler == nil || isKey || isMouse || isPaste {
 		if handled, cmd := m.handleActiveForm(msg); handled {
 			cmds = append(cmds, cmd)
 			return m, m.finishUpdate(cmds)
@@ -329,6 +330,8 @@ func (m *Model) handlerFor(msg tea.Msg) msgHandler {
 	switch msg.(type) {
 	case tea.KeyPressMsg:
 		return m.handleKeyMsg
+	case tea.PasteMsg:
+		return m.handlePasteMsg
 	case tea.WindowSizeMsg:
 		return m.handleWindowSizeMsg
 	case categoryLoadedMsg:

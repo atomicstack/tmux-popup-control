@@ -153,6 +153,49 @@ func (m *Model) handleTextInput(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	}
 }
 
+// handlePasteMsg inserts a bracketed paste into the filter as if it had been
+// typed. Bubble Tea v2 enables bracketed paste, so a terminal paste arrives
+// as one tea.PasteMsg rather than a run of key presses. Forms get the message
+// first (their text inputs handle it themselves); this only runs for menus.
+func (m *Model) handlePasteMsg(msg tea.Msg) tea.Cmd {
+	paste, ok := msg.(tea.PasteMsg)
+	if !ok || m.mode != ModeMenu || m.loading {
+		return nil
+	}
+	current := m.currentLevel()
+	if current == nil {
+		return nil
+	}
+	if !m.appendToFilter(sanitisePaste(paste.Content)) {
+		return nil
+	}
+	return m.ensurePreviewForLevel(current)
+}
+
+// sanitisePaste fits pasted text to the single-line prompt: line breaks and
+// tabs collapse to one space and other control characters are dropped, the
+// same policy as the textinput-backed forms.
+func sanitisePaste(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	pendingSpace := false
+	for _, r := range text {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t':
+			pendingSpace = true
+		case unicode.IsControl(r):
+			// dropped
+		default:
+			if pendingSpace {
+				b.WriteByte(' ')
+				pendingSpace = false
+			}
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func (m *Model) appendToFilter(text string) bool {
 	if text == "" {
 		return false
