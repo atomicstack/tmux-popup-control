@@ -65,7 +65,7 @@ Integration tests (`internal/testutil/`, `internal/tmux/integration_test.go`, `i
 
 ### Releasing
 
-`make release` cross-compiles, packages tarballs (binary + `README.md`, `main.sh`, `main.tmux`; macOS xattrs suppressed), generates checksums, and calls `gh release create`. The version comes from `git describe --tags`, so **tag first** (`git tag vX.Y.Z`), **push the tag** (`git push origin vX.Y.Z`), then run `make release VERSION=X.Y.Z`. The `VERSION` override ensures the ldflags match the tag even if `git describe` adds a suffix.
+`make release` cross-compiles, packages tarballs (binary + `README.md`, `main.tmux`; macOS xattrs suppressed), generates checksums, and calls `gh release create`. The version comes from `git describe --tags`, so **tag first** (`git tag vX.Y.Z`), **push the tag** (`git push origin vX.Y.Z`), then run `make release VERSION=X.Y.Z`. The `VERSION` override ensures the ldflags match the tag even if `git describe` adds a suffix.
 
 Every release needs a changelog: write a notes file and pass `RELEASE_NOTES=path/to/notes.md`; without it the target falls back to `--generate-notes`. Name the tmux commit the release was tested against (see the README header). Optional `SIGN_IDENTITY=…` / `NOTARY_PROFILE=…` trigger the `codesign-darwin` / `notarize-darwin` steps for the darwin binaries.
 
@@ -75,14 +75,14 @@ Every release needs a changelog: write a notes file and pass `RELEASE_NOTES=path
 
 Besides the default TUI mode, `main.go` dispatches these via `commandHandlers()`:
 - `save-sessions [--name NAME]` / `restore-sessions [--from NAME]` — resurrect save/restore with a progress popup.
-- `autosave [--socket PATH]` / `autosave-status` — helper for a tmux `#()` status snippet; runs the autosave cadence and renders the optional status icon. Must stay cheap and must `defer tmux.Shutdown()` (it is invoked on every status refresh).
+- `autosave-now [--socket PATH]` — run by the `set-hook -B` monitor main.tmux installs (tmux schedules autosaves itself: it fires when `#{t/d:start_time}` passes `@tmux-popup-control-autosave-last` + the interval). Advances `-autosave-last` first, saves, prunes, and toggles `@tmux-popup-control-autosave-saving` (the status-line indicator).
 - `install-and-init-plugins` — called from `main.tmux` at tmux startup; sources installed plugins, schedules a deferred popup for any uninstalled ones.
 - `deferred-install` — background helper (`run-shell -b`) that waits for tmux startup, then opens the plugin install UI via `showPopup`.
 - `--version`.
 
 ## Architecture
 
-This is a [Bubble Tea](https://github.com/charmbracelet/bubbletea) TUI that wraps tmux as a popup control menu. The app runs inside a `tmux display-popup` (a modal floating pane on current tmux) and communicates with tmux via the `gotmuxcc` library (vendored).
+This is a [Bubble Tea](https://github.com/charmbracelet/bubbletea) TUI that wraps tmux as a popup control menu. Key bindings launch it with `run-shell -C '#{E:@tmux-popup-control-launch} …'`: main.tmux stores the whole `new-pane -O -K …` command in that option, tmux expands it (names escaped with `#{q/a:…}`) and runs it in-process, so the binary starts in a modal floating pane with no shell or tmux client in between. The launcher passes the host pane/session/client as `TMUX_POPUP_CONTROL_PANE_ID` / `_SESSION_ID` / `_CLIENT`. The app and communicates with tmux via the `gotmuxcc` library (vendored).
 
 ### Layer overview
 
@@ -143,7 +143,7 @@ The UI maintains a `stack []*level` where each level holds the current items, cu
 | `input.go` | text filter input, backspace, filter cursor |
 | `view.go` | `View()` rendering, side-by-side preview layout, viewport logic, mouse handling |
 | `commands.go` | backend event handling, menu loading commands |
-| `backend.go` | `waitForBackendEvent`, backend update dispatch |
+| `backend.go` | `waitForBackendEvent`, backend update dispatch; simple live levels rebuild via the `menu.LiveLevels` table (`internal/menu/live.go`) |
 | `prompt.go` | filter / command prompt rendering |
 | `completion.go`, `completion_datasource.go`, `completion_options.go` | command-prompt tab completion: dropdown widget, live tmux data source, option/hook/value completion with colour swatches |
 | `forms.go` | rename/new-session/save-as/pane-capture forms |
@@ -173,13 +173,13 @@ UI modes: `ModeMenu`, `ModePaneForm`, `ModeWindowForm`, `ModeSessionForm`, `Mode
 
 Two communication paths coexist:
 1. **gotmuxcc control-mode** (`client.go`, `sessions.go`, `windows.go`, `panes.go`, `preview.go`) — the primary path for nearly all tmux operations (list/create/rename/kill sessions and windows, switch client, display-message, capture-pane, rename/resize pane, etc.). The control client sets `new-layouts` so json v2 layouts (floating panes) round-trip.
-2. **exec `tmux` subprocess** (`command.go`, `snapshots.go`, `sessions.go`) — resilience fallbacks (`killSessionCLI`, `detachSessionCLI`, `hasSessionCLI`, `fetchSessionsFallback`) used when control-mode races or is unavailable, plus `ServerStartTime`/`ShowOption`, which the autosave helper calls on purpose via exec to avoid holding a control-mode client open.
+2. **exec `tmux` subprocess** (`command.go`, `snapshots.go`, `sessions.go`) — resilience fallbacks (`killSessionCLI`, `detachSessionCLI`, `hasSessionCLI`, `fetchSessionsFallback`) used when control-mode races or is unavailable. Options are control-mode too: `PluginOptions` reads every `@tmux-popup-control-*` option with one `show-options -g -F` (cached until a user command invalidates it), and `ShowOption`/`Option` (env var first) serve from it — use those, never a per-option `show-options`.
 
 `runExecCommand` is a package-level var (`func(name string, args ...string) commander`) swapped in tests with `withStubCommander`. `newTmux` is similarly swappable for `fakeClient` in tests.
 
 **Handle interfaces:** `windowHandle` and `sessionHandle` interfaces abstract gotmuxcc types so lifecycle operations (Select, Kill, Rename, Detach) can be tested with stub handles without a live server. `newWindowHandle` and `newSessionHandle` are injectable package-level vars.
 
-**Client identification:** `CurrentClientID` resolves the user's TTY client (not the control-mode client) by listing clients and filtering out `ControlMode=true` ones attached to the popup's session — `display-message #{client_name}` over control mode returns the control client's own name. `FindTerminalClient` provides a similar lookup for subcommands. `display-popup` is silently refused for control clients, so `showPopup` always targets the terminal client.
+**Client identification:** `CurrentClientID` resolves the user's TTY client (not the control-mode client) (normally passed by the launcher in `TMUX_POPUP_CONTROL_CLIENT`; the fallback lists clients and picks a non-`ControlMode` one attached to the host session from `TMUX_POPUP_CONTROL_SESSION_ID`) — `display-message #{client_name}` over control mode returns the control client's own name. `FindTerminalClient` provides a similar lookup for subcommands. `display-popup` is silently refused for control clients, so `showPopup` always targets the terminal client.
 
 **Resilience:** fetchers fall back to direct `tmux` CLI calls when control-mode races or returns stale data. Vanished resources are silently ignored rather than failing whole queries. `KillWindows`/`KillWindow` issue `kill-window -t <@id>` directly rather than going through a looked-up handle, because newly created windows can be missing from the cached session list.
 
@@ -193,7 +193,7 @@ Discovers plugins from `@plugin` declarations in tmux config files (matching tpm
 
 ### Resurrect (`internal/resurrect/`)
 
-`save.go` / `restore.go` orchestrate full-server snapshots (sessions, windows, panes, json layouts including floating panes, optionally pane contents) and emit `ProgressEvent`s consumed by `ModeResurrect`. `storage.go` writes `<name>_<uuid>_<timestamp>.json` (manual) or `<uuid>_<timestamp>.json` snapshots under the storage dir and maintains a "last" pointer; autosaves are named `auto-YYYY-MM-DDTHH-MM-SS` and pruned independently (`autosave.go`, bounded by `@tmux-popup-control-autosave-max`). Restore merges windows into existing sessions idempotently. Pane-content replay waits are bounded (`replayWaitTimeout`) — if restore hangs, read the livelock postmortem referenced in memory before touching that code. Pre-json (v1) saves of windows with floating panes restore with a warning, not an abort.
+`save.go` / `restore.go` orchestrate full-server snapshots (sessions, windows, panes, json layouts including floating panes, optionally pane contents) and emit `ProgressEvent`s consumed by `ModeResurrect`; callers go through `resurrect.BackendFor(socket)` (`backend.go`), the seam for a future native tmux save-state backend. `storage.go` writes `<name>_<uuid>_<timestamp>.json` (manual) or `<uuid>_<timestamp>.json` snapshots under the storage dir and maintains a "last" pointer; autosaves are named `auto-YYYY-MM-DDTHH-MM-SS` and pruned independently (`autosave.go`, bounded by `@tmux-popup-control-autosave-max`). Restore merges windows into existing sessions idempotently. Pane-content replay waits are bounded (`replayWaitTimeout`) — if restore hangs, read the livelock postmortem referenced in memory before touching that code. Pre-json (v1) saves of windows with floating panes restore with a warning, not an abort.
 
 ### Extract (`internal/extract/`, `internal/ui/extract*.go`)
 
@@ -221,7 +221,7 @@ CLI flags and env vars are both supported (flag wins). Key env vars:
 | `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` | Resurrect snapshot directory |
 | `TMUX_POPUP_CONTROL_RESURRECT_NAME` / `RESURRECT_FROM` | Snapshot name for save / restore subcommands |
 | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` | Save and replay pane contents |
-| `TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES` / `AUTOSAVE_MAX` / `AUTOSAVE_ICON` / `AUTOSAVE_ICON_SECONDS` | Autosave cadence, retention, status icon (also settable as `@tmux-popup-control-autosave-*` tmux options) |
+| `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` / `AUTOSAVE_ICON` | Autosave retention and indicator icon (also `@tmux-popup-control-autosave-*`); the interval is the `@tmux-popup-control-autosave-interval-minutes` option only, since tmux's monitor reads it |
 | `TMUX_POPUP_CONTROL_SESSION_FORMAT` / `WINDOW_FORMAT` / `WINDOW_FILTER` | Custom tmux formats for session/window labels |
 | `TMUX_POPUP_CONTROL_SWITCH_CURRENT` | Include current session/window/pane in switch menus |
 
