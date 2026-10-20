@@ -7,7 +7,7 @@ import (
 )
 
 // hostPaneID returns the pane ID (e.g. "%4") of the pane that was active
-// when the popup was opened. main.sh captures #{pane_id} before opening
+// when the popup was opened. the main.tmux launcher captures #{pane_id} before opening
 // display-popup and passes it as TMUX_POPUP_CONTROL_PANE_ID.
 func hostPaneID() string {
 	return strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_ID"))
@@ -21,7 +21,7 @@ func OriginPaneID() string {
 
 // hostSessionID returns the session ID of the popup's host session in
 // tmux's "$N" format (e.g. "$1"). It checks TMUX_POPUP_CONTROL_SESSION_ID
-// (set by main.sh) first, then falls back to parsing the TMUX env var.
+// (set by the main.tmux launcher) first, then falls back to parsing the TMUX env var.
 func hostSessionID() string {
 	if id := strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_SESSION_ID")); id != "" {
 		if !strings.HasPrefix(id, "$") {
@@ -38,23 +38,33 @@ func hostSessionID() string {
 	return ""
 }
 
-func currentSessionName(ctx context.Context, client tmuxClient) string {
-	// Prefer the session ID — stable across renames.
-	if id := hostSessionID(); id != "" {
-		if sessions, err := client.ListSessionsContext(ctx); err == nil {
-			for _, s := range sessions {
-				if s.Id == id {
-					return s.Name
-				}
-			}
+// hostSessionName resolves hostSessionID to the session's current name.
+func hostSessionName(ctx context.Context, client tmuxClient) string {
+	id := hostSessionID()
+	if id == "" {
+		return ""
+	}
+	sessions, err := client.ListSessionsContext(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, s := range sessions {
+		if s.Id == id {
+			return s.Name
 		}
 	}
-	if name := popupSessionName(client); name != "" {
+	return ""
+}
+
+// currentSessionName is the popup's host session, or failing that the
+// session of the first attached client.
+func currentSessionName(ctx context.Context, client tmuxClient) string {
+	if name := hostSessionName(ctx, client); name != "" {
 		return name
 	}
 	if clients, err := client.ListClients(); err == nil {
 		for _, c := range clients {
-			if c != nil && c.Session != "" {
+			if c != nil && !c.ControlMode && c.Session != "" {
 				return c.Session
 			}
 		}

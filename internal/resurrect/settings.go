@@ -8,14 +8,10 @@ import (
 )
 
 const (
-	envAutosaveIntervalMinutes = "TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES"
-	envAutosaveMax             = "TMUX_POPUP_CONTROL_AUTOSAVE_MAX"
-	envAutosaveIcon            = "TMUX_POPUP_CONTROL_AUTOSAVE_ICON"
-	envAutosaveIconSeconds     = "TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS"
-	optAutosaveIntervalMinutes = "@tmux-popup-control-autosave-interval-minutes"
-	optAutosaveMax             = "@tmux-popup-control-autosave-max"
-	optAutosaveIcon            = "@tmux-popup-control-autosave-icon"
-	optAutosaveIconSeconds     = "@tmux-popup-control-autosave-icon-seconds"
+	envAutosaveMax  = "TMUX_POPUP_CONTROL_AUTOSAVE_MAX"
+	envAutosaveIcon = "TMUX_POPUP_CONTROL_AUTOSAVE_ICON"
+	optAutosaveMax  = "@tmux-popup-control-autosave-max"
+	optAutosaveIcon = "@tmux-popup-control-autosave-icon"
 )
 
 // resolveOption resolves a configuration value from, in order, an environment
@@ -33,16 +29,8 @@ func resolveOption[T any](socket, envKey, optKey string, parse func(string) (T, 
 	return def
 }
 
-func ResolveAutosaveIntervalMinutes(socketPath string) int {
-	return resolveOption(socketPath, envAutosaveIntervalMinutes, optAutosaveIntervalMinutes, parsePositiveInt, 0)
-}
-
 func ResolveAutosaveMax(socketPath string) int {
 	return resolveOption(socketPath, envAutosaveMax, optAutosaveMax, parseAutosaveMax, 5)
-}
-
-func ResolveAutosaveIconSeconds(socketPath string) int {
-	return resolveOption(socketPath, envAutosaveIconSeconds, optAutosaveIconSeconds, parsePositiveInt, 0)
 }
 
 func ResolveAutosaveIcon(socketPath string) string {
@@ -74,22 +62,6 @@ func parseNonEmpty(s string) (string, bool) {
 		return "", false
 	}
 	return s, true
-}
-
-// parsePositiveInt accepts a trimmed, strictly-positive integer; anything else
-// (blank, non-numeric, or <= 0) is rejected so the caller falls through.
-func parsePositiveInt(value string) (int, bool) {
-	v := strings.TrimSpace(value)
-	if v == "" {
-		return 0, false
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n <= 0 {
-		// preserve original behaviour: a present-but-invalid value resolves
-		// to 0 (the default) rather than falling through to the next source.
-		return 0, true
-	}
-	return n, true
 }
 
 // parseAutosaveMax accepts a present value, clamping invalid or sub-1 values to

@@ -243,7 +243,7 @@ Download the tarball for your platform from the
 [releases page](https://github.com/atomicstack/tmux-popup-control/releases)
 (`tmux-popup-control-<os>-<arch>.tar.gz`, for `darwin`/`linux` ×
 `amd64`/`arm64`) and extract it into the plugin directory. Each tarball ships
-the `tmux-popup-control` binary alongside `main.sh` and `main.tmux`:
+the `tmux-popup-control` binary alongside `main.tmux`:
 
 ```sh
 mkdir -p ~/.tmux/plugins/tmux-popup-control
@@ -284,6 +284,16 @@ init line sources its own `main.tmux` (keybindings) automatically.
 Reload tmux (`tmux source-file ~/.tmux.conf`) or restart it, then open the menu
 with `prefix + Space` (see [Usage](#usage)).
 
+Each key binding is a single `run-shell -C` that tmux expands and runs inside
+the server, so a key press starts no shell and no extra tmux client: just the
+binary, in a modal floating pane over the pane you pressed it in. The full
+`new-pane` command lives in the `@tmux-popup-control-launch` option, so your own
+bindings can reuse it:
+
+```tmux
+bind-key -T prefix S run-shell -C '#{E:@tmux-popup-control-launch} --root-menu session:tree --menu-args expanded'
+```
+
 ## Building and running
 
 The repository keeps Go build artifacts inside the workspace (`.gocache/`,
@@ -319,22 +329,21 @@ make release VERSION=0.7.0 # release a specific version tag
 | `--height` | `TMUX_POPUP_CONTROL_HEIGHT` | | viewport height in rows (0 = terminal height) |
 | `--footer` | `TMUX_POPUP_CONTROL_FOOTER` | `@tmux-popup-control-footer` | show keybinding hint row |
 | `--verbose` | `TMUX_POPUP_CONTROL_VERBOSE` | | print success messages for actions |
-| `--no-preview` | `TMUX_POPUP_CONTROL_NO_PREVIEW` | | disable the side-by-side preview panel |
+| `--no-preview` | `TMUX_POPUP_CONTROL_NO_PREVIEW` | `@tmux-popup-control-no-preview` | disable the side-by-side preview panel |
 | `--tree-style` | `TMUX_POPUP_CONTROL_TREE_STYLE` | `@tmux-popup-control-tree-style` | session tree connector style: `classic` (default), `arrow`, `box`, `compact`, `rounded`; `ctrl+t` cycles them in the tree |
 | `--log-file` | `TMUX_POPUP_CONTROL_LOG_FILE` | | log file path |
 | `--trace` | `TMUX_POPUP_CONTROL_TRACE` | | enable verbose JSON trace logging |
 | `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |
-| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS` | `@tmux-popup-control-autosave-icon-seconds` | any value `> 0` enables the autosave icon; `0` or unset hides it. the icon appears when the save starts and clears one second after it finishes |
-| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | status-right icon shown while a save is in progress |
-| | `TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES` | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes; `0` or unset disables autosave |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | icon `@tmux-popup-control-autosave-saving` holds while a save is in progress (default `💾`) |
+| | | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes, read live by tmux; `0` or unset disables autosave |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` | `@tmux-popup-control-autosave-max` | maximum number of retained autosaves; manual saves are never pruned |
 | | `TMUX_POPUP_CONTROL_CLIENT` | | explicit client ID override |
 | | `TMUX_POPUP_CONTROL_COLOR_PROFILE` | | force colour profile (`ansi256`, etc.) |
 | | `TMUX_POPUP_CONTROL_PANE_FILTER` | `@tmux-popup-control-pane-filter` | tmux filter expression for pane list |
 | | `TMUX_POPUP_CONTROL_PANE_FORMAT` | `@tmux-popup-control-pane-format` | custom tmux format string for pane labels |
-| | `TMUX_POPUP_CONTROL_POPUP_BORDER_LINES` | `@tmux-popup-control-popup-border-lines` | border lines for the popup pane (`new-pane -B`, see `pane-border-lines`); unset uses tmux's default |
-| | `TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE` | `@tmux-popup-control-popup-border-style` | border style for the popup pane (`new-pane -S`/`-R`); unset uses `pane-border-style`/`pane-active-border-style` |
-| | `TMUX_POPUP_CONTROL_POPUP_STYLE` | `@tmux-popup-control-popup-style` | content style for the popup pane (`new-pane -s`); unset uses `window-style` |
+| | | `@tmux-popup-control-popup-border-lines` | border lines for the popup pane (`new-pane -B`, see `pane-border-lines`); unset uses tmux's default |
+| | | `@tmux-popup-control-popup-border-style` | border style for the popup pane (`new-pane -S`/`-R`); unset uses `pane-border-style`/`pane-active-border-style` |
+| | | `@tmux-popup-control-popup-style` | content style for the popup pane (`new-pane -s`); unset uses `window-style` |
 | | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` | `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save |
 | | `TMUX_POPUP_CONTROL_RESURRECT_FROM` | | snapshot name to restore from in CLI subcommand |
 | | `TMUX_POPUP_CONTROL_RESURRECT_NAME` | | snapshot name for save/restore CLI subcommands |
@@ -359,8 +368,8 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 | `TMUX_POPUP_CONTROL_KEY_PANE_SWITCHER` | `@tmux-popup-control-key-pane-switcher` | `f` | open the pane switcher |
 | `TMUX_POPUP_CONTROL_KEY_WINDOW_SWITCHER` | `@tmux-popup-control-key-window-switcher` | `w` | open the window switcher |
 | `TMUX_POPUP_CONTROL_KEY_PANE_CAPTURE` | `@tmux-popup-control-key-pane-capture` | `H` | capture pane to file |
-| `TMUX_POPUP_CONTROL_KEY_RESURRECT_SAVE` | `@tmux-popup-control-key-resurrect-save` | `C-s` | save sessions (legacy `key-session-save` honoured as fallback) |
-| `TMUX_POPUP_CONTROL_KEY_RESURRECT_RESTORE_FROM` | `@tmux-popup-control-key-resurrect-restore-from` | `C-r` | restore sessions from a snapshot (legacy `key-session-restore-from` honoured as fallback) |
+| `TMUX_POPUP_CONTROL_KEY_RESURRECT_SAVE` | `@tmux-popup-control-key-resurrect-save` | `C-s` | save sessions |
+| `TMUX_POPUP_CONTROL_KEY_RESURRECT_RESTORE_FROM` | `@tmux-popup-control-key-resurrect-restore-from` | `C-r` | restore sessions from a snapshot |
 | `TMUX_POPUP_CONTROL_KEY_SESSION_RENAME` | `@tmux-popup-control-key-session-rename` | `$` | rename the current session via inline form |
 | `TMUX_POPUP_CONTROL_KEY_WINDOW_RENAME` | `@tmux-popup-control-key-window-rename` | `,` | rename the current window via inline form |
 | `TMUX_POPUP_CONTROL_KEY_EXTRACT` | `@tmux-popup-control-key-extract` | `Tab` | extract tokens from the current pane (extrakto-style) |
@@ -371,41 +380,32 @@ env var or a tmux option in `tmux.conf` (env var takes precedence).
 |---|---|
 | `save-sessions [--name NAME]` | save all sessions to a snapshot; opens a progress popup |
 | `restore-sessions [--from NAME]` | restore sessions from a snapshot; opens a progress popup |
-| `autosave [--socket PATH]` | internal helper for tmux `#()` status snippets; runs the autosave cadence and optional status icon |
+| `autosave-now [--socket PATH]` | internal helper run by the autosave monitor hook; saves, prunes and toggles the status indicator |
 | `install-and-init-plugins` | sources installed plugins at tmux startup; opens a deferred install popup for any missing plugins |
 | `deferred-install` | internal helper invoked via `run-shell -b`; waits for tmux startup, then opens the install UI in a popup pane |
 | `--version` | prints the version string and exits |
 
 ### Automatic session saves
 
-Autosaves are disabled by default. Enable them by setting an interval and
-adding the helper command to a tmux format that is evaluated regularly,
-typically `status-right`. The plugin publishes its resolved binary path in
-`@tmux-popup-control-binary-path` so the snippet does not need to guess where
-the binary lives.
-
-The important part to add somewhere in your status line is:
-
-```tmux
-#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')
-```
-
-A reusable `.tmux.conf` setup looks like this:
+Autosaves are disabled by default. Enable them by setting an interval:
 
 ```tmux
 set -g @tmux-popup-control-autosave-interval-minutes 5
 set -g @tmux-popup-control-autosave-max 5
-set -g @tmux-popup-control-autosave-icon "💾"
-set -g @tmux-popup-control-autosave-icon-seconds 1  # any value > 0 enables the icon
-set -g @status-right-autosave "#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')"
-set -ag status-right "#{E:@status-right-autosave}"
 ```
 
-If you do not want the extra `@status-right-autosave` helper option, you can
-append it directly instead:
+tmux schedules them itself. `main.tmux` installs a `set-hook -B` monitor that
+tmux evaluates every second and that fires once the server has been up for an
+interval past the last save, running `autosave-now` in the background. No
+process sleeps between saves, there is one scheduler per server however many
+clients are attached, and a changed interval applies immediately.
+
+To see a save in progress, add the indicator option to your status line. It
+holds `@tmux-popup-control-autosave-icon` (default `💾`) while a save runs and
+for a second afterwards, and is empty otherwise:
 
 ```tmux
-set -ag status-right "#(#{@tmux-popup-control-binary-path} autosave -socket '#{socket_path}')"
+set -ag status-right "#{@tmux-popup-control-autosave-saving}"
 ```
 
 Autosaves are stored as `auto-YYYY-MM-DDTHH-MM-SS` snapshots, update the

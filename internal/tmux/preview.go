@@ -84,7 +84,7 @@ func parsePreviewTopology(lines []string) PreviewTopology {
 		// The popup is a modal floating pane, so tmux reports it as the
 		// active pane of the window it opens in; it is never what a preview
 		// should show. Leaving that window without an active pane makes the
-		// caller fall back to the current pane main.sh recorded.
+		// caller fall back to the current pane the main.tmux launcher recorded.
 		if !ok || popup {
 			continue
 		}

@@ -233,8 +233,12 @@ func TestCurrentClientIDSkipsControlModeClients(t *testing.T) {
 	paneID := strings.TrimSpace(string(paneOut))
 	t.Logf("test pane: %s (session: %s)", paneID, initialSession)
 
-	// Set TMUX_PANE as CurrentClientID expects.
-	t.Setenv("TMUX_PANE", paneID)
+	// Point CurrentClientID at the host session, as the launcher does.
+	sessionOut, err := exec.Command("tmux", "-S", socket, "display-message", "-t", paneID, "-p", "#{session_id}").Output()
+	if err != nil {
+		t.Fatalf("get session id: %v", err)
+	}
+	t.Setenv("TMUX_POPUP_CONTROL_SESSION_ID", strings.TrimSpace(string(sessionOut)))
 
 	// Call CurrentClientID — should return empty because only
 	// control-mode clients exist (no real TTY clients in the test env).
@@ -460,7 +464,7 @@ func TestFetchPanesCurrentPaneMultiSessionIntegration(t *testing.T) {
 // Reproduces a bug where pane_id always resolves to %1 regardless of which
 // window the popup is opened from, because FetchPanes infers the current
 // pane via window_active/pane_active tmux formats rather than using the
-// pane ID captured by main.sh before the popup opened.
+// pane ID captured by the main.tmux launcher before the popup opened.
 func TestFetchPanesCurrentPaneMultiWindowIntegration(t *testing.T) {
 	testutil.RequireTmux(t)
 	socket, cleanup, logDir := testutil.StartTmuxServer(t)
@@ -532,7 +536,7 @@ func TestFetchPanesCurrentPaneMultiWindowIntegration(t *testing.T) {
 	t.Setenv("TMUX_POPUP_CONTROL_SWITCH_CURRENT", "")
 	t.Setenv("TMUX_POPUP_CONTROL_SESSION", session)
 	t.Setenv("TMUX_POPUP_CONTROL_SESSION_ID", strings.TrimPrefix(sessionID, "$"))
-	// This is the key env var — main.sh captures the pane ID before the
+	// This is the key env var — the main.tmux launcher captures the pane ID before the
 	// popup opens, so FetchPanes should use it directly.
 	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", targetPaneID)
 
@@ -928,7 +932,7 @@ func TestSessionOptionNamesIntegration(t *testing.T) {
 // TestPopupPaneIsNeverTheActivePaneIntegration pins that the popup — a modal
 // floating pane, and therefore the active pane of the window it opens in —
 // is never reported as that window's active pane nor as the current pane.
-// The current pane is the one main.sh recorded in TMUX_POPUP_CONTROL_PANE_ID.
+// The current pane is the one the main.tmux launcher recorded in TMUX_POPUP_CONTROL_PANE_ID.
 // Previews of the current session or window otherwise captured the popup.
 func TestPopupPaneIsNeverTheActivePaneIntegration(t *testing.T) {
 	testutil.RequireTmux(t)

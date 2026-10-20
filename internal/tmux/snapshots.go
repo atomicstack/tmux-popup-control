@@ -241,7 +241,7 @@ func FetchPanesContext(ctx context.Context, socketPath string) (PaneSnapshot, er
 		}
 		snapshot.Panes = append(snapshot.Panes, entry)
 	}
-	// Prefer the pane ID captured by main.sh before the popup opened.
+	// Prefer the pane ID captured by the main.tmux launcher before the popup opened.
 	// This is the most reliable source because it was resolved in the
 	// user's actual terminal context, not the control-mode client's.
 	if hpid := hostPaneID(); hpid != "" {

@@ -1,7 +1,6 @@
 package resurrect
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,36 +9,6 @@ import (
 
 	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
-
-func TestResolveAutosaveIntervalEnvVarOverridesTmuxOption(t *testing.T) {
-	t.Setenv("TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES", "7")
-	restore := withTmuxOptionFn(func(_, opt string) string {
-		if opt == "@tmux-popup-control-autosave-interval-minutes" {
-			return "3"
-		}
-		return ""
-	})
-	defer restore()
-
-	if got := ResolveAutosaveIntervalMinutes("dummy"); got != 7 {
-		t.Fatalf("expected env override interval 7, got %d", got)
-	}
-}
-
-func TestResolveAutosaveIntervalDisablesOnUnsetOrInvalid(t *testing.T) {
-	t.Setenv("TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES", "")
-	restore := withTmuxOptionFn(func(_, opt string) string {
-		if opt == "@tmux-popup-control-autosave-interval-minutes" {
-			return "nope"
-		}
-		return ""
-	})
-	defer restore()
-
-	if got := ResolveAutosaveIntervalMinutes("dummy"); got != 0 {
-		t.Fatalf("expected disabled interval 0, got %d", got)
-	}
-}
 
 func TestResolveAutosaveMaxUsesDefaultAndClampsMinimum(t *testing.T) {
 	t.Setenv("TMUX_POPUP_CONTROL_AUTOSAVE_MAX", "")
@@ -55,34 +24,6 @@ func TestResolveAutosaveMaxUsesDefaultAndClampsMinimum(t *testing.T) {
 
 	if got := ResolveAutosaveMax("dummy"); got != 1 {
 		t.Fatalf("expected clamped autosave max 1, got %d", got)
-	}
-}
-
-func TestResolveAutosaveIconSecondsUsesEnvAndDisablesOnUnsetOrInvalid(t *testing.T) {
-	t.Setenv("TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS", "4")
-	restore := withTmuxOptionFn(func(_, opt string) string {
-		if opt == "@tmux-popup-control-autosave-icon-seconds" {
-			return "9"
-		}
-		return ""
-	})
-	defer restore()
-
-	if got := ResolveAutosaveIconSeconds("dummy"); got != 4 {
-		t.Fatalf("expected env override icon seconds 4, got %d", got)
-	}
-
-	t.Setenv("TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS", "")
-	restore = withTmuxOptionFn(func(_, opt string) string {
-		if opt == "@tmux-popup-control-autosave-icon-seconds" {
-			return "bad"
-		}
-		return ""
-	})
-	defer restore()
-
-	if got := ResolveAutosaveIconSeconds("dummy"); got != 0 {
-		t.Fatalf("expected disabled icon seconds 0, got %d", got)
 	}
 }
 
@@ -177,7 +118,7 @@ func TestPruneAutoSavesRemovesOnlyOldAutoSaves(t *testing.T) {
 	}
 }
 
-func TestRunAutoSaveWritesAutoSaveUpdatesLastAndState(t *testing.T) {
+func TestRunAutoSaveWritesAutoSaveAndUpdatesLast(t *testing.T) {
 	dir := t.TempDir()
 
 	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
@@ -229,14 +170,6 @@ func TestRunAutoSaveWritesAutoSaveUpdatesLastAndState(t *testing.T) {
 		t.Fatalf("expected last symlink to point at %q, got %q", entry.Path, lastPath)
 	}
 
-	lastSuccess, err := LastAutoSaveSuccess(dir)
-	if err != nil {
-		t.Fatalf("LastAutoSaveSuccess: %v", err)
-	}
-	wantTime := time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
-	if !lastSuccess.Equal(wantTime) {
-		t.Fatalf("expected autosave state time %s, got %s", wantTime, lastSuccess)
-	}
 }
 
 func TestRunAutoSavePrunesOlderAutoSavesButKeepsManualSaves(t *testing.T) {
@@ -293,350 +226,6 @@ func TestRunAutoSavePrunesOlderAutoSavesButKeepsManualSaves(t *testing.T) {
 	}
 }
 
-func TestRunAutoSaveCommandSleepsUntilDueThenPrintsIconAndClears(t *testing.T) {
-	dir := t.TempDir()
-	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 3, 8, 0, time.UTC)); err != nil {
-		t.Fatalf("WriteAutoSaveState: %v", err)
-	}
-
-	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
-	defer restoreFetchSessions()
-	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
-	defer restoreFetchWindows()
-	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return makePanes("main", 0), nil })
-	defer restoreFetchPanes()
-	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil })
-	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
-	defer restoreClientInfo()
-	now := time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
-	restoreNow := withAutosaveNowFn(func() time.Time { return now })
-	defer restoreNow()
-	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
-		return critical()
-	})
-	defer restoreLock()
-	var sleeps []time.Duration
-	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
-		sleeps = append(sleeps, d)
-		now = now.Add(d)
-	})
-	defer restoreSleep()
-
-	var out bytes.Buffer
-	err := RunAutoSaveCommand(StatusConfig{
-		SocketPath:      "/tmp/tmux.sock",
-		SaveDir:         dir,
-		IntervalMinutes: 5,
-		Max:             5,
-		IconSeconds:     10,
-		Icon:            "X ",
-	}, &out)
-	if err != nil {
-		t.Fatalf("RunAutoSaveCommand: %v", err)
-	}
-	if got := out.String(); got != "\nX \n\n" {
-		t.Fatalf("expected autosave output sequence %q, got %q", "\nX \n\n", got)
-	}
-	// schedule sleep until due, then the fixed 1s post-save icon linger.
-	if len(sleeps) != 2 || sleeps[0] != 1*time.Minute || sleeps[1] != time.Second {
-		t.Fatalf("expected sleep sequence [1m,1s], got %#v", sleeps)
-	}
-}
-
-func TestRunAutoSaveCommandWaitsFullIntervalOnFirstSaveAfterServerStart(t *testing.T) {
-	dir := t.TempDir()
-
-	// Last autosave is from a previous tmux server lifetime — well before
-	// the current server started. Without the first-save guard the worker
-	// would save immediately on startup, snapshotting a near-empty session.
-	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 9, 0, 0, 0, time.UTC)); err != nil {
-		t.Fatalf("WriteAutoSaveState: %v", err)
-	}
-
-	serverStart := time.Date(2026, 4, 5, 16, 0, 0, 0, time.UTC)
-	now := time.Date(2026, 4, 5, 16, 0, 5, 0, time.UTC)
-
-	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
-	defer restoreFetchSessions()
-	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
-	defer restoreFetchWindows()
-	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return makePanes("main", 0), nil })
-	defer restoreFetchPanes()
-	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil })
-	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
-	defer restoreClientInfo()
-	restoreNow := withAutosaveNowFn(func() time.Time { return now })
-	defer restoreNow()
-	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
-		return critical()
-	})
-	defer restoreLock()
-
-	var sleeps []time.Duration
-	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
-		sleeps = append(sleeps, d)
-		now = now.Add(d)
-	})
-	defer restoreSleep()
-
-	var out bytes.Buffer
-	err := RunAutoSaveCommand(StatusConfig{
-		SocketPath:      "/tmp/tmux.sock",
-		SaveDir:         dir,
-		IntervalMinutes: 5,
-		Max:             5,
-		IconSeconds:     10,
-		Icon:            "X ",
-		ServerStart:     serverStart,
-	}, &out)
-	if err != nil {
-		t.Fatalf("RunAutoSaveCommand: %v", err)
-	}
-
-	if len(sleeps) == 0 {
-		t.Fatalf("expected at least one sleep, got %#v", sleeps)
-	}
-	if sleeps[0] != 5*time.Minute {
-		t.Fatalf("expected first sleep to be full interval 5m, got %v", sleeps[0])
-	}
-}
-
-func TestRunAutoSaveCommandFallsBackToDefaultIcon(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)); err != nil {
-		t.Fatalf("WriteAutoSaveState: %v", err)
-	}
-	// 0.5s after the last save — inside the post-save linger window, so the
-	// command resumes showing the leftover icon for the remaining 0.5s.
-	now := time.Date(2026, 4, 5, 16, 7, 8, int(500*time.Millisecond), time.UTC)
-	restoreNow := withAutosaveNowFn(func() time.Time { return now })
-	defer restoreNow()
-	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
-		return critical()
-	})
-	defer restoreLock()
-	var sleeps []time.Duration
-	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
-		sleeps = append(sleeps, d)
-		now = now.Add(d)
-	})
-	defer restoreSleep()
-
-	var out bytes.Buffer
-	err := RunAutoSaveCommand(StatusConfig{
-		SaveDir:         dir,
-		IntervalMinutes: 5,
-		Max:             5,
-		IconSeconds:     10,
-	}, &out)
-	if err != nil {
-		t.Fatalf("RunAutoSaveCommand: %v", err)
-	}
-	if got := out.String(); got != "💾\n\n" {
-		t.Fatalf("expected default autosave icon output, got %q", got)
-	}
-	if len(sleeps) != 1 || sleeps[0] != 500*time.Millisecond {
-		t.Fatalf("expected single icon-clear sleep of 0.5s, got %#v", sleeps)
-	}
-}
-
-func TestRunAutoSaveCommandReturnsBlankWhenIconDisabled(t *testing.T) {
-	dir := t.TempDir()
-
-	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)); err != nil {
-		t.Fatalf("WriteAutoSaveState: %v", err)
-	}
-	now := time.Date(2026, 4, 5, 16, 7, 9, 0, time.UTC)
-	restoreNow := withAutosaveNowFn(func() time.Time { return now })
-	defer restoreNow()
-	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error {
-		return critical()
-	})
-	defer restoreLock()
-	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
-		now = now.Add(d)
-	})
-	defer restoreSleep()
-	// IconSeconds=0 still triggers a save when the prior autosave is
-	// older than IntervalMinutes; without mocking the tmux fetch funcs
-	// the save would try to talk to whatever tmux server happens to be
-	// reachable from the test environment, hang on retries, and time
-	// out the package.
-	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
-	defer restoreFetchSessions()
-	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
-	defer restoreFetchWindows()
-	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return makePanes("main", 0), nil })
-	defer restoreFetchPanes()
-
-	var out bytes.Buffer
-	err := RunAutoSaveCommand(StatusConfig{
-		SaveDir:         dir,
-		IntervalMinutes: 5,
-		Max:             5,
-		IconSeconds:     0,
-	}, &out)
-	if err != nil {
-		t.Fatalf("RunAutoSaveCommand: %v", err)
-	}
-	if got := out.String(); got != "\n" {
-		t.Fatalf("expected blank autosave output, got %q", got)
-	}
-}
-
-func TestRunAutoSaveCommandExitsQuietlyWhenLockBusy(t *testing.T) {
-	dir := t.TempDir()
-
-	restoreNow := withAutosaveNowFn(func() time.Time {
-		return time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
-	})
-	defer restoreNow()
-	restoreLock := withWithAutosaveLockFn(func(string, func() error) error {
-		return ErrAutoSaveLocked
-	})
-	defer restoreLock()
-
-	var out bytes.Buffer
-	err := RunAutoSaveCommand(StatusConfig{
-		SaveDir:         dir,
-		IntervalMinutes: 5,
-		Max:             5,
-		IconSeconds:     10,
-	}, &out)
-	if err != nil {
-		t.Fatalf("RunAutoSaveCommand: %v", err)
-	}
-	if got := out.String(); got != "" {
-		t.Fatalf("expected no autosave output when lock busy, got %q", got)
-	}
-
-	entries, err := ListSaves(dir)
-	if err != nil {
-		t.Fatalf("ListSaves: %v", err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("expected no autosaves when lock is busy, got %d", len(entries))
-	}
-}
-
-func TestRunAutoSaveCommandKeepsIconUpAcrossSlowSave(t *testing.T) {
-	dir := t.TempDir()
-	// last autosave well in the past so a save is due and the resume-path
-	// linger window has already elapsed.
-	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 0, 0, 0, time.UTC)); err != nil {
-		t.Fatalf("WriteAutoSaveState: %v", err)
-	}
-
-	now := time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
-	restoreNow := withAutosaveNowFn(func() time.Time { return now })
-	defer restoreNow()
-
-	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
-	defer restoreFetchSessions()
-	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
-	defer restoreFetchWindows()
-	// simulate a slow (8s) save by advancing the mock clock during the save
-	// (fetch panes runs inside Save()). The icon is shown before the save and
-	// stays up for the whole duration plus the linger.
-	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) {
-		now = now.Add(8 * time.Second)
-		return makePanes("main", 0), nil
-	})
-	defer restoreFetchPanes()
-	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil })
-	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
-	defer restoreClientInfo()
-	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error { return critical() })
-	defer restoreLock()
-	restoreSleep := withAutosaveSleepFn(func(d time.Duration) { now = now.Add(d) })
-	defer restoreSleep()
-
-	var out bytes.Buffer
-	err := RunAutoSaveCommand(StatusConfig{
-		SocketPath:      "/tmp/tmux.sock",
-		SaveDir:         dir,
-		IntervalMinutes: 5,
-		Max:             5,
-		IconSeconds:     3,
-	}, &out)
-	if err != nil {
-		t.Fatalf("RunAutoSaveCommand: %v", err)
-	}
-	// resume-path blank line, then the icon shown across the save, then clear.
-	if got := out.String(); got != "\n💾\n\n" {
-		t.Fatalf("expected icon to stay up across a slow save, got %q", got)
-	}
-}
-
-func TestRunAutoSaveCommandShowsIconWhileSaving(t *testing.T) {
-	dir := t.TempDir()
-	// last autosave well in the past so a save is due and the resume window
-	// (a fresh restart mid-linger) has long elapsed.
-	if err := WriteAutoSaveState(dir, time.Date(2026, 4, 5, 16, 0, 0, 0, time.UTC)); err != nil {
-		t.Fatalf("WriteAutoSaveState: %v", err)
-	}
-
-	now := time.Date(2026, 4, 5, 16, 7, 8, 0, time.UTC)
-	restoreNow := withAutosaveNowFn(func() time.Time { return now })
-	defer restoreNow()
-
-	restoreFetchSessions := withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil })
-	defer restoreFetchSessions()
-	restoreFetchWindows := withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil })
-	defer restoreFetchWindows()
-	restoreWindowOpts := withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil })
-	defer restoreWindowOpts()
-	restoreClientInfo := withClientInfoFn(func(string, string) (string, string) { return "", "" })
-	defer restoreClientInfo()
-	restoreLock := withWithAutosaveLockFn(func(_ string, critical func() error) error { return critical() })
-	defer restoreLock()
-	var sleeps []time.Duration
-	restoreSleep := withAutosaveSleepFn(func(d time.Duration) {
-		sleeps = append(sleeps, d)
-		now = now.Add(d)
-	})
-	defer restoreSleep()
-
-	var out bytes.Buffer
-	// Save() fetches panes mid-save; by the time it runs, the icon must
-	// already be on the status line (it appears when the save *starts*, not
-	// only after it finishes).
-	var iconVisibleDuringSave bool
-	restoreFetchPanes := withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) {
-		iconVisibleDuringSave = strings.Contains(out.String(), "💾")
-		return makePanes("main", 0), nil
-	})
-	defer restoreFetchPanes()
-
-	err := RunAutoSaveCommand(StatusConfig{
-		SocketPath:      "/tmp/tmux.sock",
-		SaveDir:         dir,
-		IntervalMinutes: 5,
-		Max:             5,
-		IconSeconds:     3,
-	}, &out)
-	if err != nil {
-		t.Fatalf("RunAutoSaveCommand: %v", err)
-	}
-
-	if !iconVisibleDuringSave {
-		t.Fatal("expected the autosave icon to be visible while the save runs, not only after it completes")
-	}
-	// entry-path clear, icon shown for the save, then cleared one second later.
-	if got := out.String(); got != "\n💾\n\n" {
-		t.Fatalf("expected icon sequence %q, got %q", "\n💾\n\n", got)
-	}
-	// only the fixed 1s post-save linger sleep (a save is already due, so no
-	// scheduling sleep precedes it).
-	if len(sleeps) != 1 || sleeps[0] != time.Second {
-		t.Fatalf("expected single 1s linger sleep, got %#v", sleeps)
-	}
-}
-
 func writeSaveFixture(t *testing.T, dir, name string, kind SaveKind, ts time.Time, withArchive bool) string {
 	t.Helper()
 
@@ -657,4 +246,109 @@ func writeSaveFixture(t *testing.T, dir, name string, kind SaveKind, ts time.Tim
 		}
 	}
 	return path
+}
+
+// fakeAutoSaveTmux records the tmux side of an autosave in call order.
+type fakeAutoSaveTmux struct {
+	calls []string
+	err   error
+}
+
+func withFakeAutoSaveTmux(t *testing.T) *fakeAutoSaveTmux {
+	t.Helper()
+	fake := &fakeAutoSaveTmux{}
+	orig := autoSaveTmux
+	autoSaveTmux = AutoSaveTmux{
+		MarkStarted: func(string) error {
+			fake.calls = append(fake.calls, "mark")
+			return fake.err
+		},
+		SetIndicator: func(_ string, icon string) error {
+			fake.calls = append(fake.calls, "indicator="+icon)
+			return nil
+		},
+	}
+	t.Cleanup(func() { autoSaveTmux = orig })
+	return fake
+}
+
+func stubSaveFetchers(t *testing.T) {
+	t.Helper()
+	t.Cleanup(withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) { return makeSessions("main"), nil }))
+	t.Cleanup(withFetchWindowsFn(func(string) (tmux.WindowSnapshot, error) { return makeWindows("main", 0), nil }))
+	t.Cleanup(withFetchPanesFn(func(string) (tmux.PaneSnapshot, error) { return makePanes("main", 0), nil }))
+	t.Cleanup(withQueryWindowOptionsFn(func(string) (map[string]bool, error) { return map[string]bool{}, nil }))
+	t.Cleanup(withClientInfoFn(func(string, string) (string, string) { return "", "" }))
+}
+
+func TestRunAutoSaveNowMarksStartShowsIndicatorAndSaves(t *testing.T) {
+	dir := t.TempDir()
+	stubSaveFetchers(t)
+	fake := withFakeAutoSaveTmux(t)
+	var slept []time.Duration
+	t.Cleanup(withAutosaveSleepFn(func(d time.Duration) {
+		fake.calls = append(fake.calls, "linger")
+		slept = append(slept, d)
+	}))
+
+	if err := RunAutoSaveNow(NowConfig{SocketPath: "sock", SaveDir: dir, Max: 5, Icon: "X"}); err != nil {
+		t.Fatalf("RunAutoSaveNow: %v", err)
+	}
+
+	// the schedule is advanced before the save, so a failing save cannot
+	// leave the monitor stuck true (it only fires on a change to true).
+	want := []string{"mark", "indicator=X", "linger", "indicator="}
+	if strings.Join(fake.calls, ",") != strings.Join(want, ",") {
+		t.Fatalf("tmux calls = %v, want %v", fake.calls, want)
+	}
+	if len(slept) != 1 || slept[0] != postSaveIconLinger {
+		t.Fatalf("expected one %s linger, got %v", postSaveIconLinger, slept)
+	}
+	entries, err := ListSaves(dir)
+	if err != nil || len(entries) != 1 || entries[0].Kind != SaveKindAuto {
+		t.Fatalf("expected one autosave, got %v (%v)", entries, err)
+	}
+}
+
+func TestRunAutoSaveNowClearsIndicatorWhenSaveFails(t *testing.T) {
+	dir := t.TempDir()
+	stubSaveFetchers(t)
+	t.Cleanup(withFetchSessionsFn(func(string) (tmux.SessionSnapshot, error) {
+		return tmux.SessionSnapshot{}, os.ErrPermission
+	}))
+	fake := withFakeAutoSaveTmux(t)
+	t.Cleanup(withAutosaveSleepFn(func(time.Duration) {}))
+
+	if err := RunAutoSaveNow(NowConfig{SocketPath: "sock", SaveDir: dir, Max: 5, Icon: "X"}); err == nil {
+		t.Fatal("expected the save error")
+	}
+	if got := fake.calls[len(fake.calls)-1]; got != "indicator=" {
+		t.Fatalf("indicator left set after a failed save: %v", fake.calls)
+	}
+}
+
+func TestRunAutoSaveNowSkipsWhenAnotherSaveHoldsTheLock(t *testing.T) {
+	dir := t.TempDir()
+	fake := withFakeAutoSaveTmux(t)
+	t.Cleanup(withWithAutosaveLockFn(func(string, func() error) error { return ErrAutoSaveLocked }))
+
+	if err := RunAutoSaveNow(NowConfig{SocketPath: "sock", SaveDir: dir, Max: 5}); err != nil {
+		t.Fatalf("a busy lock is not an error: %v", err)
+	}
+	if strings.Join(fake.calls, ",") != "mark" {
+		t.Fatalf("expected only the schedule mark, got %v", fake.calls)
+	}
+}
+
+func TestRunAutoSaveNowUsesDefaultIcon(t *testing.T) {
+	stubSaveFetchers(t)
+	fake := withFakeAutoSaveTmux(t)
+	t.Cleanup(withAutosaveSleepFn(func(time.Duration) {}))
+
+	if err := RunAutoSaveNow(NowConfig{SocketPath: "sock", SaveDir: t.TempDir(), Max: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if fake.calls[1] != "indicator="+defaultAutosaveStatusIcon {
+		t.Fatalf("expected default icon, got %v", fake.calls)
+	}
 }

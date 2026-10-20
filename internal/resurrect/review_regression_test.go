@@ -30,29 +30,12 @@ func TestRelativeSaveLastSymlink(t *testing.T) {
 	}
 }
 
-func TestMalformedAutoSaveStateFallsBackToSave(t *testing.T) {
-	dir := t.TempDir()
-	sf := buildSaveFile()
-	sf.Kind = SaveKindAuto
-	writeSaveFile(t, dir, "auto", sf)
-	if err := os.WriteFile(autosaveStatePath(dir), []byte("{"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	got, err := LastAutoSaveSuccess(dir)
-	if err != nil || !got.Equal(sf.Timestamp) {
-		t.Fatalf("got %v, %v; want %v", got, err, sf.Timestamp)
-	}
-}
-
 func TestAtomicSaveWritesReplaceSymlink(t *testing.T) {
-	for _, kind := range []string{"save", "state", "archive"} {
+	for _, kind := range []string{"save", "archive"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
 			original := filepath.Join(dir, "original")
 			path := filepath.Join(dir, "save.json")
-			if kind == "state" {
-				path = autosaveStatePath(dir)
-			}
 			if err := os.WriteFile(original, []byte("original"), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -63,8 +46,6 @@ func TestAtomicSaveWritesReplaceSymlink(t *testing.T) {
 			switch kind {
 			case "save":
 				err = WriteSaveFile(path, buildSaveFile())
-			case "state":
-				err = WriteAutoSaveState(dir, time.Now())
 			case "archive":
 				err = WritePaneArchive(path, map[string]string{"pane": "content"})
 			}

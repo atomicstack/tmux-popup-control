@@ -2,43 +2,43 @@ package resurrect
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/atomicstack/tmux-popup-control/internal/tmux"
 )
 
 const defaultAutosaveStatusIcon = "💾"
 
-// postSaveIconLinger is how long the autosave icon stays on the status line
-// after a save finishes. The icon appears when the save starts and clears one
-// second after it completes, so a brief save still shows a visible flash.
+// postSaveIconLinger is how long the autosave indicator stays on the status
+// line after a save finishes, so a brief save still shows a visible flash.
 const postSaveIconLinger = time.Second
 
 var ErrAutoSaveLocked = errors.New("autosave lock busy")
 
-type StatusConfig struct {
+// NowConfig configures one scheduled autosave.
+type NowConfig struct {
 	SocketPath          string
 	SaveDir             string
 	CapturePaneContents bool
-	IntervalMinutes     int
 	Max                 int
-	IconSeconds         int
 	Icon                string
-	// ServerStart is the tmux server's start time. When the last successful
-	// autosave predates ServerStart, this is the first save of a fresh tmux
-	// server lifetime and the worker waits the full interval before saving,
-	// so we don't snapshot a near-empty session. Zero = unknown; normal
-	// scheduling applies.
-	ServerStart time.Time
 }
 
-type autoSaveState struct {
-	LastSuccess time.Time `json:"last_success"`
+// AutoSaveTmux is the tmux side of a scheduled autosave: advancing the
+// monitor hook's schedule and toggling the status-line indicator.
+type AutoSaveTmux struct {
+	MarkStarted  func(socketPath string) error
+	SetIndicator func(socketPath, icon string) error
+}
+
+var autoSaveTmux = AutoSaveTmux{
+	MarkStarted:  tmux.MarkAutoSaveStarted,
+	SetIndicator: tmux.SetAutoSaveIndicator,
 }
 
 var autosaveNowFn = time.Now
@@ -84,15 +84,13 @@ func withWithAutosaveLockFn(fn func(string, func() error) error) func() {
 	return func() { withAutosaveLockFn = orig }
 }
 
-// RunAutoSave performs one autosave cycle: save, prune excess autosaves, then
-// persist the success timestamp for future schedule/icon checks.
+// RunAutoSave performs one autosave: save, then prune excess autosaves.
 func RunAutoSave(cfg Config, maxSaves int) error {
 	maxSaves = max(maxSaves, 1)
 
-	saveTime := autosaveNowFn()
 	cfg.Kind = SaveKindAuto
 	if cfg.Name == "" {
-		cfg.Name = AutoSaveName(saveTime)
+		cfg.Name = AutoSaveName(autosaveNowFn())
 	}
 
 	var saveErr error
@@ -105,26 +103,35 @@ func RunAutoSave(cfg Config, maxSaves int) error {
 	if saveErr != nil {
 		return saveErr
 	}
-
-	if err := PruneAutoSaves(cfg.SaveDir, maxSaves); err != nil {
-		return err
-	}
-	if err := WriteAutoSaveState(cfg.SaveDir, saveTime); err != nil {
-		return err
-	}
-	return nil
+	return PruneAutoSaves(cfg.SaveDir, maxSaves)
 }
 
-// RunAutoSaveCommand is intended for tmux status-right #() usage. It acquires
-// a singleton lifetime lock, waits until the next required event, writes
-// status-line output over time, and exits after clearing the icon.
-func RunAutoSaveCommand(cfg StatusConfig, output io.Writer) error {
-	if cfg.IntervalMinutes <= 0 {
-		return nil
+// RunAutoSaveNow is run by the autosave monitor hook main.tmux installs, when
+// the server has been up for an interval past the last save. It advances the
+// schedule first, so a failed save waits one interval instead of leaving the
+// monitor stuck true (it only fires on a change to true), then saves with the
+// status indicator up. A save already in progress makes it a no-op.
+func RunAutoSaveNow(cfg NowConfig) error {
+	if err := autoSaveTmux.MarkStarted(cfg.SocketPath); err != nil {
+		return fmt.Errorf("advancing autosave schedule: %w", err)
 	}
-
 	err := withAutosaveLockFn(cfg.SaveDir, func() error {
-		return runAutoSaveCommandLocked(cfg, output)
+		icon := cfg.Icon
+		if icon == "" {
+			icon = defaultAutosaveStatusIcon
+		}
+		_ = autoSaveTmux.SetIndicator(cfg.SocketPath, icon)
+		defer func() { _ = autoSaveTmux.SetIndicator(cfg.SocketPath, "") }()
+
+		err := RunAutoSave(Config{
+			SocketPath:          cfg.SocketPath,
+			SaveDir:             cfg.SaveDir,
+			CapturePaneContents: cfg.CapturePaneContents,
+		}, cfg.Max)
+		if err == nil {
+			autosaveSleepFn(postSaveIconLinger)
+		}
+		return err
 	})
 	if errors.Is(err, ErrAutoSaveLocked) {
 		return nil
@@ -132,145 +139,6 @@ func RunAutoSaveCommand(cfg StatusConfig, output io.Writer) error {
 	return err
 }
 
-func runAutoSaveCommandLocked(cfg StatusConfig, output io.Writer) error {
-	now := autosaveNowFn()
-	lastSuccess, err := LastAutoSaveSuccess(cfg.SaveDir)
-	if err != nil {
-		return err
-	}
-
-	iconEnabled := cfg.IconSeconds > 0
-
-	// Resume path: if this process (re)started within the post-save linger
-	// window of a recent save, keep the icon up for the remainder then clear
-	// it, so a restart mid-linger doesn't drop the icon early.
-	if iconEnabled && !lastSuccess.IsZero() && now.Sub(lastSuccess) < postSaveIconLinger {
-		if err := writeAutoSaveLine(output, resolveAutoSaveStatusIcon(cfg.Icon)); err != nil {
-			return err
-		}
-		if remaining := lastSuccess.Add(postSaveIconLinger).Sub(now); remaining > 0 {
-			autosaveSleepFn(remaining)
-		}
-		return writeAutoSaveLine(output, "")
-	}
-
-	// Clear any stale icon a previous invocation may have left on the line.
-	if err := writeAutoSaveLine(output, ""); err != nil {
-		return err
-	}
-
-	sleepFor := timeUntilNextAutoSave(lastSuccess, now, cfg.IntervalMinutes)
-	if !cfg.ServerStart.IsZero() && lastSuccess.Before(cfg.ServerStart) {
-		// first save of this tmux server's lifetime — force the full interval
-		// so a freshly-started (empty) session isn't captured immediately.
-		sleepFor = time.Duration(cfg.IntervalMinutes) * time.Minute
-	}
-	if sleepFor > 0 {
-		autosaveSleepFn(sleepFor)
-	}
-
-	// Show the icon as soon as the save starts so it covers the whole save.
-	if iconEnabled {
-		if err := writeAutoSaveLine(output, resolveAutoSaveStatusIcon(cfg.Icon)); err != nil {
-			return err
-		}
-	}
-
-	if err := RunAutoSave(Config{
-		SocketPath:          cfg.SocketPath,
-		SaveDir:             cfg.SaveDir,
-		CapturePaneContents: cfg.CapturePaneContents,
-		Kind:                SaveKindAuto,
-	}, cfg.Max); err != nil {
-		return err
-	}
-
-	// Keep it up for a brief linger after the save finishes, then clear.
-	if iconEnabled {
-		autosaveSleepFn(postSaveIconLinger)
-		return writeAutoSaveLine(output, "")
-	}
-	return nil
-}
-
-func resolveAutoSaveStatusIcon(icon string) string {
-	if icon == "" {
-		return defaultAutosaveStatusIcon
-	}
-	return icon
-}
-
-func LastAutoSaveSuccess(dir string) (time.Time, error) {
-	state, err := ReadAutoSaveState(dir)
-	switch {
-	case err == nil && !state.LastSuccess.IsZero():
-		return state.LastSuccess, nil
-	}
-
-	entries, err := ListSaves(dir)
-	if err != nil {
-		return time.Time{}, err
-	}
-	for _, entry := range entries {
-		if entry.Kind == SaveKindAuto {
-			return entry.Timestamp, nil
-		}
-	}
-	return time.Time{}, nil
-}
-
-func WriteAutoSaveState(dir string, ts time.Time) error {
-	data, err := json.MarshalIndent(autoSaveState{LastSuccess: ts}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal autosave state: %w", err)
-	}
-	if err := atomicWriteFile(autosaveStatePath(dir), func(f *os.File) error {
-		_, err := f.Write(data)
-		return err
-	}); err != nil {
-		return fmt.Errorf("write autosave state: %w", err)
-	}
-	return nil
-}
-
-func ReadAutoSaveState(dir string) (autoSaveState, error) {
-	data, err := os.ReadFile(autosaveStatePath(dir))
-	if err != nil {
-		return autoSaveState{}, err
-	}
-	var state autoSaveState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return autoSaveState{}, fmt.Errorf("parse autosave state: %w", err)
-	}
-	return state, nil
-}
-
-func autosaveStatePath(dir string) string {
-	return filepath.Join(dir, ".autosave-state")
-}
-
 func autosaveLockPath(dir string) string {
 	return filepath.Join(dir, ".autosave.lock")
-}
-
-func autoSaveDue(lastSuccess, now time.Time, intervalMinutes int) bool {
-	if intervalMinutes <= 0 {
-		return false
-	}
-	if lastSuccess.IsZero() {
-		return true
-	}
-	return !now.Before(lastSuccess.Add(time.Duration(intervalMinutes) * time.Minute))
-}
-
-func timeUntilNextAutoSave(lastSuccess, now time.Time, intervalMinutes int) time.Duration {
-	if autoSaveDue(lastSuccess, now, intervalMinutes) {
-		return 0
-	}
-	return lastSuccess.Add(time.Duration(intervalMinutes) * time.Minute).Sub(now)
-}
-
-func writeAutoSaveLine(output io.Writer, line string) error {
-	_, err := fmt.Fprintln(output, line)
-	return err
 }

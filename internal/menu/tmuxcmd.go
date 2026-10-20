@@ -52,7 +52,7 @@ func tmuxCommandEnv(socket string) []string {
 		env = append(env, "TMUX_TMPDIR="+dir)
 	}
 	// display-popup clears TMUX_PANE, but tmux uses it to resolve the current
-	// pane/session/window context for commands like "move-window -r". main.sh
+	// pane/session/window context for commands like "move-window -r". the launcher
 	// captures the host pane before opening the popup, so restore that here for
 	// subprocess-based command execution.
 	if strings.TrimSpace(os.Getenv("TMUX_PANE")) == "" {

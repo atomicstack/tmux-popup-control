@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -103,57 +102,37 @@ func TestSubcommandHelpersUseParsedCommandArgs(t *testing.T) {
 	}
 }
 
-func TestAutoSaveOutputUsesResolvedSettings(t *testing.T) {
-	var gotCfg resurrect.StatusConfig
+func TestAutoSaveNowUsesResolvedSettings(t *testing.T) {
+	var gotSocketArg string
+	var got resurrect.NowConfig
 	deps := MainDeps{
-		ResolveSaveDir:                 func(string) (string, error) { return "/tmp/saves", nil },
-		ResolvePaneContents:            func(string) bool { return true },
-		ResolveSocketPath:              func(string) (string, error) { return "/tmp/tmux.sock", nil },
-		ResolveAutosaveIntervalMinutes: func(string) int { return 7 },
-		ResolveAutosaveMax:             func(string) int { return 9 },
-		ResolveAutosaveIcon:            func(string) string { return "X " },
-		ResolveAutosaveIconSeconds:     func(string) int { return 5 },
-		RunAutoSaveCommand: func(cfg resurrect.StatusConfig, outputWriter io.Writer) error {
-			gotCfg = cfg
-			_, err := outputWriter.Write([]byte("X \n"))
-			return err
+		ResolveSocketPath: func(s string) (string, error) {
+			gotSocketArg = s
+			return "/tmp/tmux.sock", nil
+		},
+		ResolveSaveDir:      func(string) (string, error) { return "/tmp/saves", nil },
+		ResolvePaneContents: func(string) bool { return true },
+		ResolveAutosaveMax:  func(string) int { return 9 },
+		ResolveAutosaveIcon: func(string) string { return "X " },
+		RunAutoSaveNow: func(cfg resurrect.NowConfig) error {
+			got = cfg
+			return nil
 		},
 	}
 
-	output, err := autoSaveOutputWithDeps(config.Config{
-		App: app.Config{SocketPath: "app-socket"},
-		Command: []string{
-			"autosave",
-			"-socket", "flag-socket",
-		},
+	err := runAutosaveNow(config.Config{
+		App:     app.Config{SocketPath: "app-socket"},
+		Command: []string{"autosave-now", "-socket", "flag-socket"},
 	}, deps)
 	if err != nil {
-		t.Fatalf("autoSaveOutput: %v", err)
+		t.Fatalf("runAutosaveNow: %v", err)
 	}
-
-	if output != "X \n" {
-		t.Fatalf("expected autosave output %q, got %q", "X \n", output)
+	if gotSocketArg != "flag-socket" {
+		t.Fatalf("expected the -socket flag to win, got %q", gotSocketArg)
 	}
-	if gotCfg.SocketPath != "/tmp/tmux.sock" {
-		t.Fatalf("expected socket path %q, got %q", "/tmp/tmux.sock", gotCfg.SocketPath)
-	}
-	if gotCfg.SaveDir != "/tmp/saves" {
-		t.Fatalf("expected save dir %q, got %q", "/tmp/saves", gotCfg.SaveDir)
-	}
-	if !gotCfg.CapturePaneContents {
-		t.Fatal("expected pane contents to be enabled")
-	}
-	if gotCfg.IntervalMinutes != 7 {
-		t.Fatalf("expected autosave interval 7, got %d", gotCfg.IntervalMinutes)
-	}
-	if gotCfg.Max != 9 {
-		t.Fatalf("expected autosave max 9, got %d", gotCfg.Max)
-	}
-	if gotCfg.Icon != "X " {
-		t.Fatalf("expected autosave icon %q, got %q", "X ", gotCfg.Icon)
-	}
-	if gotCfg.IconSeconds != 5 {
-		t.Fatalf("expected autosave icon duration 5, got %d", gotCfg.IconSeconds)
+	want := resurrect.NowConfig{SocketPath: "/tmp/tmux.sock", SaveDir: "/tmp/saves", CapturePaneContents: true, Max: 9, Icon: "X "}
+	if got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
@@ -173,18 +152,15 @@ func TestBuildSelfCommandQuotesArguments(t *testing.T) {
 	}
 }
 
-func TestCommandHandlersIncludesAutosaveAlias(t *testing.T) {
+func TestCommandHandlersIncludeAutosaveNowOnly(t *testing.T) {
 	handlers := commandHandlers()
-	autosave, ok := handlers["autosave"]
-	if !ok {
-		t.Fatal("expected autosave handler")
+	if _, ok := handlers["autosave-now"]; !ok {
+		t.Fatal("expected autosave-now handler")
 	}
-	autosaveStatus, ok := handlers["autosave-status"]
-	if !ok {
-		t.Fatal("expected autosave-status handler")
-	}
-	if autosave.ErrorLabel != "autosave" || autosaveStatus.ErrorLabel != "autosave" {
-		t.Fatalf("expected autosave labels, got %q and %q", autosave.ErrorLabel, autosaveStatus.ErrorLabel)
+	for _, gone := range []string{"autosave", "autosave-status"} {
+		if _, ok := handlers[gone]; ok {
+			t.Fatalf("the #() autosave daemon %q should be gone", gone)
+		}
 	}
 }
 
@@ -195,6 +171,7 @@ func TestPopupArgsOpensModalFloatingPaneOnClientSession(t *testing.T) {
 		"new-pane", "-t", "/dev/ttys001:", "-O", "-K", "-W",
 		"-x", "50%", "-y", "50%", "-X", "25%", "-Y", "25%",
 		"-T", "tmux-popup-control",
+		"-e", "TMUX_POPUP_CONTROL_CLIENT=/dev/ttys001",
 		"-B", "rounded",
 		"/bin/tpc --root-menu x",
 	}

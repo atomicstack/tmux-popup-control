@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"io"
 	"testing"
 
 	"github.com/atomicstack/tmux-popup-control/internal/app"
@@ -127,21 +126,12 @@ func TestRunWithDepsReturnsSubcommandError(t *testing.T) {
 	loadConfigFn = func() (config.Config, error) {
 		return config.Config{
 			App:     app.Config{SocketPath: "sock"},
-			Command: []string{"autosave"},
+			Command: []string{"autosave-now"},
 		}, nil
 	}
 	validateConfigFn = func(config.Config) error { return nil }
 
-	deps := MainDeps{
-		ResolveSocketPath:              func(string) (string, error) { return "sock", nil },
-		ResolveSaveDir:                 func(string) (string, error) { return "/tmp/saves", nil },
-		ResolvePaneContents:            func(string) bool { return false },
-		ResolveAutosaveIntervalMinutes: func(string) int { return 5 },
-		ResolveAutosaveMax:             func(string) int { return 10 },
-		ResolveAutosaveIcon:            func(string) string { return "*" },
-		ResolveAutosaveIconSeconds:     func(string) int { return 1 },
-		RunAutoSaveCommand:             func(resurrect.StatusConfig, io.Writer) error { return wantErr },
-	}
+	deps := autosaveNowDeps(func(resurrect.NowConfig) error { return wantErr })
 
 	if got := runWithDeps(deps); got != 1 {
 		t.Fatalf("runWithDeps() = %d, want 1", got)
@@ -152,18 +142,16 @@ func TestRunWithDepsReturnsSubcommandError(t *testing.T) {
 }
 
 // TestRunWithDepsClosesTmuxAfterSubcommand is the regression test for the
-// control-mode connection leak: every `autosave-status` invocation opened a
-// cached gotmuxcc control-mode client (tmux -C attach-session) and exited
-// without closing it, orphaning the subprocess. tmux runs the status hook
-// roughly once per second, so during a large session restore dozens of these
-// accumulated and saturated the single-threaded tmux server. The subcommand
-// branch of runWithDeps must close any cached client on exit.
+// control-mode connection leak: a subcommand that opened a cached gotmuxcc
+// control-mode client (tmux -C attach-session) and exited without closing it
+// orphaned the subprocess. The subcommand branch of runWithDeps must close any
+// cached client on exit.
 func TestRunWithDepsClosesTmuxAfterSubcommand(t *testing.T) {
 	stubRunDeps(t)
 	loadConfigFn = func() (config.Config, error) {
 		return config.Config{
 			App:     app.Config{SocketPath: "sock"},
-			Command: []string{"autosave-status"},
+			Command: []string{"autosave-now"},
 		}, nil
 	}
 	validateConfigFn = func(config.Config) error { return nil }
@@ -171,16 +159,7 @@ func TestRunWithDepsClosesTmuxAfterSubcommand(t *testing.T) {
 	shutdownCalls := 0
 	shutdownTmuxFn = func() { shutdownCalls++ }
 
-	deps := MainDeps{
-		ResolveSocketPath:              func(string) (string, error) { return "sock", nil },
-		ResolveSaveDir:                 func(string) (string, error) { return "/tmp/saves", nil },
-		ResolvePaneContents:            func(string) bool { return false },
-		ResolveAutosaveIntervalMinutes: func(string) int { return 5 },
-		ResolveAutosaveMax:             func(string) int { return 10 },
-		ResolveAutosaveIcon:            func(string) string { return "*" },
-		ResolveAutosaveIconSeconds:     func(string) int { return 1 },
-		RunAutoSaveCommand:             func(resurrect.StatusConfig, io.Writer) error { return nil },
-	}
+	deps := autosaveNowDeps(func(resurrect.NowConfig) error { return nil })
 
 	if got := runWithDeps(deps); got != 0 {
 		t.Fatalf("runWithDeps() = %d, want 0", got)
@@ -228,5 +207,16 @@ func TestRunWithDepsAppliesPluginOptionsBeforeRunningApp(t *testing.T) {
 	}
 	if gotSocket != "/resolved/sock" || !got.ShowFooter {
 		t.Fatalf("plugin options not applied: socket=%q footer=%v", gotSocket, got.ShowFooter)
+	}
+}
+
+func autosaveNowDeps(run func(resurrect.NowConfig) error) MainDeps {
+	return MainDeps{
+		ResolveSocketPath:   func(string) (string, error) { return "sock", nil },
+		ResolveSaveDir:      func(string) (string, error) { return "/tmp/saves", nil },
+		ResolvePaneContents: func(string) bool { return false },
+		ResolveAutosaveMax:  func(string) int { return 10 },
+		ResolveAutosaveIcon: func(string) string { return "*" },
+		RunAutoSaveNow:      run,
 	}
 }

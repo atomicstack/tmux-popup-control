@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -29,25 +28,21 @@ import (
 var Version = "dev"
 
 type MainDeps struct {
-	ResolveSocketPath              func(string) (string, error)
-	ResolveSaveDir                 func(string) (string, error)
-	ResolvePaneContents            func(string) bool
-	ResolveAutosaveIntervalMinutes func(string) int
-	ResolveAutosaveMax             func(string) int
-	ResolveAutosaveIcon            func(string) string
-	ResolveAutosaveIconSeconds     func(string) int
-	RunAutoSaveCommand             func(resurrect.StatusConfig, io.Writer) error
+	ResolveSocketPath   func(string) (string, error)
+	ResolveSaveDir      func(string) (string, error)
+	ResolvePaneContents func(string) bool
+	ResolveAutosaveMax  func(string) int
+	ResolveAutosaveIcon func(string) string
+	RunAutoSaveNow      func(resurrect.NowConfig) error
 }
 
 var mainDeps = MainDeps{
-	ResolveSocketPath:              tmux.ResolveSocketPath,
-	ResolveSaveDir:                 resurrect.ResolveDir,
-	ResolvePaneContents:            resurrect.ResolvePaneContents,
-	ResolveAutosaveIntervalMinutes: resurrect.ResolveAutosaveIntervalMinutes,
-	ResolveAutosaveMax:             resurrect.ResolveAutosaveMax,
-	ResolveAutosaveIcon:            resurrect.ResolveAutosaveIcon,
-	ResolveAutosaveIconSeconds:     resurrect.ResolveAutosaveIconSeconds,
-	RunAutoSaveCommand:             resurrect.RunAutoSaveCommand,
+	ResolveSocketPath:   tmux.ResolveSocketPath,
+	ResolveSaveDir:      resurrect.ResolveDir,
+	ResolvePaneContents: resurrect.ResolvePaneContents,
+	ResolveAutosaveMax:  resurrect.ResolveAutosaveMax,
+	ResolveAutosaveIcon: resurrect.ResolveAutosaveIcon,
+	RunAutoSaveNow:      resurrect.RunAutoSaveNow,
 }
 
 var (
@@ -122,12 +117,10 @@ func runWithDeps(deps MainDeps) (exitCode int) {
 
 	cmd := subcommand(runtimeCfg)
 	if handler, ok := commandHandlers()[cmd]; ok {
-		// Subcommands (autosave, autosave-status, save/restore-sessions,
-		// plugin helpers) may open a cached gotmuxcc control-mode client via
-		// newTmux. Unlike the TUI path (app.Run defers its own Shutdown), they
-		// have no other teardown, so the tmux -C subprocess would leak on exit.
-		// tmux runs autosave-status ~once/sec, so these orphans accumulate and
-		// can saturate the server during a large restore. Close on exit here.
+		// Subcommands (autosave-now, save/restore-sessions, plugin helpers)
+		// may open a cached gotmuxcc control-mode client via newTmux. Unlike
+		// the TUI path (app.Run defers its own Shutdown), they have no other
+		// teardown, so the tmux -C subprocess would leak on exit.
 		defer shutdownTmuxFn()
 		if err := handler.Run(runtimeCfg, deps); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", handler.ErrorLabel, err)
@@ -170,13 +163,9 @@ func commandHandlers() map[string]commandHandler {
 				return runRestoreSessions(cfg)
 			},
 		},
-		"autosave": {
+		"autosave-now": {
 			ErrorLabel: "autosave",
-			Run:        runAutosave,
-		},
-		"autosave-status": {
-			ErrorLabel: "autosave",
-			Run:        runAutosave,
+			Run:        runAutosaveNow,
 		},
 		"install-and-init-plugins": {
 			ErrorLabel: "Error",
@@ -493,63 +482,36 @@ func runRestoreSessions(cfg config.Config) error {
 	return showPopup(socketPath, clientName, args...)
 }
 
-func runAutosave(cfg config.Config, deps MainDeps) error {
-	autoSaveCfg, err := buildAutoSaveConfig(cfg, deps)
+// runAutosaveNow is run by the autosave monitor hook main.tmux installs.
+func runAutosaveNow(cfg config.Config, deps MainDeps) error {
+	nowCfg, err := buildAutoSaveNowConfig(cfg, deps)
 	if err != nil {
 		return err
 	}
-	return deps.RunAutoSaveCommand(autoSaveCfg, os.Stdout)
+	return deps.RunAutoSaveNow(nowCfg)
 }
 
-func autoSaveOutput(cfg config.Config) (string, error) {
-	return autoSaveOutputWithDeps(cfg, mainDeps)
-}
-
-func autoSaveOutputWithDeps(cfg config.Config, deps MainDeps) (string, error) {
-	autoSaveCfg, err := buildAutoSaveConfig(cfg, deps)
-	if err != nil {
-		return "", err
-	}
-	var output strings.Builder
-	if err := deps.RunAutoSaveCommand(autoSaveCfg, &output); err != nil {
-		return "", err
-	}
-	return output.String(), nil
-}
-
-func buildAutoSaveConfig(cfg config.Config, deps MainDeps) (resurrect.StatusConfig, error) {
-	socketPath := cfg.App.SocketPath
-	if parsed := autoSaveSocketFlag(cfg); parsed != "" {
-		socketPath = parsed
-	}
-	resolvedSocketPath, err := deps.ResolveSocketPath(socketPath)
-	if err != nil {
-		return resurrect.StatusConfig{}, fmt.Errorf("resolving socket: %w", err)
-	}
-	saveDir, err := deps.ResolveSaveDir(resolvedSocketPath)
-	if err != nil {
-		return resurrect.StatusConfig{}, fmt.Errorf("resolving save dir: %w", err)
-	}
-	serverStart, _ := tmux.ServerStartTime(resolvedSocketPath)
-	return resurrect.StatusConfig{
-		SocketPath:          resolvedSocketPath,
-		SaveDir:             saveDir,
-		CapturePaneContents: deps.ResolvePaneContents(resolvedSocketPath),
-		IntervalMinutes:     deps.ResolveAutosaveIntervalMinutes(resolvedSocketPath),
-		Max:                 deps.ResolveAutosaveMax(resolvedSocketPath),
-		Icon:                deps.ResolveAutosaveIcon(resolvedSocketPath),
-		IconSeconds:         deps.ResolveAutosaveIconSeconds(resolvedSocketPath),
-		ServerStart:         serverStart,
-	}, nil
-}
-
-func autoSaveSocketFlag(cfg config.Config) string {
-	fs := flag.NewFlagSet("autosave", flag.ContinueOnError)
+func buildAutoSaveNowConfig(cfg config.Config, deps MainDeps) (resurrect.NowConfig, error) {
+	fs := flag.NewFlagSet("autosave-now", flag.ContinueOnError)
 	socket := fs.String("socket", cfg.App.SocketPath, "tmux socket path")
 	if err := fs.Parse(subcommandArgs(cfg)); err != nil {
-		return cfg.App.SocketPath
+		return resurrect.NowConfig{}, err
 	}
-	return *socket
+	socketPath, err := deps.ResolveSocketPath(*socket)
+	if err != nil {
+		return resurrect.NowConfig{}, fmt.Errorf("resolving socket: %w", err)
+	}
+	saveDir, err := deps.ResolveSaveDir(socketPath)
+	if err != nil {
+		return resurrect.NowConfig{}, fmt.Errorf("resolving save dir: %w", err)
+	}
+	return resurrect.NowConfig{
+		SocketPath:          socketPath,
+		SaveDir:             saveDir,
+		CapturePaneContents: deps.ResolvePaneContents(socketPath),
+		Max:                 deps.ResolveAutosaveMax(socketPath),
+		Icon:                deps.ResolveAutosaveIcon(socketPath),
+	}, nil
 }
 
 func buildSelfCommand(args ...string) (string, error) {
@@ -590,6 +552,7 @@ func popupArgs(clientName string, style tmux.PopupStyle, popupCmd string) []stri
 		"new-pane", "-t", clientName + ":", "-O", "-K", "-W",
 		"-x", "50%", "-y", "50%", "-X", "25%", "-Y", "25%",
 		"-T", popupTitle,
+		"-e", "TMUX_POPUP_CONTROL_CLIENT=" + clientName,
 	}
 	args = append(args, style.Args()...)
 	return append(args, popupCmd)

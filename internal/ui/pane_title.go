@@ -10,14 +10,14 @@ import (
 )
 
 // paneTitleBase is the popup pane's title at the root menu; it matches the
-// new-pane -T value main.sh and showPopup open the popup with.
+// new-pane -T value the main.tmux launcher and showPopup open the popup with.
 const paneTitleBase = "tmux-popup-control"
 
 // setPaneTitleFn retitles a pane (select-pane -T). Swappable in tests.
 var setPaneTitleFn = tmux.RenamePane
 
 // popupPaneID returns the popup's own pane when the binary was launched as a
-// popup (main.sh records the host pane in TMUX_POPUP_CONTROL_PANE_ID), and ""
+// popup (the main.tmux launcher records the host pane in TMUX_POPUP_CONTROL_PANE_ID), and ""
 // otherwise, so running the binary in an ordinary pane never renames it.
 func popupPaneID() string {
 	if strings.TrimSpace(os.Getenv("TMUX_POPUP_CONTROL_PANE_ID")) == "" {

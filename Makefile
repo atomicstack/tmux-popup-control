@@ -89,7 +89,7 @@ cover:
 
 RELEASE_DIR := dist
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
-RELEASE_SUPPORT_FILES := README.md main.sh main.tmux
+RELEASE_SUPPORT_FILES := README.md main.tmux
 
 # --- macOS signing / notarisation (opt-in) ---------------------------------
 # SIGN_IDENTITY must name a "Developer ID Application" identity. An "Apple
@@ -145,7 +145,7 @@ release: ensure-dirs
 		stage_dir="$$(mktemp -d ./release.XXXXXX)"; \
 		cp "$$f" "$$stage_dir/$(BINARY)"; \
 		cp $(addprefix ../,$(RELEASE_SUPPORT_FILES)) "$$stage_dir/"; \
-		chmod +x "$$stage_dir/$(BINARY)" "$$stage_dir/main.sh" "$$stage_dir/main.tmux"; \
+		chmod +x "$$stage_dir/$(BINARY)" "$$stage_dir/main.tmux"; \
 		COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$$f.tar.gz" -C "$$stage_dir" .; \
 		rm -rf "$$stage_dir" "$$f"; \
 	done

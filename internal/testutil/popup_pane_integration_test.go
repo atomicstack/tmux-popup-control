@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// TestPopupPaneHiddenFromTreeIntegration launches the binary the way main.sh
+// TestPopupPaneHiddenFromTreeIntegration launches the binary the way the main.tmux launcher
 // does — in a modal floating pane opened over a host pane, with the host
 // recorded in TMUX_POPUP_CONTROL_PANE_ID — and verifies the popup's own pane
 // is not listed: the host window shows one pane, not two.

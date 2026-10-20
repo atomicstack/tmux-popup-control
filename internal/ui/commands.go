@@ -12,7 +12,7 @@ import (
 )
 
 // currentPaneIDWithFallback returns storeID if non-empty, otherwise reads
-// TMUX_POPUP_CONTROL_PANE_ID (set by main.sh) so pane actions work even
+// TMUX_POPUP_CONTROL_PANE_ID (set by the main.tmux launcher) so pane actions work even
 // before the backend's first poll completes.
 func currentPaneIDWithFallback(storeID string) string {
 	if storeID != "" {
