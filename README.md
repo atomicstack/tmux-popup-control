@@ -324,26 +324,27 @@ make release VERSION=0.7.0 # release a specific version tag
 | `--log-file` | `TMUX_POPUP_CONTROL_LOG_FILE` | | log file path |
 | `--trace` | `TMUX_POPUP_CONTROL_TRACE` | | enable verbose JSON trace logging |
 | `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |
-| | `TMUX_POPUP_CONTROL_CLIENT` | | explicit client ID override |
-| | `TMUX_POPUP_CONTROL_SESSION` | | explicit session name override |
-| | `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` | `@tmux-popup-control-session-storage-dir` | override save/restore storage directory; supports `$HOME` and other env vars |
-| | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` | `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save |
-| | `TMUX_POPUP_CONTROL_SESSION_FORMAT` | `@tmux-popup-control-session-format` | custom tmux format string for session labels |
-| | `TMUX_POPUP_CONTROL_WINDOW_FORMAT` | `@tmux-popup-control-window-format` | custom tmux format string for window labels |
-| | `TMUX_POPUP_CONTROL_WINDOW_FILTER` | `@tmux-popup-control-window-filter` | tmux filter expression for window list |
-| | `TMUX_POPUP_CONTROL_PANE_FORMAT` | `@tmux-popup-control-pane-format` | custom tmux format string for pane labels |
-| | `TMUX_POPUP_CONTROL_PANE_FILTER` | `@tmux-popup-control-pane-filter` | tmux filter expression for pane list |
-| | `TMUX_POPUP_CONTROL_SWITCH_CURRENT` | `@tmux-popup-control-switch-current` | include current session/window/pane in switch menus |
-| | `TMUX_POPUP_CONTROL_COLOR_PROFILE` | | force colour profile (`ansi256`, etc.) |
-| | `TMUX_POPUP_CONTROL_RESURRECT_NAME` | | snapshot name for save/restore CLI subcommands |
-| | `TMUX_POPUP_CONTROL_RESURRECT_FROM` | | snapshot name to restore from in CLI subcommand |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS` | `@tmux-popup-control-autosave-icon-seconds` | any value `> 0` enables the autosave icon; `0` or unset hides it. the icon appears when the save starts and clears one second after it finishes |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | status-right icon shown while a save is in progress |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES` | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes; `0` or unset disables autosave |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` | `@tmux-popup-control-autosave-max` | maximum number of retained autosaves; manual saves are never pruned |
-| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | status-right icon shown while a save is in progress |
-| | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON_SECONDS` | `@tmux-popup-control-autosave-icon-seconds` | any value `> 0` enables the autosave icon; `0` or unset hides it. the icon appears when the save starts and clears one second after it finishes |
+| | `TMUX_POPUP_CONTROL_CLIENT` | | explicit client ID override |
+| | `TMUX_POPUP_CONTROL_COLOR_PROFILE` | | force colour profile (`ansi256`, etc.) |
+| | `TMUX_POPUP_CONTROL_PANE_FILTER` | `@tmux-popup-control-pane-filter` | tmux filter expression for pane list |
+| | `TMUX_POPUP_CONTROL_PANE_FORMAT` | `@tmux-popup-control-pane-format` | custom tmux format string for pane labels |
 | | `TMUX_POPUP_CONTROL_POPUP_BORDER_LINES` | `@tmux-popup-control-popup-border-lines` | border lines for the popup pane (`new-pane -B`, see `pane-border-lines`); unset uses tmux's default |
 | | `TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE` | `@tmux-popup-control-popup-border-style` | border style for the popup pane (`new-pane -S`/`-R`); unset uses `pane-border-style`/`pane-active-border-style` |
 | | `TMUX_POPUP_CONTROL_POPUP_STYLE` | `@tmux-popup-control-popup-style` | content style for the popup pane (`new-pane -s`); unset uses `window-style` |
+| | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` | `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save |
+| | `TMUX_POPUP_CONTROL_RESURRECT_FROM` | | snapshot name to restore from in CLI subcommand |
+| | `TMUX_POPUP_CONTROL_RESURRECT_NAME` | | snapshot name for save/restore CLI subcommands |
+| | `TMUX_POPUP_CONTROL_SESSION_FORMAT` | `@tmux-popup-control-session-format` | custom tmux format string for session labels |
+| | `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` | `@tmux-popup-control-session-storage-dir` | override save/restore storage directory; supports `$HOME` and other env vars |
+| | `TMUX_POPUP_CONTROL_SESSION` | | explicit session name override |
+| | `TMUX_POPUP_CONTROL_SWITCH_CURRENT` | `@tmux-popup-control-switch-current` | include current session/window/pane in switch menus |
+| | `TMUX_POPUP_CONTROL_TREE_STYLE` | `@tmux-popup-control-tree-style` | default style for trees |
+| | `TMUX_POPUP_CONTROL_WINDOW_FILTER` | `@tmux-popup-control-window-filter` | tmux filter expression for window list |
+| | `TMUX_POPUP_CONTROL_WINDOW_FORMAT` | `@tmux-popup-control-window-format` | custom tmux format string for window labels |
 
 ### Keybindings
 
