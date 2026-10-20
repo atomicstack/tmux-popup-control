@@ -7,20 +7,6 @@ import (
 	"github.com/atomicstack/tmux-popup-control/internal/menu"
 )
 
-func TestSessionSwitchItemsFiltersCurrent(t *testing.T) {
-	ctx := menu.Context{
-		IncludeCurrent: false,
-		Sessions: []menu.SessionEntry{
-			{Name: "one", Label: "one", Current: true},
-			{Name: "two", Label: "two"},
-		},
-	}
-	items := sessionSwitchItems(ctx)
-	if len(items) != 1 || items[0].ID != "two" {
-		t.Fatalf("expected only non-current session, got %#v", items)
-	}
-}
-
 // TestMenuHeaderRootLevel pins that the root menu draws no header: the app's
 // name is shown by tmux as the popup pane's title (new-pane -T) instead.
 func TestMenuHeaderRootLevel(t *testing.T) {
@@ -92,17 +78,6 @@ func TestInvalidRootMenuFallsBackToDefault(t *testing.T) {
 	}
 	if m.errMsg == "" {
 		t.Fatalf("expected error message for invalid root menu")
-	}
-}
-
-func TestCurrentWindowMenuItem(t *testing.T) {
-	ctx := menu.Context{CurrentWindowID: "s:1", CurrentWindowLabel: "s:1 main"}
-	item, ok := currentWindowMenuItem(ctx)
-	if !ok {
-		t.Fatalf("expected item")
-	}
-	if item.ID != "s:1" || item.Label[:9] != "[current]" {
-		t.Fatalf("unexpected item: %#v", item)
 	}
 }
 

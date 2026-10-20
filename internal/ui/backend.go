@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -48,23 +47,21 @@ func (m *Model) handleBackendDoneMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// levelUpdate pairs a menu level ID with the function that produces its items
-// from a menu.Context. Used to table-drive the find-update-sync cases in
-// applyBackendEvent; an ordered slice keeps side-effect determinism (cursor /
-// viewport sync order matters).
-type levelUpdate struct {
-	id      string
-	itemsFn func(menu.Context) []menu.Item
-}
-
-// applySimpleLevelUpdates runs the standard find-update-sync sequence for each
-// update whose level is currently present in the stack.
-func (m *Model) applySimpleLevelUpdates(ctx menu.Context, updates []levelUpdate) {
-	for _, u := range updates {
-		if lvl := m.findLevelByID(u.id); lvl != nil {
-			lvl.UpdateItems(u.itemsFn(ctx))
-			m.syncViewport(lvl)
+// refreshLiveLevels rebuilds every level in the stack that the menu package
+// declares as live for src, in table order. session:switch additionally clears
+// the info line once it has entries (before the viewport sync, since the info
+// line affects the visible height).
+func (m *Model) refreshLiveLevels(ctx menu.Context, src menu.LiveSource) {
+	for _, live := range menu.LiveLevels(src) {
+		lvl := m.findLevelByID(live.ID)
+		if lvl == nil {
+			continue
 		}
+		lvl.UpdateItems(live.Items(ctx))
+		if live.ID == "session:switch" && len(lvl.Items) > 0 {
+			m.clearInfo()
+		}
+		m.syncViewport(lvl)
 	}
 }
 
@@ -144,19 +141,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 	currentLvl := m.currentLevel()
 
 	if res.SessionsUpdated {
-		if lvl := m.findLevelByID("session:switch"); lvl != nil {
-			lvl.UpdateItems(sessionSwitchItems(ctx))
-			if len(lvl.Items) > 0 {
-				m.clearInfo()
-			}
-			m.syncViewport(lvl)
-		}
-		m.applySimpleLevelUpdates(ctx, []levelUpdate{
-			{"session:rename", func(c menu.Context) []menu.Item { return menu.SessionRenameItems(c.Sessions) }},
-			{"session:detach", func(c menu.Context) []menu.Item { return menu.SessionEntriesToItems(c.Sessions) }},
-			{"session:kill", func(c menu.Context) []menu.Item { return menu.SessionEntriesToItems(c.Sessions) }},
-			{"window:push-to-session", windowPushToSessionItems},
-		})
+		m.refreshLiveLevels(ctx, menu.LiveSessions)
 		m.rebuildPullTree()
 		if m.sessionForm != nil {
 			m.sessionForm.SetSessions(ctx.Sessions)
@@ -173,18 +158,8 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		if m.pendingWindowSwap != nil && !slices.ContainsFunc(ctx.Windows, func(entry menu.WindowEntry) bool { return entry.ID == m.pendingWindowSwap.ID }) {
 			m.pendingWindowSwap = nil
 		}
-		m.applySimpleLevelUpdates(ctx, []levelUpdate{
-			{"window:switch", menu.WindowSwitchItems},
-		})
+		m.refreshLiveLevels(ctx, menu.LiveWindows)
 		m.rebuildPullTree()
-		m.applySimpleLevelUpdates(ctx, []levelUpdate{
-			{"window:swap", windowSwapItems},
-		})
-		if lvl := m.findLevelByID("window:kill"); lvl != nil {
-			lvl.UpdateItems(windowSwapItems(ctx))
-			m.applyNodeSettings(lvl)
-			m.syncViewport(lvl)
-		}
 		if focusCmd := m.applyDeferredWindowRename(ctx); focusCmd != nil {
 			previewCmd = tea.Batch(previewCmd, focusCmd)
 		}
@@ -197,26 +172,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 		if m.pendingPaneSwap != nil && !slices.ContainsFunc(ctx.Panes, func(entry menu.PaneEntry) bool { return entry.ID == m.pendingPaneSwap.ID }) {
 			m.pendingPaneSwap = nil
 		}
-		m.applySimpleLevelUpdates(ctx, []levelUpdate{
-			{"pane:switch", paneSwitchItems},
-			{"pane:break", paneBreakItems},
-		})
-		if lvl := m.findLevelByID("pane:join"); lvl != nil {
-			lvl.UpdateItems(paneJoinItems(ctx))
-			m.applyNodeSettings(lvl)
-			m.syncViewport(lvl)
-		}
-		m.applySimpleLevelUpdates(ctx, []levelUpdate{
-			{"pane:swap", paneSwapItems},
-		})
-		if lvl := m.findLevelByID("pane:kill"); lvl != nil {
-			lvl.UpdateItems(paneKillItems(ctx))
-			m.applyNodeSettings(lvl)
-			m.syncViewport(lvl)
-		}
-		m.applySimpleLevelUpdates(ctx, []levelUpdate{
-			{"pane:rename", func(c menu.Context) []menu.Item { return menu.PaneEntriesToItems(c.Panes) }},
-		})
+		m.refreshLiveLevels(ctx, menu.LivePanes)
 		if m.paneForm != nil {
 			m.paneForm.SyncContext(ctx)
 		}
@@ -283,105 +239,4 @@ func (m *Model) hasBackendIssue() (bool, string) {
 		}
 	}
 	return false, ""
-}
-
-func sessionSwitchItems(ctx menu.Context) []menu.Item {
-	return menu.SessionSwitchMenuItems(ctx)
-}
-
-func windowPushToSessionItems(ctx menu.Context) []menu.Item {
-	items := make([]menu.Item, 0, len(ctx.Sessions))
-	for _, entry := range ctx.Sessions {
-		if entry.Name == ctx.CurrentWindowSession {
-			continue
-		}
-		items = append(items, menu.Item{ID: entry.Name, Label: entry.Label})
-	}
-	return items
-}
-
-func windowSwapItems(ctx menu.Context) []menu.Item {
-	items := menu.WindowEntriesToItems(ctx.Windows)
-	if currentItem, ok := currentWindowMenuItem(ctx); ok {
-		items = append([]menu.Item{currentItem}, items...)
-	}
-	return items
-}
-
-func currentWindowMenuItem(ctx menu.Context) (menu.Item, bool) {
-	id := strings.TrimSpace(ctx.CurrentWindowID)
-	if id == "" {
-		return menu.Item{}, false
-	}
-	label := strings.TrimSpace(ctx.CurrentWindowLabel)
-	if label == "" {
-		label = id
-	}
-	return menu.Item{ID: id, Label: fmt.Sprintf("[current] %s", label)}, true
-}
-
-func currentPaneMenuItem(ctx menu.Context) (menu.Item, bool) {
-	id := strings.TrimSpace(ctx.CurrentPaneID)
-	if id == "" {
-		return menu.Item{}, false
-	}
-	label := strings.TrimSpace(ctx.CurrentPaneLabel)
-	if label == "" {
-		label = id
-	}
-	return menu.Item{ID: id, Label: fmt.Sprintf("[current] %s", label)}, true
-}
-
-func paneItems(ctx menu.Context) []menu.Item {
-	items := make([]menu.Item, 0, len(ctx.Panes))
-	for _, entry := range ctx.Panes {
-		items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
-	}
-	return items
-}
-
-func paneSwitchItems(ctx menu.Context) []menu.Item {
-	items := make([]menu.Item, 0, len(ctx.Panes))
-	for _, entry := range ctx.Panes {
-		if entry.Current && !ctx.PaneIncludeCurrent {
-			continue
-		}
-		items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
-	}
-	return items
-}
-
-func paneBreakItems(ctx menu.Context) []menu.Item {
-	items := paneItems(ctx)
-	if current, ok := currentPaneMenuItem(ctx); ok {
-		items = append([]menu.Item{current}, items...)
-	}
-	return items
-}
-
-func paneJoinItems(ctx menu.Context) []menu.Item {
-	items := make([]menu.Item, 0, len(ctx.Panes))
-	for _, entry := range ctx.Panes {
-		if entry.Current {
-			continue
-		}
-		items = append(items, menu.Item{ID: entry.ID, Label: entry.Label})
-	}
-	return items
-}
-
-func paneSwapItems(ctx menu.Context) []menu.Item {
-	items := paneItems(ctx)
-	if current, ok := currentPaneMenuItem(ctx); ok {
-		items = append([]menu.Item{current}, items...)
-	}
-	return items
-}
-
-func paneKillItems(ctx menu.Context) []menu.Item {
-	items := paneItems(ctx)
-	if current, ok := currentPaneMenuItem(ctx); ok {
-		items = append([]menu.Item{current}, items...)
-	}
-	return items
 }
