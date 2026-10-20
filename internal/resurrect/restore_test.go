@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -1467,5 +1468,104 @@ func TestRestoreContinuesWhenLayoutApplyFails(t *testing.T) {
 	}
 	if !warned {
 		t.Fatalf("expected a non-fatal layout warning event, got %+v", events)
+	}
+}
+
+// TestRestoreContinuesWhenPaneReplayTimesOut covers the 2026-10-20 incident:
+// one pane's content replay outlived replayWaitTimeout and the whole restore
+// aborted, leaving later sessions uncreated and the current one half
+// finalized. Saved scrollback is cosmetic, so a replay that has not finished
+// must be reported and skipped, not fatal.
+func TestRestoreContinuesWhenPaneReplayTimesOut(t *testing.T) {
+	dir := t.TempDir()
+	restore := installNoopRestoreFns(t)
+	defer restore()
+
+	var created, selectedPanes, selectedWindows []string
+	r1 := withCreateSessionFn(func(spec tmux.SessionSpec) error {
+		created = append(created, spec.Name)
+		return nil
+	})
+	defer r1()
+	r2 := withSelectPaneFn(func(_, target string) error {
+		selectedPanes = append(selectedPanes, target)
+		return nil
+	})
+	defer r2()
+	r3 := withSelectWindowFn(func(_, target string) error {
+		selectedWindows = append(selectedWindows, target)
+		return nil
+	})
+	defer r3()
+	slow := paneReplayWaitChannel("dev", 0, 1)
+	var waited []string
+	r4 := withWaitForFn(func(_ context.Context, _, channel string) error {
+		waited = append(waited, channel)
+		if channel == slow {
+			return fmt.Errorf("wait-for %s: %w", channel, context.DeadlineExceeded)
+		}
+		return nil
+	})
+	defer r4()
+
+	sf := buildSaveFile(
+		Session{
+			Name: "dev",
+			Windows: []Window{
+				{Index: 0, Name: "main", Layout: "tiled", Active: true,
+					Panes: []Pane{
+						{Index: 0, WorkingDir: "/home", Active: true},
+						{Index: 1, WorkingDir: "/tmp"},
+					}},
+			},
+		},
+		Session{
+			Name: "ops",
+			Windows: []Window{
+				{Index: 0, Name: "shell", Layout: "tiled", Active: true,
+					Panes: []Pane{{Index: 0, WorkingDir: "/home", Active: true}}},
+			},
+		},
+	)
+	sf.HasPaneContents = true
+	path := writeSaveFile(t, dir, "slow-replay", sf)
+	if err := WritePaneArchive(paneArchivePath(path), map[string]string{
+		"dev:0.0": "pane 0",
+		"dev:0.1": "pane 1 (never finishes)",
+		"ops:0.0": "ops pane",
+	}); err != nil {
+		t.Fatalf("WritePaneArchive: %v", err)
+	}
+
+	// Drain until the channel closes: the final cleanup waits run after the
+	// Done event, and the channel closes only once they have.
+	var events []ProgressEvent
+	for ev := range Restore(t.Context(), Config{SaveDir: dir}, path) {
+		events = append(events, ev)
+	}
+
+	last := events[len(events)-1]
+	if !last.Done || last.Err != nil {
+		t.Fatalf("a slow pane replay must not fail the restore: done=%v err=%v", last.Done, last.Err)
+	}
+	var warned bool
+	for _, ev := range events {
+		if ev.Kind == "error" && strings.Contains(ev.Message, "dev:0.1") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("expected an error-kind event naming pane dev:0.1, got %+v", events)
+	}
+	if !slices.Equal(created, []string{"dev", "ops"}) {
+		t.Fatalf("every session must still be created, got %v", created)
+	}
+	if len(selectedPanes) != 2 || len(selectedWindows) != 2 {
+		t.Fatalf("both sessions must be finalized, got panes=%v windows=%v", selectedPanes, selectedWindows)
+	}
+	// The pane that timed out is waited for once more, bounded, during
+	// cleanup so its content file is not removed under a cat still reading.
+	if n := slices.Index(waited, slow); n == -1 || slices.Index(waited[n+1:], slow) == -1 {
+		t.Fatalf("expected the timed-out channel to get a final bounded wait, got %v", waited)
 	}
 }

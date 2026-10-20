@@ -29,6 +29,9 @@ func (m *Model) resurrectView() string {
 	// ── log area ────────────────────────────────────────────────────────────
 
 	logLines := buildResurrectLogLines(s.log, s.total)
+	if s.err != nil {
+		logLines = append(logLines, resurrectFailureLines(s.operation, s.err, innerWidth)...)
+	}
 
 	// show only the last logHeight lines
 	if len(logLines) > logHeight {
@@ -67,6 +70,20 @@ func buildResurrectLogLines(entries []logEntry, total int) []string {
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+// resurrectFailureLines renders the outcome of a save or restore that gave
+// up: what failed, wrapped to the log width, and how to leave the screen. A
+// failure that is not shown is indistinguishable from a hang.
+func resurrectFailureLines(operation string, err error, width int) []string {
+	message := fmt.Sprintf("%s failed: %v", operation, err)
+	style := lipgloss.NewStyle().Width(width)
+	if styles.Error != nil {
+		style = styles.Error.Width(width)
+	}
+	lines := strings.Split(style.Render(message), "\n")
+	hint := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true).Render("press any key to return")
+	return append(lines, hint)
 }
 
 // styledResurrectLine applies hierarchical blue colouring based on entry kind.

@@ -186,6 +186,14 @@ func assertGolden(t *testing.T, goldenName, output string) {
 // into the launcher script before the binary invocation (e.g. "export FOO=bar").
 func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, extraEnv []string) (pane, exitFile string) {
 	t.Helper()
+	return launchBinaryArgs(t, bin, socket, session, rootMenu, extraEnv, "-socket", socket, "-width", "80", "-height", "24")
+}
+
+// launchBinaryArgs is the general form of launchBinaryWithEnv: args is the
+// whole command line after the binary, so subcommands (restore-sessions,
+// save-sessions) can be driven on screen the same way as the menu.
+func launchBinaryArgs(t *testing.T, bin, socket, session, rootMenu string, extraEnv []string, args ...string) (pane, exitFile string) {
+	t.Helper()
 	scriptDir := t.TempDir()
 	exitFile = filepath.Join(scriptDir, "exit-code")
 	scriptPath := filepath.Join(scriptDir, "run.sh")
@@ -200,12 +208,11 @@ func launchBinaryWithEnv(t *testing.T, bin, socket, session, rootMenu string, ex
 	}
 	script := "#!/bin/sh\n" +
 		"POPUP_BIN=" + shquote.Quote(bin) + "\n" +
-		"POPUP_SOCKET=" + shquote.Quote(socket) + "\n" +
 		"POPUP_EXIT=" + shquote.Quote(exitFile) + "\n" +
 		"export TMUX_POPUP_CONTROL_COLOR_PROFILE=ansi256\n" +
 		rootLine +
 		extraLines.String() +
-		"\"$POPUP_BIN\" -socket \"$POPUP_SOCKET\" -width 80 -height 24 2>/dev/null\n" +
+		"\"$POPUP_BIN\" " + shquote.JoinCommand(args...) + " 2>/dev/null\n" +
 		"printf '%s' $? > \"$POPUP_EXIT\"\n" +
 		"sleep 300\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {

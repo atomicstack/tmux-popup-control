@@ -1,6 +1,7 @@
 package resurrect
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -901,5 +902,78 @@ func TestSaveRestoreSkipsPopupPaneIntegration(t *testing.T) {
 	}
 	if n := countFloatingPanes(t, socket2, "float:0"); n != 1 {
 		t.Fatalf("restored window has %d floating panes, want 1", n)
+	}
+}
+
+// TestRestoreSurvivesPaneReplayTimeoutIntegration restores real sessions
+// through real tmux with one pane's content replay reported as timed out, the
+// shape of the 2026-10-20 incident (a 10 MB scrollback on a server slowed by
+// -vv logging). The restore must finish every session and say which pane it
+// gave up waiting for.
+func TestRestoreSurvivesPaneReplayTimeoutIntegration(t *testing.T) {
+	testutil.RequireTmux(t)
+
+	socket1, cleanup1, logDir1 := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup1()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir1) })
+
+	if err := tmuxCmd(socket1, "rename-session", "-t", "tmux-popup-control-test", "alpha").Run(); err != nil {
+		t.Fatalf("rename to alpha: %v", err)
+	}
+	if err := tmuxCmd(socket1, "split-window", "-t", "alpha:0", "-d").Run(); err != nil {
+		t.Fatalf("split alpha:0: %v", err)
+	}
+	if err := tmuxCmd(socket1, "new-session", "-d", "-s", "beta", "-n", "main", "-x", "80", "-y", "24").Run(); err != nil {
+		t.Fatalf("create beta: %v", err)
+	}
+	waitSession(t, socket1, "beta")
+
+	saveDir := t.TempDir()
+	for ev := range Save(t.Context(), Config{SocketPath: socket1, SaveDir: saveDir, Name: "slow", CapturePaneContents: true}) {
+		if ev.Err != nil {
+			t.Fatalf("save error: %v", ev.Err)
+		}
+	}
+	entries, err := ListSaves(saveDir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no save file: err=%v entries=%d", err, len(entries))
+	}
+	tmux.Shutdown()
+
+	socket2, cleanup2, logDir2 := testutil.StartIsolatedTmuxServer(t)
+	defer cleanup2()
+	t.Cleanup(func() { testutil.AssertNoServerCrash(t, logDir2) })
+
+	// Every replay wait is real except alpha:0.1, which reports the timeout
+	// tmux.WaitFor returns when a pane's cat outlives replayWaitTimeout.
+	slow := paneReplayWaitChannel("alpha", 0, 1)
+	restoreWait := withWaitForFn(func(ctx context.Context, socketPath, channel string) error {
+		if channel == slow {
+			return fmt.Errorf("wait-for %s: %w", channel, context.DeadlineExceeded)
+		}
+		return tmux.WaitFor(ctx, socketPath, channel, replayWaitTimeout)
+	})
+	defer restoreWait()
+
+	var warned bool
+	for ev := range Restore(t.Context(), Config{SocketPath: socket2, SaveDir: saveDir}, entries[0].Path) {
+		t.Logf("restore: [%d/%d] %s %s", ev.Step, ev.Total, ev.Kind, ev.Message)
+		if ev.Err != nil {
+			t.Fatalf("restore must survive a slow pane replay, got: %v", ev.Err)
+		}
+		if ev.Kind == "error" && strings.Contains(ev.Message, "alpha:0.1") {
+			warned = true
+		}
+	}
+	tmux.Shutdown()
+	if !warned {
+		t.Fatalf("expected a warning naming pane alpha:0.1")
+	}
+	got := listSessionNames(t, socket2)
+	if !slices.Contains(got, "alpha") || !slices.Contains(got, "beta") {
+		t.Fatalf("restored sessions = %v, want alpha and beta", got)
+	}
+	if n := countPanes(t, socket2, "alpha:0"); n != 2 {
+		t.Fatalf("alpha:0 has %d panes, want 2", n)
 	}
 }

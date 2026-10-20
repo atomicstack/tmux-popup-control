@@ -287,3 +287,41 @@ func TestResurrectViewRestoreOperation(t *testing.T) {
 		t.Fatalf("expected empty bar background in restore view, got:\n%s", view)
 	}
 }
+
+// TestResurrectViewShowsFailure pins the one thing a failed restore must do:
+// say so. The final event Restore sends on failure carries only Err (no
+// message, zero step and total), and the view used to render nothing for it,
+// so a restore that gave up looked exactly like one that had hung.
+func TestResurrectViewShowsFailure(t *testing.T) {
+	m := NewModel(ModelConfig{Width: 120, Height: 24})
+	m.mode = ModeResurrect
+	m.resurrectState = &resurrectState{
+		operation: "restore",
+		progress:  make(chan resurrect.ProgressEvent, 1),
+		log: []logEntry{
+			{message: "splitting panes for session claude: claude:6.1", kind: "pane"},
+		},
+		step:        70,
+		total:       90,
+		displayStep: 70,
+	}
+
+	failure := errors.New("waiting for pane replay claude:5.0: context deadline exceeded")
+	mdl, _ := m.Update(resurrectProgressMsg{event: resurrect.ProgressEvent{Done: true, Err: failure}})
+	model := mdl.(*Model)
+	view := model.resurrectView()
+
+	if !strings.Contains(view, "restore failed: "+failure.Error()) {
+		t.Fatalf("expected the failure in the view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "press any key") {
+		t.Fatalf("expected a dismiss hint in the view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "splitting panes for session claude") {
+		t.Fatalf("expected the log to survive the failure, got:\n%s", view)
+	}
+	s := model.resurrectState
+	if s.step != 70 || s.total != 90 {
+		t.Fatalf("a failure event must not reset progress, got step=%d total=%d", s.step, s.total)
+	}
+}

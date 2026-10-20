@@ -241,8 +241,12 @@ func tmuxCommandPath() string {
 	return path
 }
 
+// replayChannelPrefix starts every pane-replay wait-for channel; the rest is
+// the pane's saved target (session:window.pane).
+const replayChannelPrefix = "tmux-popup-control-pane-restored-"
+
 func paneReplayWaitChannel(sessName string, winIdx, paneIdx int) string {
-	return fmt.Sprintf("tmux-popup-control-pane-restored-%s:%d.%d", sessName, winIdx, paneIdx)
+	return fmt.Sprintf("%s%s:%d.%d", replayChannelPrefix, sessName, winIdx, paneIdx)
 }
 
 // restoreRun carries the cross-cutting state shared by the per-session restore
@@ -256,6 +260,24 @@ type restoreRun struct {
 	total         int
 	step          int
 	lookupPaneCmd func(sessName string, winIdx, paneIdx int) string
+}
+
+// awaitPendingReplays gives every pane replay not yet confirmed finished one
+// bounded wait, sharing a single replayWaitTimeout. A replay still running
+// after that was already reported as a warning, so the outcome is not an
+// error: a second timeout must not turn a finished restore into a failure.
+// Only waits that were never attempted or never returned stay pending, so
+// calling this twice costs nothing the second time.
+func (r *restoreRun) awaitPendingReplays() {
+	if len(r.pendingReplay) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.ctx), replayWaitTimeout)
+	defer cancel()
+	for channel := range r.pendingReplay {
+		_ = restoreDeps.WaitFor(ctx, r.cfg.SocketPath, channel)
+		delete(r.pendingReplay, channel)
+	}
 }
 
 // emit sends a progress event, advancing through the run. It returns false when
@@ -302,15 +324,9 @@ func runRestore(ctx context.Context, cfg Config, file string, ch chan<- Progress
 		lookupPaneCmd: lookupPaneCmd,
 	}
 
-	defer func() {
-		// A later tmux operation may fail after earlier pane replays started.
-		// Finish those reads before removing their content or publishing Done.
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), replayWaitTimeout)
-		defer cancel()
-		for channel := range run.pendingReplay {
-			restoreErr = errors.Join(restoreErr, restoreDeps.WaitFor(cleanupCtx, cfg.SocketPath, channel))
-		}
-	}()
+	// A later tmux operation may fail after earlier pane replays started.
+	// Finish those reads before removing their content or publishing Done.
+	defer run.awaitPendingReplays()
 
 	if !run.emit(ProgressEvent{
 		Step:    0,
@@ -327,6 +343,11 @@ func runRestore(ctx context.Context, cfg Config, file string, ch chan<- Progress
 			return err
 		}
 	}
+
+	// A replay reported as still running during finalization gets one more
+	// bounded wait here, before the client switches to it and before its
+	// content file goes away.
+	run.awaitPendingReplays()
 
 	if err := run.switchClient(sf); err != nil {
 		return err
@@ -641,10 +662,33 @@ func (r *restoreRun) finalizeSession(sess Session, indexMap map[int]int, replayW
 	}
 
 	for _, channel := range replayWaitChannels {
-		if err := restoreDeps.WaitFor(r.ctx, r.cfg.SocketPath, channel); err != nil {
+		err := restoreDeps.WaitFor(r.ctx, r.cfg.SocketPath, channel)
+		if err == nil {
+			delete(r.pendingReplay, channel)
+			continue
+		}
+		if r.ctx.Err() != nil {
 			return fmt.Errorf("waiting for pane replay %s: %w", channel, err)
 		}
-		delete(r.pendingReplay, channel)
+		// Saved scrollback is cosmetic. A replay that has not finished (a
+		// server too slow to ingest a large pane within replayWaitTimeout,
+		// or a pane whose cat died before signalling) must not abandon this
+		// session's finalization or the sessions still to come. The channel
+		// stays pending so the final cleanup gives it one more bounded wait
+		// before the content files are removed.
+		pane := strings.TrimPrefix(channel, replayChannelPrefix)
+		message := fmt.Sprintf("could not wait for pane %s to replay its saved content (%v), continuing without it", pane, err)
+		if errors.Is(err, context.DeadlineExceeded) {
+			message = fmt.Sprintf("pane %s is still replaying its saved content after %s, continuing without it", pane, replayWaitTimeout)
+		}
+		if !r.emit(ProgressEvent{
+			Step:    r.step,
+			Message: message,
+			Kind:    "error",
+			ID:      sess.Name,
+		}) {
+			return r.ctx.Err()
+		}
 	}
 
 	for _, win := range sess.Windows {

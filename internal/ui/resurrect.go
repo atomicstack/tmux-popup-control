@@ -87,8 +87,12 @@ func (m *Model) handleResurrectProgressMsg(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	evt := progMsg.event
-	s.step = evt.Step
-	s.total = evt.Total
+	// The failure event Restore and Save send carries only Err; keeping the
+	// last step and total leaves the bar where the operation stopped.
+	if !(evt.Done && evt.Err != nil) {
+		s.step = evt.Step
+		s.total = evt.Total
+	}
 	if evt.Message != "" {
 		s.log = append(s.log, logEntry{
 			message: evt.Message,
