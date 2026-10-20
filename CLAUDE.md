@@ -34,6 +34,7 @@ The repository uses a Makefile that keeps Go build artifacts inside the workspac
 
 ```sh
 make build           # builds ./tmux-popup-control
+make build TAGS=sqlitedebug  # TAGS threads go build tags into build/run/test/cover; sqlitedebug compiles in --debug-to-sqlite (modernc.org/sqlite), never in release builds
 make run             # runs the application
 make test            # runs all tests (isolated from the user's tmux server, -p 4)
 make test-trace      # same, with gotmuxcc command tracing → ./gotmuxcc_trace.log (~4x slower)

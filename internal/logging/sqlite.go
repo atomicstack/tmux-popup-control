@@ -1,3 +1,5 @@
+//go:build sqlitedebug
+
 package logging
 
 import (
@@ -19,53 +21,6 @@ const (
 	sqliteQueueSize     = 2048
 )
 
-// SQLiteRunInfo captures per-process metadata stored in the runs table.
-type SQLiteRunInfo struct {
-	Version        string
-	ExecutablePath string
-	CWD            string
-	Args           []string
-	Flags          map[string]string
-	SocketPath     string
-	RootMenu       string
-	MenuArgs       string
-	ClientID       string
-	SessionName    string
-}
-
-// RunResult records how the process finished.
-type RunResult struct {
-	ExitCode   int
-	ExitStatus string
-	Error      error
-}
-
-type eventRecord struct {
-	RunID     int64
-	Seq       int64
-	Time      time.Time
-	Level     string
-	Component string
-	EventName string
-	Message   string
-	Attrs     map[string]any
-}
-
-type spanRecord struct {
-	RunID         int64
-	Seq           int64
-	ParentSpanSeq int64
-	StartedAt     time.Time
-	EndedAt       time.Time
-	Duration      time.Duration
-	Component     string
-	Operation     string
-	Outcome       string
-	Target        string
-	Attrs         map[string]any
-	ErrorText     string
-}
-
 type closeRequest struct {
 	Result RunResult
 	Done   chan struct{}
@@ -81,11 +36,6 @@ type sqliteSink struct {
 
 	closeOnce sync.Once
 	writerWG  sync.WaitGroup
-}
-
-// ResolveSQLiteDebugPath places the debug database next to the binary.
-func ResolveSQLiteDebugPath(executablePath string) string {
-	return filepath.Join(filepath.Dir(executablePath), filepath.Base(executablePath)+".debug.sqlite3")
 }
 
 func openSQLiteSink(info SQLiteRunInfo) (*sqliteSink, error) {

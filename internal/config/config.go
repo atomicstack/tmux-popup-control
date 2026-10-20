@@ -75,7 +75,7 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	height := fs.Int("height", envOrInt(env, envHeight, 0), "desired viewport height in rows (0 uses terminal height)")
 	footer := fs.Bool("footer", envOrBool(env, envShowFooter, false), "enable footer hint row (disabled by default)")
 	trace := fs.Bool("trace", envOrBool(env, envTrace, false), "enable verbose JSON trace logging")
-	debugToSQLite := fs.Bool("debug-to-sqlite", false, "write structured debug events and spans to a sqlite database next to the binary")
+	debugToSQLite := fs.Bool("debug-to-sqlite", false, "write structured debug events and spans to a sqlite database next to the binary (requires a build with -tags sqlitedebug)")
 	verbose := fs.Bool("verbose", envOrBool(env, envVerbose, false), "print success messages for actions")
 	noPreview := fs.Bool("no-preview", envOrBool(env, envNoPreview, false), "disable the preview panel")
 	treeStyle := fs.String("tree-style", envOrDefault(env, envTreeStyle, ""), "session tree connector style: classic, arrow, box, compact, rounded")

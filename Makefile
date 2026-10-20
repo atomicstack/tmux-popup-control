@@ -6,6 +6,12 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # Path to a markdown file with release notes; falls back to gh's generated notes.
 RELEASE_NOTES ?=
 LDFLAGS := -ldflags="-X main.Version=$(VERSION)"
+# Optional go build tags for build/run/test/test-trace/cover, e.g.
+# `make build TAGS=sqlitedebug` to compile in the --debug-to-sqlite sink
+# (modernc.org/sqlite). `make release` deliberately ignores TAGS so release
+# binaries never carry debug-only dependencies.
+TAGS ?=
+GO_TAGS := $(if $(TAGS),-tags '$(TAGS)')
 # Base env for offline builds. GOTMUXCC_TRACE is intentionally NOT set here:
 # enabling it makes every gotmuxcc call write a trace line to disk and slows
 # integration tests by ~4x (6s → 24s for `make test`). Use `make test-trace`
@@ -36,10 +42,10 @@ ensure-dirs:
 	mkdir -p $(GOCACHE) $(GOMODCACHE)
 
 build: ensure-dirs
-	$(GO_ENV) go build $(LDFLAGS) -o $(BINARY) .
+	$(GO_ENV) go build $(GO_TAGS) $(LDFLAGS) -o $(BINARY) .
 
 run: ensure-dirs
-	$(GO_ENV) go run .
+	$(GO_ENV) go run $(GO_TAGS) .
 
 fmt:
 	$(GO_ENV) gofmt -w .
@@ -58,13 +64,13 @@ test: ensure-dirs
 	# concurrently with each other but the rest of the suite fills
 	# remaining slots one-at-a-time, keeping per-test contention low.
 	# Cold cache: ~7s. Warm cache (no source changes): <1s.
-	$(call ISOLATED_TEST,$(GO_ENV) go test -p 4 ./...)
+	$(call ISOLATED_TEST,$(GO_ENV) go test $(GO_TAGS) -p 4 ./...)
 
 test-trace: ensure-dirs
 	# Same as `make test` but with gotmuxcc command tracing enabled.
 	# Trace lines land in $(CURDIR)/gotmuxcc_trace.log. Roughly 4x
 	# slower than `make test`; use only when you need the trace.
-	$(call ISOLATED_TEST,$(GO_ENV_TRACED) go test -p 4 ./...)
+	$(call ISOLATED_TEST,$(GO_ENV_TRACED) go test $(GO_TAGS) -p 4 ./...)
 
 GO_ENV_ONLINE := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE) GOFLAGS=-modcacherw GOPROXY=direct
 
@@ -83,7 +89,7 @@ clean-cache:
 
 cover:
 	@echo "==> Generating coverage report"
-	$(call ISOLATED_TEST,$(GO) test ./... -coverprofile=coverage.out)
+	$(call ISOLATED_TEST,$(GO) test $(GO_TAGS) ./... -coverprofile=coverage.out)
 	@echo "Coverage summary:"
 	$(GO) tool cover -func=coverage.out
 

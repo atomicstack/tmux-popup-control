@@ -333,7 +333,7 @@ make release VERSION=0.7.0 # release a specific version tag
 | `--tree-style` | `TMUX_POPUP_CONTROL_TREE_STYLE` | `@tmux-popup-control-tree-style` | session tree connector style: `classic` (default), `arrow`, `box`, `compact`, `rounded`; `ctrl+t` cycles them in the tree |
 | `--log-file` | `TMUX_POPUP_CONTROL_LOG_FILE` | | log file path |
 | `--trace` | `TMUX_POPUP_CONTROL_TRACE` | | enable verbose JSON trace logging |
-| `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable |
+| `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable; debug-only, compiled in only with `make build TAGS=sqlitedebug` (release binaries exit with an error if it is set) |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | icon `@tmux-popup-control-autosave-saving` holds while a save is in progress (default `💾`) |
 | | | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes, read live by tmux; `0` or unset disables autosave |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` | `@tmux-popup-control-autosave-max` | maximum number of retained autosaves; manual saves are never pruned |
@@ -450,7 +450,7 @@ internal/ui/state/        per-level items, cursor, filter, selection, viewport
 internal/format/table/    columnar table formatting with alignment
 internal/plugin/          plugin management (discover, install, update, uninstall, source)
 internal/theme/           lipgloss styles
-internal/logging/         structured JSON log file, trace events, and SQLite debug sink
+internal/logging/         structured JSON log file, trace events, and SQLite debug sink (`sqlitedebug` build tag)
 internal/testutil/        integration test helpers
 ```
 
