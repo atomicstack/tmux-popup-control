@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -101,30 +102,42 @@ func BreakPane(socketPath, source, destination string) error {
 	return client.BreakPane(source, destination)
 }
 
-// SelectLayout applies a layout to the current window via control-mode.
-// No explicit window target is used; tmux applies the layout to whatever
-// window is currently active for the control-mode session.
+// errNoHostPane is returned by operations on the popup's host window when the
+// launcher did not record a host pane to target.
+var errNoHostPane = errors.New("no host pane to target (TMUX_POPUP_CONTROL_PANE_ID is unset)")
+
+// SelectLayout applies a layout to the window the popup was opened over. It
+// targets the host pane: an untargeted select-layout over the control
+// connection acts on the control client's own session instead.
 func SelectLayout(socketPath, layout string) error {
 	if strings.TrimSpace(layout) == "" {
 		return fmt.Errorf("layout required")
 	}
+	host := hostPaneID()
+	if host == "" {
+		return errNoHostPane
+	}
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return err
 	}
-
-	_, err = client.Command("select-layout", layout)
+	_, err = client.Command("select-layout", "-t", host, layout)
 	return err
 }
 
-// ZoomWindow zooms the active pane of the current window via control-mode
-// (`resize-pane -Z`). Used to restore a zoom that select-layout undid.
+// ZoomWindow zooms the host pane (`resize-pane -Z`), restoring a zoom that
+// select-layout undid. The host pane was the visible, zoomed pane when the
+// popup opened.
 func ZoomWindow(socketPath string) error {
+	host := hostPaneID()
+	if host == "" {
+		return errNoHostPane
+	}
 	client, err := newTmux(socketPath)
 	if err != nil {
 		return err
 	}
-	_, err = client.Command("resize-pane", "-Z")
+	_, err = client.Command("resize-pane", "-Z", "-t", host)
 	return err
 }
 

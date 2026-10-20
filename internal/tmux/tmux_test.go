@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -919,15 +920,59 @@ func TestSelectLayoutValidation(t *testing.T) {
 	if err := SelectLayout("", "  "); err == nil {
 		t.Fatalf("expected error")
 	}
+}
+
+// select-layout without -t would act on the control client's own session's
+// window (the alphabetically first session), not the window the popup was
+// opened over, so it must target the host pane.
+func TestSelectLayoutTargetsHostPane(t *testing.T) {
 	fake := &fakeClient{}
 	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", "%4")
+
 	if err := SelectLayout("", "even-horizontal"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(fake.commandCalls) != 1 ||
-		len(fake.commandCalls[0]) < 1 ||
-		fake.commandCalls[0][0] != "select-layout" {
-		t.Fatalf("unexpected command calls %#v", fake.commandCalls)
+	want := [][]string{{"select-layout", "-t", "%4", "even-horizontal"}}
+	if !reflect.DeepEqual(fake.commandCalls, want) {
+		t.Fatalf("got %v, want %v", fake.commandCalls, want)
+	}
+}
+
+func TestSelectLayoutRefusesWithoutHostPane(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", "")
+
+	if err := SelectLayout("", "tiled"); err == nil {
+		t.Fatal("expected an error rather than an untargeted select-layout")
+	}
+	if len(fake.commandCalls) != 0 {
+		t.Fatalf("no command should be sent, got %v", fake.commandCalls)
+	}
+}
+
+func TestZoomWindowTargetsHostPane(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", "%4")
+
+	if err := ZoomWindow(""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := [][]string{{"resize-pane", "-Z", "-t", "%4"}}
+	if !reflect.DeepEqual(fake.commandCalls, want) {
+		t.Fatalf("got %v, want %v", fake.commandCalls, want)
+	}
+}
+
+func TestZoomWindowRefusesWithoutHostPane(t *testing.T) {
+	fake := &fakeClient{}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	t.Setenv("TMUX_POPUP_CONTROL_PANE_ID", "")
+
+	if err := ZoomWindow(""); err == nil || len(fake.commandCalls) != 0 {
+		t.Fatalf("expected an error and no command, got err=%v calls=%v", err, fake.commandCalls)
 	}
 }
 
