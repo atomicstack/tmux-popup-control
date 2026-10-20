@@ -21,6 +21,7 @@ func resetCaches() {
 	optionCacheGeneration++
 	optionCache = map[string]string{}
 	optionCacheMu.Unlock()
+	resetPluginOptionCache()
 	resetThemeColourCache()
 }
 

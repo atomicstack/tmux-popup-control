@@ -1,7 +1,5 @@
 package tmux
 
-import "context"
-
 // PopupStyle holds the optional styling applied to the floating pane the
 // plugin opens as its popup. Empty fields are left to tmux's own defaults, so
 // the plugin never imposes a look of its own.
@@ -11,14 +9,14 @@ type PopupStyle struct {
 	Style       string // new-pane -s
 }
 
-// ResolvePopupStyle reads the popup styling from the TMUX_POPUP_CONTROL_POPUP_*
-// env vars, falling back to the matching @tmux-popup-control-popup-* options.
+// ResolvePopupStyle reads the popup styling from the
+// @tmux-popup-control-popup-* options, the same ones the key-binding launcher
+// in main.tmux expands.
 func ResolvePopupStyle(socketPath string) PopupStyle {
-	ctx := context.Background()
 	return PopupStyle{
-		BorderLines: envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_POPUP_BORDER_LINES", "@tmux-popup-control-popup-border-lines"),
-		BorderStyle: envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE", "@tmux-popup-control-popup-border-style"),
-		Style:       envOrOption(ctx, socketPath, "TMUX_POPUP_CONTROL_POPUP_STYLE", "@tmux-popup-control-popup-style"),
+		BorderLines: ShowOption(socketPath, "@tmux-popup-control-popup-border-lines"),
+		BorderStyle: ShowOption(socketPath, "@tmux-popup-control-popup-border-style"),
+		Style:       ShowOption(socketPath, "@tmux-popup-control-popup-style"),
 	}
 }
 

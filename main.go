@@ -62,6 +62,7 @@ var (
 	appRunFn                 = app.Run
 	logErrorFn               = logging.Error
 	shutdownTmuxFn           = tmux.Shutdown
+	pluginOptionsFn          = tmux.PluginOptions
 )
 
 type commandHandler struct {
@@ -135,6 +136,14 @@ func runWithDeps(deps MainDeps) (exitCode int) {
 			return 1
 		}
 		return 0
+	}
+
+	// Settings that also exist as @tmux-popup-control-* options come from one
+	// bulk read over the control connection the app is about to use anyway.
+	if deps.ResolveSocketPath != nil {
+		if socket, err := deps.ResolveSocketPath(runtimeCfg.App.SocketPath); err == nil {
+			runtimeCfg = runtimeCfg.ApplyPluginOptions(pluginOptionsFn(socket))
+		}
 	}
 
 	if err := appRunFn(runtimeCfg.App); err != nil {

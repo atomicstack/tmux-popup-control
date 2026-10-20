@@ -185,6 +185,7 @@ type fakeClient struct {
 	commandCalls  [][]string
 	commandOutput string
 	commandErr    error
+	commandFn     func(parts ...string) (string, error)
 
 	// NewSession tracking.
 	newSessionOptsCalls []*gotmux.SessionOptions
@@ -419,6 +420,9 @@ func (f *fakeClient) Command(parts ...string) (string, error) {
 	cp := make([]string, len(parts))
 	copy(cp, parts)
 	f.commandCalls = append(f.commandCalls, cp)
+	if f.commandFn != nil {
+		return f.commandFn(cp...)
+	}
 	return f.commandOutput, f.commandErr
 }
 
@@ -1540,42 +1544,6 @@ func TestShutdownClosesClient(t *testing.T) {
 	}
 	if cachedSocket != "" {
 		t.Fatalf("expected cachedSocket to be empty after Shutdown")
-	}
-}
-
-func TestEnvOrOptionPrefersEnvVar(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return stubCommander{output: []byte("from-tmux\n")}
-	})
-	t.Setenv("TEST_ENV_OR_OPT", "from-env")
-	result := envOrOption(context.Background(), "", "TEST_ENV_OR_OPT", "@test-option")
-	if result != "from-env" {
-		t.Fatalf("expected env value, got %q", result)
-	}
-}
-
-func TestEnvOrOptionFallsBackToTmuxOption(t *testing.T) {
-	withStubCommander(t, func(name string, args ...string) commander {
-		if strings.Contains(strings.Join(args, " "), "@test-option") {
-			return stubCommander{output: []byte("from-tmux\n")}
-		}
-		return stubCommander{output: nil}
-	})
-	t.Setenv("TEST_ENV_OR_OPT", "")
-	result := envOrOption(context.Background(), "", "TEST_ENV_OR_OPT", "@test-option")
-	if result != "from-tmux" {
-		t.Fatalf("expected tmux option value, got %q", result)
-	}
-}
-
-func TestEnvOrOptionReturnsEmptyWhenBothUnset(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return stubCommander{output: nil}
-	})
-	t.Setenv("TEST_ENV_OR_OPT", "")
-	result := envOrOption(context.Background(), "", "TEST_ENV_OR_OPT", "@nonexistent")
-	if result != "" {
-		t.Fatalf("expected empty, got %q", result)
 	}
 }
 

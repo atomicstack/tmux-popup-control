@@ -1,28 +1,27 @@
 package tmux
 
-import (
-	"sync/atomic"
-	"testing"
-)
+import "testing"
 
 func TestCacheResetRejectsInFlightStaleResult(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
-	var calls atomic.Int32
-	withStubCommander(t, func(string, ...string) commander {
-		if calls.Add(1) == 1 {
+	calls := 0
+	fake := &fakeClient{globalOptionFn: func(string) (string, error) {
+		calls++
+		if calls == 1 {
 			close(entered)
 			<-release
-			return stubCommander{output: []byte("before")}
+			return "before", nil
 		}
-		return stubCommander{output: []byte("after")}
-	})
+		return "after", nil
+	}}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
 	done := make(chan string, 1)
-	go func() { done <- ShowOption("socket", "@test") }()
+	go func() { done <- ShowOption("socket", "status-left") }()
 	<-entered
 	resetCaches()
 	close(release)
 	<-done
-	if got := ShowOption("socket", "@test"); got != "after" {
+	if got := ShowOption("socket", "status-left"); got != "after" {
 		t.Fatalf("in-flight read repopulated stale cache: %q", got)
 	}
 }

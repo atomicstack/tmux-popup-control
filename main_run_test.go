@@ -25,6 +25,7 @@ func stubRunDeps(t *testing.T) *logging.RunResult {
 	oldAppRun := appRunFn
 	oldLogError := logErrorFn
 	oldShutdown := shutdownTmuxFn
+	oldPluginOptions := pluginOptionsFn
 
 	var closed logging.RunResult
 	ensureZeroExitOnHangupFn = func() {}
@@ -36,6 +37,7 @@ func stubRunDeps(t *testing.T) *logging.RunResult {
 	appRunFn = func(app.Config) error { return nil }
 	logErrorFn = func(error) {}
 	shutdownTmuxFn = func() {}
+	pluginOptionsFn = func(string) map[string]string { return nil }
 
 	t.Cleanup(func() {
 		ensureZeroExitOnHangupFn = oldEnsure
@@ -49,6 +51,7 @@ func stubRunDeps(t *testing.T) *logging.RunResult {
 		appRunFn = oldAppRun
 		logErrorFn = oldLogError
 		shutdownTmuxFn = oldShutdown
+		pluginOptionsFn = oldPluginOptions
 	})
 
 	return &closed
@@ -204,5 +207,26 @@ func TestRunWithDepsReturnsAppError(t *testing.T) {
 	}
 	if closed.ExitStatus != "error" || !errors.Is(closed.Error, wantErr) {
 		t.Fatalf("unexpected close result: %+v", *closed)
+	}
+}
+
+func TestRunWithDepsAppliesPluginOptionsBeforeRunningApp(t *testing.T) {
+	stubRunDeps(t)
+	loadConfigFn = func() (config.Config, error) { return config.LoadArgs([]string{"-socket", "sock"}, nil) }
+	validateConfigFn = func(config.Config) error { return nil }
+	var gotSocket string
+	pluginOptionsFn = func(socket string) map[string]string {
+		gotSocket = socket
+		return map[string]string{"@tmux-popup-control-footer": "on"}
+	}
+	var got app.Config
+	appRunFn = func(cfg app.Config) error { got = cfg; return nil }
+
+	deps := MainDeps{ResolveSocketPath: func(s string) (string, error) { return "/resolved/" + s, nil }}
+	if code := runWithDeps(deps); code != 0 {
+		t.Fatalf("runWithDeps() = %d", code)
+	}
+	if gotSocket != "/resolved/sock" || !got.ShowFooter {
+		t.Fatalf("plugin options not applied: socket=%q footer=%v", gotSocket, got.ShowFooter)
 	}
 }

@@ -295,46 +295,6 @@ func SetSessionOption(socketPath, session, option, value string) error {
 	return err
 }
 
-// ShowOption queries a tmux server-level (global) option value. Returns an
-// empty string if the option is not set or an error occurs. Results are
-// memoized per (socket, option) until a user command or shutdown invalidates
-// the cache — see cache.go.
-//
-// This reads via a one-shot `tmux show-options -gqv`, not the control-mode
-// connection. ShowOption feeds the autosave-status path (which tmux runs
-// roughly once per second) and the restore path; a control-mode attach in
-// either forces a full server state-sync and saturates the single-threaded
-// server during a large restore. The per-process memoization below keeps the
-// exec cost to one invocation per (socket, option) between invalidations.
-func ShowOption(socketPath, option string) string {
-	return ShowOptionContext(context.Background(), socketPath, option)
-}
-
-// ShowOptionContext is the cancellable counterpart of ShowOption.
-func ShowOptionContext(ctx context.Context, socketPath, option string) string {
-	key := optionCacheKey(socketPath, option)
-	optionCacheMu.RLock()
-	if v, ok := optionCache[key]; ok {
-		optionCacheMu.RUnlock()
-		return v
-	}
-	generation := optionCacheGeneration
-	optionCacheMu.RUnlock()
-
-	args := append(baseArgs(socketPath), "show-options", "-gqv", option)
-	output, err := runExecCommandContext(ctx, "tmux", args...).Output()
-	if err != nil {
-		return ""
-	}
-	trimmed := strings.TrimSpace(string(output))
-	optionCacheMu.Lock()
-	if generation == optionCacheGeneration {
-		optionCache[key] = trimmed
-	}
-	optionCacheMu.Unlock()
-	return trimmed
-}
-
 // DefaultCommand returns the tmux default-command setting. If unset or empty
 // it falls back to the SHELL environment variable, then /bin/sh.
 func DefaultCommand(socketPath string) string {

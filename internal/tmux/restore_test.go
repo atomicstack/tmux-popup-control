@@ -3,7 +3,6 @@ package tmux
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
 	gotmux "github.com/atomicstack/gotmuxcc/gotmuxcc"
@@ -300,86 +299,10 @@ func TestCapturePaneContentsClientError(t *testing.T) {
 	}
 }
 
-// --- ShowOption ---
-
-func TestShowOptionSuccess(t *testing.T) {
-	// ShowOption resolves via one-shot `tmux show-options -gqv`, not control
-	// mode: it feeds the autosave-status path (~once/sec) and the restore path,
-	// where a control-mode attach forces a full state-sync. newTmux is stubbed
-	// to fail so any control-mode use would surface.
-	withStubTmux(t, func(string) (tmuxClient, error) {
-		return nil, errors.New("control-mode must not be used")
-	})
-	var gotArgs []string
-	withStubCommander(t, func(name string, args ...string) commander {
-		gotArgs = append([]string{name}, args...)
-		return stubCommander{output: []byte("  myvalue  \n")}
-	})
-
-	got := ShowOption("", "@my-option")
-	if got != "myvalue" {
-		t.Errorf("expected %q, got %q", "myvalue", got)
-	}
-	joined := strings.Join(gotArgs, " ")
-	if !strings.Contains(joined, "show-options") || !strings.Contains(joined, "@my-option") {
-		t.Errorf("unexpected exec invocation: %q", joined)
-	}
-}
-
-func TestShowOptionError(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return stubCommander{err: errors.New("option error")}
-	})
-
-	got := ShowOption("", "@missing")
-	if got != "" {
-		t.Errorf("expected empty, got %q", got)
-	}
-}
-
-// TestShowOptionCachesResult verifies repeated lookups for the same
-// (socket, option) pair only hit tmux once. Backend pollers query the
-// same options on every cycle; without this cache each cycle issues
-// redundant `show-options` commands that serialize through gotmuxcc and
-// dominate startup latency under load.
-func TestShowOptionCachesResult(t *testing.T) {
-	calls := 0
-	withStubCommander(t, func(string, ...string) commander {
-		calls++
-		return stubCommander{output: []byte("value\n")}
-	})
-
-	for i := range 5 {
-		if got := ShowOption("/tmp/socket", "@cached-option"); got != "value" {
-			t.Fatalf("call %d: got %q, want %q", i, got, "value")
-		}
-	}
-	if calls != 1 {
-		t.Errorf("expected 1 tmux call, got %d", calls)
-	}
-
-	// Different option key → new tmux call.
-	_ = ShowOption("/tmp/socket", "@other-option")
-	if calls != 2 {
-		t.Errorf("expected 2 tmux calls after new key, got %d", calls)
-	}
-
-	// Different socket path → new tmux call.
-	_ = ShowOption("/tmp/different-socket", "@cached-option")
-	if calls != 3 {
-		t.Errorf("expected 3 tmux calls after new socket, got %d", calls)
-	}
-}
-
 // --- DefaultCommand ---
 
 func TestDefaultCommandFromTmux(t *testing.T) {
-	withStubCommander(t, func(name string, args ...string) commander {
-		if strings.Contains(strings.Join(args, " "), "default-command") {
-			return stubCommander{output: []byte("/usr/local/bin/fish\n")}
-		}
-		return stubCommander{output: nil}
-	})
+	withGlobalOptions(t, map[string]string{"default-command": "/usr/local/bin/fish\n"})
 
 	got := DefaultCommand("")
 	if got != "/usr/local/bin/fish" {
@@ -388,16 +311,7 @@ func TestDefaultCommandFromTmux(t *testing.T) {
 }
 
 func TestDefaultCommandFallsBackToDefaultShell(t *testing.T) {
-	withStubCommander(t, func(name string, args ...string) commander {
-		joined := strings.Join(args, " ")
-		if strings.Contains(joined, "default-command") {
-			return stubCommander{output: nil}
-		}
-		if strings.Contains(joined, "default-shell") {
-			return stubCommander{output: []byte("/usr/bin/zsh\n")}
-		}
-		return stubCommander{output: nil}
-	})
+	withGlobalOptions(t, map[string]string{"default-shell": "/usr/bin/zsh\n"})
 
 	// default-shell (a tmux option the user configured) must win over the
 	// process environment's $SHELL, mirroring tmux's own resolution order.
@@ -409,9 +323,7 @@ func TestDefaultCommandFallsBackToDefaultShell(t *testing.T) {
 }
 
 func TestDefaultCommandFallsBackToShell(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return stubCommander{output: nil}
-	})
+	withGlobalOptions(t, nil)
 
 	t.Setenv("SHELL", "/bin/zsh")
 	got := DefaultCommand("")
@@ -421,9 +333,7 @@ func TestDefaultCommandFallsBackToShell(t *testing.T) {
 }
 
 func TestDefaultCommandFallsBackToBinSh(t *testing.T) {
-	withStubCommander(t, func(string, ...string) commander {
-		return stubCommander{output: nil}
-	})
+	withGlobalOptions(t, nil)
 
 	t.Setenv("SHELL", "")
 	got := DefaultCommand("")

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -23,6 +24,10 @@ type Config struct {
 	Flags    map[string]string
 	Args     []string
 	Command  []string
+
+	// explicit records the settings a flag or env var set, which
+	// ApplyPluginOptions must leave alone.
+	explicit map[string]bool
 }
 
 type Logging struct {
@@ -82,6 +87,13 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
+	explicit := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
+	for name, key := range map[string]string{"footer": envShowFooter, "tree-style": envTreeStyle, "no-preview": envNoPreview} {
+		if strings.TrimSpace(env[key]) != "" {
+			explicit[name] = true
+		}
+	}
 
 	if *showVersion {
 		return Config{}, ErrVersionRequested
@@ -131,11 +143,46 @@ func LoadArgs(args []string, environ []string) (Config, error) {
 			"menuArgs":      strings.TrimSpace(*menuArgs),
 			"treeStyle":     strings.TrimSpace(*treeStyle),
 		},
-		Args:    slices.Clone(args),
-		Command: slices.Clone(fs.Args()),
+		Args:     slices.Clone(args),
+		Command:  slices.Clone(fs.Args()),
+		explicit: explicit,
 	}
 
 	return cfg, nil
+}
+
+// ApplyPluginOptions fills the settings that also exist as tmux options
+// (@tmux-popup-control-footer, -tree-style, -no-preview) from opts, unless a
+// flag or env var already set them.
+func (cfg Config) ApplyPluginOptions(opts map[string]string) Config {
+	cfg.Flags = maps.Clone(cfg.Flags)
+	if cfg.Flags == nil {
+		cfg.Flags = map[string]string{}
+	}
+	if v, ok := parseTmuxBool(opts["@tmux-popup-control-footer"]); ok && !cfg.explicit["footer"] {
+		cfg.App.ShowFooter = v
+		cfg.Flags["footer"] = strconv.FormatBool(v)
+	}
+	if v, ok := parseTmuxBool(opts["@tmux-popup-control-no-preview"]); ok && !cfg.explicit["no-preview"] {
+		cfg.App.NoPreview = v
+	}
+	if v := strings.TrimSpace(opts["@tmux-popup-control-tree-style"]); v != "" && !cfg.explicit["tree-style"] {
+		cfg.App.TreeStyle = v
+		cfg.Flags["treeStyle"] = v
+	}
+	return cfg
+}
+
+// parseTmuxBool accepts tmux flag spellings (on/off) as well as Go's.
+func parseTmuxBool(v string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "on", "yes":
+		return true, true
+	case "off", "no":
+		return false, true
+	}
+	b, err := strconv.ParseBool(strings.TrimSpace(v))
+	return b, err == nil
 }
 
 func parseEnv(environ []string) map[string]string {

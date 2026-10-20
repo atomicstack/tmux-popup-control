@@ -2,7 +2,6 @@ package tmux
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -36,22 +35,15 @@ func TestPopupStyleArgsOmitsUnsetFields(t *testing.T) {
 	}
 }
 
-func TestResolvePopupStyleReadsOptionsAndPrefersEnv(t *testing.T) {
-	withStubCommander(t, func(name string, args ...string) commander {
-		joined := strings.Join(args, " ")
-		switch {
-		case strings.HasSuffix(joined, "@tmux-popup-control-popup-border-lines"):
-			return stubCommander{output: []byte("heavy\n")}
-		case strings.HasSuffix(joined, "@tmux-popup-control-popup-border-style"):
-			return stubCommander{output: []byte("fg=red\n")}
-		}
-		return stubCommander{output: nil}
-	})
+func TestResolvePopupStyleReadsPluginOptions(t *testing.T) {
+	fake := &fakeClient{commandOutput: "@tmux-popup-control-popup-border-lines=heavy\n" +
+		"@tmux-popup-control-popup-border-style=fg=red,bold\n"}
+	withStubTmux(t, func(string) (tmuxClient, error) { return fake, nil })
+	// the popup style is tmux-side configuration: the run-shell -C launcher
+	// can only see tmux options, so env vars must not change it here either.
 	t.Setenv("TMUX_POPUP_CONTROL_POPUP_BORDER_LINES", "rounded")
-	t.Setenv("TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE", "")
-	t.Setenv("TMUX_POPUP_CONTROL_POPUP_STYLE", "")
 
-	want := PopupStyle{BorderLines: "rounded", BorderStyle: "fg=red"}
+	want := PopupStyle{BorderLines: "heavy", BorderStyle: "fg=red,bold"}
 	if got := ResolvePopupStyle(""); got != want {
 		t.Fatalf("unexpected style\n got: %+v\nwant: %+v", got, want)
 	}

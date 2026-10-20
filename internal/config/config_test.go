@@ -126,3 +126,42 @@ func TestTreeStyleFlagAndEnvVar(t *testing.T) {
 		t.Fatalf("expected flag to win with TreeStyle=box, got %q", cfg.App.TreeStyle)
 	}
 }
+
+func TestApplyPluginOptionsFillsUnsetSettings(t *testing.T) {
+	cfg, err := LoadArgs(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg = cfg.ApplyPluginOptions(map[string]string{
+		"@tmux-popup-control-footer":     "on",
+		"@tmux-popup-control-tree-style": "rounded",
+		"@tmux-popup-control-no-preview": "1",
+	})
+	if !cfg.App.ShowFooter || cfg.App.TreeStyle != "rounded" || !cfg.App.NoPreview {
+		t.Fatalf("options not applied: %+v", cfg.App)
+	}
+}
+
+func TestApplyPluginOptionsKeepsFlagsAndEnv(t *testing.T) {
+	cfg, err := LoadArgs([]string{"--footer=false", "--tree-style", "box"},
+		[]string{"TMUX_POPUP_CONTROL_NO_PREVIEW=0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg = cfg.ApplyPluginOptions(map[string]string{
+		"@tmux-popup-control-footer":     "on",
+		"@tmux-popup-control-tree-style": "rounded",
+		"@tmux-popup-control-no-preview": "on",
+	})
+	if cfg.App.ShowFooter || cfg.App.TreeStyle != "box" || cfg.App.NoPreview {
+		t.Fatalf("explicit settings were overridden: %+v", cfg.App)
+	}
+}
+
+func TestApplyPluginOptionsIgnoresUnparsableBool(t *testing.T) {
+	cfg, _ := LoadArgs(nil, nil)
+	cfg = cfg.ApplyPluginOptions(map[string]string{"@tmux-popup-control-footer": "maybe"})
+	if cfg.App.ShowFooter {
+		t.Fatal("an unparsable option must leave the default")
+	}
+}
