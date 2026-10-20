@@ -51,11 +51,12 @@ func (m *Model) SetResurrectInit(start menu.ResurrectStart) {
 
 func (m *Model) handleResurrectStartMsg(msg tea.Msg) tea.Cmd {
 	start := msg.(menu.ResurrectStart)
+	backend := resurrect.BackendFor(start.Config.SocketPath)
 	var ch <-chan resurrect.ProgressEvent
 	if start.Operation == "restore" {
-		ch = resurrect.Restore(m.ctx, start.Config, start.SaveFile)
+		ch = backend.Restore(m.ctx, start.Config, start.SaveFile)
 	} else {
-		ch = resurrect.Save(m.ctx, start.Config)
+		ch = backend.Save(m.ctx, start.Config)
 	}
 	m.resurrectState = &resurrectState{
 		operation: start.Operation,

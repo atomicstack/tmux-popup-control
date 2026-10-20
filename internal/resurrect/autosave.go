@@ -94,7 +94,7 @@ func RunAutoSave(cfg Config, maxSaves int) error {
 	}
 
 	var saveErr error
-	for event := range Save(context.Background(), cfg) {
+	for event := range BackendFor(cfg.SocketPath).Save(context.Background(), cfg) {
 		if event.Done {
 			saveErr = event.Err
 			break
