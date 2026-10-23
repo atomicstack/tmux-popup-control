@@ -1,11 +1,11 @@
 # tmux-popup-control
 
-Current version: **v0.20.1** — see the [release
+Current version: **v0.21.0** — see the [release
 notes](https://github.com/atomicstack/tmux-popup-control/releases/latest)
 for the latest changes.
 
 Built and tested against tmux `next-3.9` at
-[`9c22ff6e`](https://github.com/tmux/tmux/commit/9c22ff6e3d5e9cef4134c5de9b354fb01f69321e)
+[`95c1c3d7`](https://github.com/tmux/tmux/commit/95c1c3d7c50795170fd95ec8614bf45fea09faab)
 (2026-10-09). tmux-popup-control tracks tmux HEAD; older releases of tmux
 are not supported.
 
