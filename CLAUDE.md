@@ -102,6 +102,7 @@ internal/format/table/    → columnar table formatting with alignment
 internal/plugin/          → tmux plugin management (discover, install, update, uninstall, source)
 internal/resurrect/       → session save/restore/autosave: snapshot format, storage, layout replay
 internal/extract/         → extrakto-style token extraction from captured pane text (consumer-agnostic)
+internal/contentsearch/   → case-insensitive substring search over captured pane text (consumer-agnostic)
 internal/clipboard/       → native system clipboard copy, dispatching on OS (consumer-agnostic)
 internal/tmuxopts/        → embedded tmux option/command catalog (consumer-agnostic)
 internal/cmdparse/        → tmux command synopsis → schema; input analysis + value resolution for completion
