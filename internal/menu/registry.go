@@ -10,6 +10,9 @@ type Node struct {
 	Children      map[string]*Node
 	MultiSelect   bool
 	FilterCommand bool
+	// ContentSearch marks a level whose typed text is a search query run
+	// against pane contents, not a filter over the items already listed.
+	ContentSearch bool
 }
 
 // Registry exposes lookup utilities for menu definitions.
@@ -65,6 +68,12 @@ func BuildRegistry() *Registry {
 
 	if node, ok := nodes["command"]; ok {
 		node.FilterCommand = true
+	}
+
+	for _, id := range []string{PaneFindID, WindowFindID} {
+		if node, ok := nodes[id]; ok {
+			node.ContentSearch = true
+		}
 	}
 
 	for id, node := range nodes {

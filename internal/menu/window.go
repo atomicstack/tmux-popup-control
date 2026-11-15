@@ -37,6 +37,7 @@ func loadWindowMenu(Context) ([]Item, error) {
 		"push-to-session",
 		"pull-from-session",
 		"link",
+		"find-window-by-content",
 		"switch",
 		// ^^^ do NOT reorder these! ^^^
 	}

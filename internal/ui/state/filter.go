@@ -65,6 +65,11 @@ func (l *Level) filterQuery() string {
 	if l == nil {
 		return ""
 	}
+	if l.Node != nil && l.Node.ContentSearch {
+		// The typed text is a content search query; results arrive already
+		// matched, so nothing is filtered out by label.
+		return ""
+	}
 	if l.Node != nil && l.Node.FilterCommand {
 		fields := strings.Fields(l.Filter)
 		if len(fields) == 0 {

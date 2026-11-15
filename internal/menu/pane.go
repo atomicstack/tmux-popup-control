@@ -36,6 +36,7 @@ func loadPaneMenu(Context) ([]Item, error) {
 		"join",
 		"break",
 		"capture",
+		"find-pane-by-content",
 		"switch",
 		// ^^^ do NOT reorder these! ^^^
 	}
