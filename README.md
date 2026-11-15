@@ -129,6 +129,8 @@ list plus the env vars and tmux options that override each default.
   session (showing the index it, and any shuffled neighbours, will land on),
   enter performs the move and esc cancels
 - **Link** windows into other sessions
+- **Find window by content** — the same search as *find pane by content*
+  below, listing each window that has a matching pane
 - **Layout** presets with live preview (even-horizontal, even-vertical,
   main-horizontal, main-vertical, tiled)
 
@@ -142,6 +144,11 @@ list plus the env vars and tmux options that override each default.
 - **Resize** panes (left/right/up/down)
 - **Capture** pane scrollback to file with configurable template path
   (supports tmux format variables and strftime tokens)
+- **Find pane by content** — type any text to list the panes, across every
+  session, whose contents contain it (case-insensitive, searched live as you
+  type). The preview scrolls to the match and highlights it; enter switches to
+  the pane. Only the visible screen is searched by default; `alt+a` ticks
+  **all history** to search each pane's full scrollback
 
 ### Plugin management
 - **Install** plugins declared via `@plugin` in tmux config (tpm-compatible)

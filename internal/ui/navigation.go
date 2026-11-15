@@ -119,9 +119,13 @@ func (m *Model) handleEnterKey() tea.Cmd {
 		m.startDeleteConfirm(item)
 		return nil
 	}
-	beforeCursor := current.FilterCursorPos()
-	current.SetFilter("", 0)
-	m.kickPreviewBlinkOnFilterChange(current, beforeCursor)
+	if findStateOf(current) == nil {
+		// A find level keeps its query: it is the search itself, and the
+		// results must survive a switch that fails.
+		beforeCursor := current.FilterCursorPos()
+		current.SetFilter("", 0)
+		m.kickPreviewBlinkOnFilterChange(current, beforeCursor)
+	}
 	if current.ID == "window:swap-target" && m.pendingWindowSwap != nil {
 		first := *m.pendingWindowSwap
 		m.pendingWindowSwap = nil
@@ -305,6 +309,9 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 		if cmd, handled := m.handleExtractKey(keyMsg); handled {
 			return cmd
 		}
+	}
+	if m.handleFindKey(keyMsg.String()) {
+		return nil
 	}
 	if current := m.currentLevel(); current != nil && current.ID == windowMoveLevelID {
 		if cmd, handled := m.handleWindowMoveKey(keyMsg); handled {
@@ -520,6 +527,7 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	if update.id == windowMoveLevelID {
 		m.initWindowMove(level)
 	}
+	m.initFindLevel(level)
 	if update.id == extractLevelID {
 		// Category was already reset to DefaultCategory when navigation into
 		// extract was initiated (handleEnterKey / applyRootMenuOverride),
@@ -533,7 +541,10 @@ func (m *Model) handleCategoryLoadedMsg(msg tea.Msg) tea.Cmd {
 	if update.id == "resurrect:restore-from" {
 		cmd = tea.Batch(cmd, m.startRestoreRefreshIfNeeded())
 	}
-	if len(level.Items) == 0 {
+	if findStateOf(level) != nil {
+		// A find level starts empty by design: nothing has been searched yet.
+		m.clearInfo()
+	} else if len(level.Items) == 0 {
 		m.setInfo("No entries found.")
 	} else if m.infoMsg != "" {
 		m.clearInfo()
@@ -672,6 +683,7 @@ func (m *Model) applyRootMenuOverride(requested string) {
 	if node.ID == windowMoveLevelID {
 		m.initWindowMove(root)
 	}
+	m.initFindLevel(root)
 	if node.ID == extractLevelID {
 		// Category was already reset above, before the loader ran. Only the
 		// header needs (re)rendering here.

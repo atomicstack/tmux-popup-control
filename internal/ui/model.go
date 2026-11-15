@@ -394,6 +394,8 @@ func (m *Model) handlerFor(msg tea.Msg) msgHandler {
 		return m.handlePaneCapturePreviewMsg
 	case deleteSavedReloadedMsg:
 		return m.handleDeleteSavedReloadedMsg
+	case findResultMsg:
+		return m.handleFindResultMsg
 	case extractReloadMsg:
 		return m.handleExtractReloadMsg
 	case extractDoneMsg:
@@ -405,6 +407,9 @@ func (m *Model) handlerFor(msg tea.Msg) msgHandler {
 }
 
 func (m *Model) finishUpdate(cmds []tea.Cmd) tea.Cmd {
+	if cmd := m.findSyncCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if cmd := m.syncPaneTitleCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}

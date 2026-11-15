@@ -48,6 +48,7 @@ type previewData struct {
 	cursorVisible bool
 	cursorX       int
 	cursorY       int
+	scrollKey     string // identifies what scrollOffset was last anchored to
 	levelRef      *level
 }
 
@@ -62,6 +63,11 @@ type previewLoadedMsg struct {
 	cursorVisible bool
 	cursorX       int
 	cursorY       int
+	// scrollTo / scrollKey: when scrollKey is set and differs from the key the
+	// preview is anchored to, the preview jumps to row scrollTo. A refresh
+	// with an unchanged key keeps wherever the user has scrolled to.
+	scrollTo  int
+	scrollKey string
 }
 
 var (
@@ -151,6 +157,26 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 		m.preview = make(map[string]*previewData)
 	}
 
+	var findResult menu.FindResult
+	var findQuery string
+	var findHistory bool
+	if kind == previewKindFind {
+		st := findStateOf(level)
+		if st == nil {
+			m.clearPreview(level.ID)
+			return nil
+		}
+		res, found := st.matches[item.ID]
+		if !found {
+			m.clearPreview(level.ID)
+			return nil
+		}
+		findResult, findQuery, findHistory = res, st.applied, st.appliedHistory
+		// The row label carries the matching line; the panel title only
+		// needs to say which pane or window this is.
+		item.Label = item.ID
+	}
+
 	// Plugin overview content is independent of the selected action.
 	if kind == previewKindPlugin {
 		item.ID = "__plugins__"
@@ -191,6 +217,8 @@ func (m *Model) ensurePreviewForLevel(level *level) tea.Cmd {
 		}
 	case previewKindTree:
 		return m.treePreviewCmd(levelID, target, seq, socket)
+	case previewKindFind:
+		return findPreviewCmd(levelID, target, findResult.PaneID, findQuery, findHistory, seq, socket)
 	case previewKindPane:
 		return capturePaneCmd(levelID, kind, target, m.paneCaptureTarget(target), seq, socket)
 	case previewKindSession:
@@ -510,6 +538,10 @@ const previewKindTree previewKind = 10
 const previewKindLayout previewKind = 11
 const previewKindPlugin previewKind = 12
 
+// previewKindFind shows the pane behind a find-by-content result, scrolled to
+// the match with every occurrence highlighted.
+const previewKindFind previewKind = 13
+
 func previewKindForLevel(id string) previewKind {
 	switch id {
 	case "session:switch":
@@ -524,6 +556,8 @@ func previewKindForLevel(id string) previewKind {
 		return previewKindLayout
 	case "plugins":
 		return previewKindPlugin
+	case menu.PaneFindID, menu.WindowFindID:
+		return previewKindFind
 	default:
 		return previewKindNone
 	}
@@ -581,11 +615,17 @@ func (m *Model) handlePreviewLoadedMsg(msg tea.Msg) tea.Cmd {
 		// For pane captures start at the bottom so the most recent output is visible.
 		// Anchor to the last non-empty row so sparse panes with trailing blank
 		// cursor rows keep their visible content in view.
-		if update.kind == previewKindPane {
+		switch {
+		case update.scrollKey != "":
+			if update.scrollKey != data.scrollKey {
+				data.scrollOffset = update.scrollTo
+			}
+		case update.kind == previewKindPane:
 			data.scrollOffset = lastNonEmptyPreviewOffset(data.lines)
-		} else {
+		default:
 			data.scrollOffset = 0
 		}
+		data.scrollKey = update.scrollKey
 	}
 	// Re-sync the viewport so the cursor stays visible with the updated item height budget.
 	m.syncViewport(m.currentLevel())

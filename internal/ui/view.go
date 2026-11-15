@@ -178,6 +178,9 @@ func (m *Model) renderMenuLines(current *level, width int) []styledLine {
 		if current.Filter != "" {
 			msg = fmt.Sprintf("No matches for %q", current.Filter)
 		}
+		if st := findStateOf(current); st != nil {
+			msg = findEmptyMessage(current, st)
+		}
 		lines = append(lines, styledLine{text: msg, style: styles.Info})
 	} else if isTreeLevel(current.ID) {
 		ts, _ := current.Data.(*menu.TreeState)
@@ -223,7 +226,7 @@ func (m *Model) viewVertical(header string) (string, int) {
 	// The extract level renders its category (mode) header in the bottom bar,
 	// directly above the fuzzy input (see renderBottomBarLines); every other
 	// level with a Subtitle renders it dimmed above the list.
-	if current := m.currentLevel(); current != nil && current.Subtitle != "" && current.ID != extractLevelID {
+	if current := m.currentLevel(); current != nil && current.Subtitle != "" && !subtitleInBottomBar(current) {
 		dimStyle := lipgloss.NewStyle().Faint(true)
 		lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
 	}
@@ -444,7 +447,14 @@ func (m *Model) bottomBarRows() int {
 // category (mode) header in the bottom bar, directly above the fuzzy input.
 func (m *Model) extractHeaderVisible() bool {
 	current := m.currentLevel()
-	return current != nil && current.ID == extractLevelID && current.Subtitle != ""
+	return current != nil && subtitleInBottomBar(current) && current.Subtitle != ""
+}
+
+// subtitleInBottomBar reports whether l's pre-styled Subtitle is a control row
+// that sits directly above the input (extract's mode/area selectors, the find
+// levels' "all history" tick box) rather than a dimmed line above the list.
+func subtitleInBottomBar(l *level) bool {
+	return l != nil && (l.ID == extractLevelID || isFindLevelID(l.ID))
 }
 
 // renderBottomBarLines builds the pinned bottom region. Order, top to bottom:
@@ -1103,7 +1113,7 @@ func (m *Model) maxVisibleItems() int {
 	}
 	// The extract mode header lives in the bottom bar, so it is already
 	// counted by bottomBarRows(); only non-extract subtitles add a top row.
-	if current := m.currentLevel(); current != nil && current.Subtitle != "" && current.ID != extractLevelID {
+	if current := m.currentLevel(); current != nil && current.Subtitle != "" && !subtitleInBottomBar(current) {
 		used++
 	}
 	if info := m.currentInfo(); info != "" {

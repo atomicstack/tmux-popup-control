@@ -132,6 +132,8 @@ The UI maintains a `stack []*level` where each level holds the current items, cu
 
 **Menu item styling:** all menu levels must use `buildItemLine` for consistent rendering. The selected item's highlight (background colour) must fill the full container width. Multi-select lines are rendered as `raw: true` via `buildMultiSelectLine`, which renders each segment (indicator, checkbox, body) independently with composite styles to avoid ANSI nesting issues. Checkbox characters (■/□) use `styles.CheckboxChecked`/`styles.Checkbox` foreground composited with the line's background via `Inherit`. Every y/n confirmation goes through `renderYNPrompt` in `yn_prompt.go`.
 
+**Find by content** (`pane:find-pane-by-content`, `window:find-window-by-content`; `internal/contentsearch`, `internal/menu/find.go`, `internal/ui/find.go`): these nodes are marked `ContentSearch`, so the typed text is a search query run against captured pane text (`menu.FindPanes` / `FindWindows`) instead of a fuzzy filter over listed items. Searches are single-flight and re-synced from `finishUpdate` (`findSyncCmd`); `alt+a` toggles viewport vs full-scrollback capture; viewport results re-run on pane-list updates. The tick-box row is a pre-styled `Subtitle` rendered in the bottom bar (`subtitleInBottomBar`), like extract's selectors.
+
 **Live data:** any level that shows tmux state must rebuild from backend updates rather than freezing a snapshot when opened; re-anchor the cursor by tmux id (see `window_move.go`, `restore_refresh.go`). Forms and submenus launched directly via `--root-menu` must quit on `Esc`, not pop back to the root.
 
 ### UI decomposition (`internal/ui/`)

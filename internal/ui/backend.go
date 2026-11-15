@@ -173,6 +173,7 @@ func (m *Model) applyBackendEvent(evt backend.Event) tea.Cmd {
 			m.pendingPaneSwap = nil
 		}
 		m.refreshLiveLevels(ctx, menu.LivePanes)
+		m.findInvalidate()
 		if m.paneForm != nil {
 			m.paneForm.SyncContext(ctx)
 		}
