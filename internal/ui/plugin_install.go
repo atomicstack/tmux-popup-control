@@ -462,9 +462,9 @@ func (m *Model) pluginInstallView() string {
 
 	// Reserve a row immediately above the progress bar for the y/n
 	// confirmation prompt while the uninstall flow is still asking.
-	prompt := pluginUninstallPromptRendered(s)
-	if prompt != "" && bodyRows > 0 {
-		bodyRows--
+	prompt := strings.Join(pluginUninstallPromptRendered(s, m.ynHover), "\n")
+	if prompt != "" {
+		bodyRows = max(bodyRows-ynPromptRows, 0)
 	}
 
 	if bodyRows == 0 {
@@ -525,27 +525,30 @@ func pluginUninstallPromptText(s *pluginInstallState) string {
 	return ""
 }
 
-// pluginUninstallPromptRendered returns the prompt with the surrounding
-// text painted yellow, the "y" green, and the "n" red. Returns "" when
-// pluginUninstallPromptText would.
-func pluginUninstallPromptRendered(s *pluginInstallState) string {
-	return renderYNPrompt(pluginUninstallPromptText(s))
+// pluginUninstallPromptRendered returns the rows of the y/n prompt for the
+// entry being asked about (see renderYNPrompt), or nil when
+// pluginUninstallPromptText is empty.
+func pluginUninstallPromptRendered(s *pluginInstallState, hover ynChoice) []string {
+	return renderYNPrompt(pluginUninstallPromptText(s), hover)
 }
 
 func (m *Model) pluginInstallBodyLines(s *pluginInstallState, bodyRows int) []styledLine {
 	if s.finished {
-		return pluginInstallFinishedBodyLines(s, bodyRows, m.width)
+		return pluginInstallFinishedBodyLines(s, bodyRows, m.width, m.ynHover)
 	}
 	return pluginInstallVisibleEntries(s.entries, bodyRows, m.width, s.operation)
 }
 
-func pluginInstallCompletionLines(s *pluginInstallState) []styledLine {
+// pluginReloadPromptText is the y/n prompt shown once plugins were installed.
+const pluginReloadPromptText = "Reload plugins? " + YNPromptMarker
+
+func pluginInstallCompletionLines(s *pluginInstallState, hover ynChoice) []styledLine {
 	if len(s.installed) > 0 {
-		return []styledLine{
+		lines := []styledLine{
 			{},
 			{text: s.summary, style: styles.Info},
-			{text: renderYNPrompt("Reload plugins? " + YNPromptMarker), raw: true},
 		}
+		return append(lines, ynPromptLines(pluginReloadPromptText, hover)...)
 	}
 	return []styledLine{
 		{},
@@ -554,8 +557,8 @@ func pluginInstallCompletionLines(s *pluginInstallState) []styledLine {
 	}
 }
 
-func pluginInstallFinishedBodyLines(s *pluginInstallState, bodyRows, width int) []styledLine {
-	completion := pluginInstallCompletionLines(s)
+func pluginInstallFinishedBodyLines(s *pluginInstallState, bodyRows, width int, hover ynChoice) []styledLine {
+	completion := pluginInstallCompletionLines(s, hover)
 	completionRows := len(completion)
 	if completionRows > bodyRows {
 		return limitHeight(completion, bodyRows, width)

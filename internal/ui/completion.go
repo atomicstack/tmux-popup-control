@@ -54,6 +54,10 @@ type completionState struct {
 	anchorCol int
 	argType   string
 	typeLabel string
+
+	// viewStart and viewRows describe the item rows of the last view call,
+	// so a mouse click on a row can be mapped back to its candidate.
+	viewStart, viewRows int
 }
 
 func newCompletionState(opts CompletionOptions) *completionState {
@@ -242,6 +246,7 @@ func (cs *completionState) view(maxWidth, maxHeight int) string {
 	}
 	end := min(start+maxRows, len(cs.filtered))
 	visible := cs.filtered[start:end]
+	cs.viewStart, cs.viewRows = start, len(visible)
 
 	// Measure against the entire filtered candidate set, not just the rows
 	// currently on screen. Measuring only `visible` makes the popup reflow

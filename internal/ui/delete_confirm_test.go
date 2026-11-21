@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -156,22 +157,22 @@ func TestConfirmEnterAcceptsAsYes(t *testing.T) {
 func TestConfirmPromptIncludesSaveName(t *testing.T) {
 	m, _ := makeDeleteSavedLevel(t)
 	m.handleEnterKey()
-	prompt := m.renderDeleteConfirmPrompt()
-	if !strings.Contains(prompt, "manual-foo.json") {
-		t.Fatalf("expected prompt to include save name, got %q", prompt)
+	rows := renderYNPrompt(m.deleteConfirmPromptText(), ynNone)
+	if len(rows) != ynPromptRows {
+		t.Fatalf("expected a %d-row prompt, got %d rows", ynPromptRows, len(rows))
 	}
-	if !strings.Contains(prompt, "delete save") {
-		t.Fatalf("expected prompt to start with 'delete save', got %q", prompt)
+	// The question shares the middle row with the two buttons.
+	middle := ansi.Strip(rows[1])
+	for _, want := range []string{"delete save 'manual-foo.json'?", ynYesFace, ynNoFace} {
+		if !strings.Contains(middle, want) {
+			t.Fatalf("expected prompt row to contain %q, got %q", want, middle)
+		}
 	}
-	// Routed through the shared renderYNPrompt — body text inside the
-	// "[y/n]" marker is split into separate ANSI runs (yellow [, green y,
-	// yellow /, red n, yellow ]). Assert on the rendered components rather
-	// than the literal marker.
-	if !strings.Contains(prompt, "y") || !strings.Contains(prompt, "n") {
-		t.Fatalf("expected prompt to contain y/n choice, got %q", prompt)
+	if strings.Contains(middle, YNPromptMarker) {
+		t.Fatalf("the [y/n] marker must be replaced by the buttons, got %q", middle)
 	}
-	if !strings.Contains(prompt, "\x1b[") {
-		t.Fatalf("expected prompt to contain ANSI styling, got %q", prompt)
+	if !strings.Contains(rows[1], "\x1b[") {
+		t.Fatalf("expected prompt to contain ANSI styling, got %q", rows[1])
 	}
 }
 

@@ -240,9 +240,6 @@ func (m *Model) removeFilterRune() bool {
 }
 
 func (m *Model) filterPrompt() (string, *lipgloss.Style) {
-	if m.confirmState != nil {
-		return m.renderDeleteConfirmPrompt(), nil
-	}
 	current := m.currentLevel()
 	if current == nil {
 		return ">", styles.Filter

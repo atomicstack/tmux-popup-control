@@ -111,16 +111,14 @@ func (m *Model) handleDeleteConfirmKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// renderDeleteConfirmPrompt builds the styled y/n prompt that replaces the
-// filter input while a delete confirmation is in flight. Uses the shared
-// renderYNPrompt helper so the colour scheme matches every other y/n prompt
-// in the UI.
-func (m *Model) renderDeleteConfirmPrompt() string {
+// deleteConfirmPromptText is the question shown while a delete confirmation
+// is in flight, or "" when there is none.
+func (m *Model) deleteConfirmPromptText() string {
 	if m.confirmState == nil {
 		return ""
 	}
 	name := deleteSaveDisplayName(m.confirmState.item)
-	return renderYNPrompt(fmt.Sprintf("delete save '%s'? %s", name, YNPromptMarker))
+	return fmt.Sprintf("delete save '%s'? %s", name, YNPromptMarker)
 }
 
 // handleDeleteSavedActionResult finishes the post-confirm flow: surface a

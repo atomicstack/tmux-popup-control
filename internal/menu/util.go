@@ -124,3 +124,28 @@ func splitLines(input string) []string {
 	}
 	return lines
 }
+
+// setInputCursorColumn places ti's text cursor under screen column col of the
+// row the input is rendered on, for a mouse click. The input starts at column
+// 0 with its prompt; a click on the prompt or past the end clamps.
+func setInputCursorColumn(ti *textinput.Model, col int) {
+	ti.SetCursor(max(col-lipgloss.Width(ti.Prompt), 0))
+}
+
+// SetCursorColumn moves the text cursor to the clicked screen column.
+func (f *PaneRenameForm) SetCursorColumn(col int) { setInputCursorColumn(&f.input, col) }
+
+// SetCursorColumn moves the text cursor to the clicked screen column.
+func (f *PaneCaptureForm) SetCursorColumn(col int) { setInputCursorColumn(&f.input, col) }
+
+// ToggleEscSeqs flips the "capture escape sequences" tick box, as tab does.
+func (f *PaneCaptureForm) ToggleEscSeqs() { f.escSeqs = !f.escSeqs }
+
+// SetCursorColumn moves the text cursor to the clicked screen column.
+func (f *SessionForm) SetCursorColumn(col int) { setInputCursorColumn(&f.input, col) }
+
+// SetCursorColumn moves the text cursor to the clicked screen column.
+func (f *SaveForm) SetCursorColumn(col int) { setInputCursorColumn(&f.input, col) }
+
+// SetCursorColumn moves the text cursor to the clicked screen column.
+func (f *WindowRenameForm) SetCursorColumn(col int) { setInputCursorColumn(&f.input, col) }

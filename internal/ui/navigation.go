@@ -342,22 +342,7 @@ func (m *Model) handleKeyMsg(msg tea.Msg) tea.Cmd {
 	if keyMsg.String() == "tab" {
 		if current := m.currentLevel(); current != nil {
 			if current.MultiSelect {
-				current.ToggleCurrentSelection()
-				// Sync "all" sentinel: toggling "all" on selects everything,
-				// toggling "all" off clears everything, deselecting any item
-				// while "all" is active deselects "all".
-				if current.Cursor >= 0 && current.Cursor < len(current.Items) {
-					item := current.Items[current.Cursor]
-					if item.ID == menu.AllPluginsSentinel {
-						if current.IsSelected(item.ID) {
-							current.SelectAll()
-						} else {
-							current.ClearAll()
-						}
-					} else if !current.IsSelected(item.ID) && current.IsSelected(menu.AllPluginsSentinel) {
-						current.ToggleSelection(menu.AllPluginsSentinel)
-					}
-				}
+				m.toggleCursorSelection(current)
 				return nil
 			}
 			if current.Node != nil && current.Node.FilterCommand {

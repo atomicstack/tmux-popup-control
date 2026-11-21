@@ -74,8 +74,22 @@ func (m *Model) wrapView(content string) tea.View {
 	return v
 }
 
-// View implements tea.Model.
-func (m *Model) View() (view tea.View) {
+// View implements tea.Model. It also rebuilds the hit map the mouse handlers
+// test against, and asks for mouse motion while a y/n prompt is showing so its
+// buttons can highlight under the pointer.
+func (m *Model) View() tea.View {
+	m.hit = newHitMap()
+	view := m.render()
+	if m.ynPromptActive() {
+		m.hit.yn, _ = locateYNButtons(view.Content)
+		view.MouseMode = tea.MouseModeAllMotion
+	} else {
+		m.ynHover = ynNone
+	}
+	return view
+}
+
+func (m *Model) render() (view tea.View) {
 	span := logging.StartSpan("ui", "view", logging.SpanOptions{
 		Attrs: map[string]any{
 			"mode":        m.mode.String(),
@@ -97,6 +111,7 @@ func (m *Model) View() (view tea.View) {
 	case ModePaneForm:
 		if m.paneForm != nil {
 			content, inputRow := m.viewPaneFormWithHeader(header)
+			m.hit.formInputRow = inputRow
 			v := m.wrapView(content)
 			attachFormCursor(&v, m.paneForm.Cursor(), inputRow)
 			return v
@@ -104,6 +119,9 @@ func (m *Model) View() (view tea.View) {
 	case ModePaneCaptureForm:
 		if m.paneCaptureForm != nil {
 			content, inputRow := m.viewPaneCaptureForm(header)
+			m.hit.formInputRow = inputRow
+			// The tick box sits two rows below the input (see viewPaneCaptureForm).
+			m.hit.formCheckbox = hitRect{x0: 0, y0: inputRow + 2, x1: lipgloss.Width(m.paneCaptureForm.CheckboxView()), y1: inputRow + 3}
 			v := m.wrapView(content)
 			attachFormCursor(&v, m.paneCaptureForm.Cursor(), inputRow)
 			return v
@@ -114,6 +132,7 @@ func (m *Model) View() (view tea.View) {
 	case ModeWindowForm:
 		if m.windowForm != nil {
 			content, inputRow := m.viewWindowFormWithHeader(header)
+			m.hit.formInputRow = inputRow
 			v := m.wrapView(content)
 			attachFormCursor(&v, m.windowForm.Cursor(), inputRow)
 			return v
@@ -121,6 +140,7 @@ func (m *Model) View() (view tea.View) {
 	case ModeSessionForm:
 		if m.sessionForm != nil {
 			content, inputRow := m.viewSessionFormWithHeader(header)
+			m.hit.formInputRow = inputRow
 			v := m.wrapView(content)
 			attachFormCursor(&v, m.sessionForm.Cursor(), inputRow)
 			return v
@@ -134,6 +154,7 @@ func (m *Model) View() (view tea.View) {
 	case ModeSessionSaveForm:
 		if m.saveForm != nil {
 			content, inputRow := m.viewSaveForm()
+			m.hit.formInputRow = inputRow
 			v := m.wrapView(content)
 			attachFormCursor(&v, m.saveForm.Cursor(), inputRow)
 			return v
@@ -231,7 +252,9 @@ func (m *Model) viewVertical(header string) (string, int) {
 		lines = append(lines, styledLine{text: current.Subtitle, style: &dimStyle})
 	}
 	if current := m.currentLevel(); current != nil {
+		listTop := len(lines)
 		lines = append(lines, m.renderMenuLines(current, m.width)...)
+		m.recordListHit(current, listTop, m.width, len(lines)-listTop)
 	}
 	if preview := m.activePreview(); !m.noPreview && shouldRenderPreview(preview) {
 		lines = append(lines, styledLine{})
@@ -285,6 +308,7 @@ func (m *Model) viewVertical(header string) (string, int) {
 		lines = applyWidth(lines, m.width)
 	}
 
+	m.hit.barTop = len(lines)
 	lines = append(lines, m.renderBottomBarLines()...)
 	// The fuzzy input is the last line of the bottom bar.
 	promptRow := len(lines) - 1
@@ -316,7 +340,9 @@ func (m *Model) viewSideBySide(header string) (string, int) {
 		contentLines = append(contentLines, styledLine{text: header, style: styles.Header})
 	}
 	if current := m.currentLevel(); current != nil {
+		listTop := len(contentLines)
 		contentLines = append(contentLines, m.renderMenuLines(current, menuW)...)
+		m.recordListHit(current, listTop, menuW, len(contentLines)-listTop)
 	}
 	if info := m.currentInfo(); info != "" {
 		contentLines = append(contentLines, styledLine{})
@@ -363,6 +389,8 @@ func (m *Model) viewSideBySide(header string) (string, int) {
 
 	topSection := lipgloss.JoinHorizontal(lipgloss.Top, leftStr, rightStr)
 
+	m.hit.preview = hitRect{x0: menuW, y0: 0, x1: menuW + prevW, y1: panelH}
+	m.hit.barTop = panelH
 	bottomStr := renderLines(m.renderBottomBarLines())
 
 	// topSection has panelH lines; bottom bar starts immediately after.
@@ -431,6 +459,9 @@ func (m *Model) viewCommandOutput(header string) string {
 
 func (m *Model) bottomBarRows() int {
 	rows := 2 // separator + fuzzy input, always present
+	if m.confirmState != nil {
+		rows += ynPromptRows - 1 // the y/n buttons are taller than the input
+	}
 	if m.errMsg != "" {
 		rows++
 	}
@@ -482,9 +513,15 @@ func (m *Model) renderBottomBarLines() []styledLine {
 		// The extract category (mode) labels sit immediately above the
 		// separator. extractSubtitle pre-styles each segment, so render it raw
 		// to avoid nesting ANSI escapes (see buildMultiSelectLine).
+		m.hit.subtitleRow = len(lines)
 		lines = append(lines, styledLine{text: m.currentLevel().Subtitle, raw: true})
 	}
 	lines = append(lines, m.bottomSeparatorLine())
+	if m.confirmState != nil {
+		// A y/n confirmation replaces the input with its question and buttons.
+		lines = append(lines, ynPromptLines(m.deleteConfirmPromptText(), m.ynHover)...)
+		return applyWidth(lines, m.width)
+	}
 	promptText, _ := m.filterPrompt()
 	// The prompt is pre-styled; raw keeps applyWidth's truncation ANSI-aware
 	// so escape sequences don't count towards the visible width.
@@ -829,34 +866,6 @@ func (m *Model) renderPreviewPanel(preview *previewData, totalWidth, height int)
 	return strings.Join(rows, "\n")
 }
 
-// handleMouseMsg handles mouse wheel events to scroll the preview panel.
-func (m *Model) handleMouseMsg(msg tea.Msg) tea.Cmd {
-	ev, ok := msg.(tea.MouseWheelMsg)
-	if !ok {
-		return nil
-	}
-	if !m.hasSidePreview() {
-		return nil
-	}
-	preview := m.activePreview()
-	if preview == nil || preview.loading {
-		return nil
-	}
-	innerH := m.height - 2
-	innerH = max(innerH, 1)
-	switch ev.Button {
-	case tea.MouseWheelUp:
-		preview.scrollOffset -= 3
-		preview.scrollOffset = max(preview.scrollOffset, 0)
-	case tea.MouseWheelDown:
-		maxOffset := len(preview.lines) - innerH
-		maxOffset = max(maxOffset, 0)
-		preview.scrollOffset += 3
-		preview.scrollOffset = min(preview.scrollOffset, maxOffset)
-	}
-	return nil
-}
-
 func (m *Model) menuHeader() string {
 	segments := m.headerSegments()
 	if len(segments) == 0 {
@@ -1055,6 +1064,7 @@ func (m *Model) overlayDropdownWidget(rendered string, cs *completionState, anch
 		}
 		dropLines = strings.Split(dropdown, "\n")
 		insertStart := len(lines)
+		m.recordDropdownHit(cs, anchorCol, insertStart, dropLines)
 		for len(lines) < insertStart+len(dropLines) {
 			lines = append(lines, "")
 		}
@@ -1079,6 +1089,7 @@ func (m *Model) overlayDropdownWidget(rendered string, cs *completionState, anch
 	insertEnd := barStart
 	insertStart := insertEnd - len(dropLines)
 	insertStart = max(insertStart, 0)
+	m.recordDropdownHit(cs, anchorCol, insertStart, dropLines)
 	for idx, line := range dropLines {
 		lineIdx := insertStart + idx
 		if lineIdx < 0 || lineIdx >= len(lines) {
@@ -1088,6 +1099,17 @@ func (m *Model) overlayDropdownWidget(rendered string, cs *completionState, anch
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// recordDropdownHit notes where a dropdown's item rows landed: they sit
+// inside its border, below the top edge, as laid out by completionState.view.
+func (m *Model) recordDropdownHit(cs *completionState, col, top int, dropLines []string) {
+	if len(dropLines) == 0 || cs.viewRows <= 0 {
+		return
+	}
+	m.hit.dropdownState = cs
+	m.hit.dropdownFirst = cs.viewStart
+	m.hit.dropdown = hitRect{x0: col + 1, y0: top + 1, x1: col + lipgloss.Width(dropLines[0]) - 1, y1: top + 1 + cs.viewRows}
 }
 
 func overlayAt(baseLine, overlayStr string, col, maxWidth int) string {

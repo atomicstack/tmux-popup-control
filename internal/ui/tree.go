@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2/tree"
@@ -466,8 +467,17 @@ func (m *Model) renderTreeView(opts treeRenderOptions) []styledLine {
 		rowWidth = opts.Width - 1
 	}
 	result := make([]styledLine, 0, len(visibleLines))
+	m.hit.treeLabelX = make(map[int]int, len(visibleLines))
 	for i, line := range visibleLines {
 		absoluteIdx := start + i
+		if absoluteIdx < len(opts.Items) && menu.TreeIsExpandable(opts.Items[absoluteIdx].ID) {
+			// Everything before the name is connectors and the expand arrow;
+			// a click there toggles the node (see clickListRow).
+			lead := strings.IndexFunc(line, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
+			if lead >= 0 {
+				m.hit.treeLabelX[absoluteIdx] = len([]rune(indicator+" ")) + len([]rune(line[:lead]))
+			}
+		}
 		fullText := indicator + " " + line
 		if rowWidth > 0 {
 			if pad := rowWidth - len([]rune(fullText)); pad > 0 {

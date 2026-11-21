@@ -59,10 +59,10 @@ func TestPluginInstallViewLeavesSummaryAboveBottomBar(t *testing.T) {
 		t.Fatalf("expected bottom row to remain the progress bar after completion, got last row %q in:\n%s", last, view)
 	}
 	plain := stripANSI(view)
-	if !strings.Contains(plain, "Reload plugins? [y/n]") {
+	if !strings.Contains(plain, reloadPromptRow) {
 		t.Fatalf("expected reload prompt in finished view, got:\n%s", view)
 	}
-	if idx := strings.LastIndex(plain, "Reload plugins? [y/n]"); idx > strings.LastIndex(plain, "█") {
+	if idx := strings.LastIndex(plain, reloadPromptRow); idx > strings.LastIndex(plain, "█") {
 		t.Fatalf("expected reload prompt to stay above the bar, got:\n%s", view)
 	}
 }
@@ -205,8 +205,10 @@ func TestPluginInstallViewUninstallAskingPhaseRendersInline(t *testing.T) {
 		t.Fatalf("expected at least 2 rendered rows, got:\n%s", view)
 	}
 	bottomRow := stripANSI(lines[len(lines)-1])
-	promptRow := stripANSI(lines[len(lines)-2])
-	if !strings.Contains(promptRow, "remove gamma (/tmp/plugins/gamma)? [y/n]") {
+	// The prompt is three rows tall (bordered buttons); its question is on
+	// the middle one, two rows above the progress bar.
+	promptRow := stripANSI(lines[len(lines)-3])
+	if !strings.Contains(promptRow, "remove gamma (/tmp/plugins/gamma)?  "+ynYesFace+" "+ynNoFace) {
 		t.Fatalf("expected prompt above progress bar to ask about gamma, got %q in:\n%s", promptRow, view)
 	}
 	// Crude sanity check that the bottom row is the progress bar (it
@@ -285,7 +287,7 @@ func TestPluginInstallViewUninstallDoneShowsReloadPrompt(t *testing.T) {
 	if !strings.Contains(view, "Uninstalled 1 plugin(s)") {
 		t.Fatalf("expected uninstall summary in view, got:\n%s", view)
 	}
-	if !strings.Contains(stripANSI(view), "Reload plugins? [y/n]") {
+	if !strings.Contains(stripANSI(view), reloadPromptRow) {
 		t.Fatalf("expected reload prompt after uninstall, got:\n%s", view)
 	}
 }
@@ -394,7 +396,7 @@ func TestPluginInstallFinishedViewKeepsSummaryVisibleWithLongList(t *testing.T) 
 	if !strings.Contains(view, "Installed 1 plugin(s)") {
 		t.Fatalf("expected finished summary to remain visible, got:\n%s", view)
 	}
-	if !strings.Contains(stripANSI(view), "Reload plugins? [y/n]") {
+	if !strings.Contains(stripANSI(view), reloadPromptRow) {
 		t.Fatalf("expected reload prompt to remain visible, got:\n%s", view)
 	}
 }
@@ -629,3 +631,7 @@ func stripANSI(s string) string {
 	}
 	return out.String()
 }
+
+// reloadPromptRow is the middle row of the rendered "Reload plugins?" y/n
+// prompt: the question beside the yes and no buttons.
+var reloadPromptRow = "Reload plugins?  " + ynYesFace + " " + ynNoFace

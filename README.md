@@ -211,6 +211,7 @@ list plus the env vars and tmux options that override each default.
 - Breadcrumb navigation with push/pop menu stack; the breadcrumb is shown in the
   popup pane's title (tmux draws it in the pane border) rather than a header row
 - Side-by-side preview panel with ANSI rendering and mouse-wheel scrolling
+  (wheel over the panel scrolls it; wheel over the list moves the cursor)
 - Background polling keeps menu data in sync with tmux state
 - Multi-select with Tab for bulk operations
 - Command prompt help line with tmux command summaries under the input field
@@ -222,7 +223,13 @@ list plus the env vars and tmux options that override each default.
 - Thin vertical-line scrollbar column on every long list (main menu,
   completion popup, session tree), rendered outside row highlighting so
   selection styling never bleeds into the scrollbar glyph
-- Alt-screen with mouse cell-motion support
+- Mouse support: click a row to move the cursor to it, double click to
+  activate it (the same as `Enter`), and scroll the wheel over the list or
+  the preview panel. Checkboxes in multi-select lists, tree expand/collapse
+  arrows, the "all history" tick box, completion candidates and form fields
+  are clickable too. Needs `set -g mouse on` in tmux
+- y/n confirmations show bordered **yes** / **no** buttons that highlight
+  under the pointer and can be clicked; the `y` and `n` keys still answer them
 - Hybrid progress bar with gradient blocks and background fill for
   save/restore operations, smoothed at ~60 fps via a lerped display value
   so bursts of restore events do not look jerky

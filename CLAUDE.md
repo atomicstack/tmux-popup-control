@@ -131,9 +131,11 @@ The UI maintains a `stack []*level` where each level holds the current items, cu
 
 **Untargeted commands resolve to the popup.** Because the popup is a modal floating pane, a tmux command without `-t` acts on the popup itself, not the pane the user launched from — even when `$TMUX_PANE` names another pane. Always target the host pane explicitly (see how `customize-mode` does it). Never silently inject `-t` into a command the user typed in the command prompt; ask first.
 
-**Menu item styling:** all menu levels must use `buildItemLine` for consistent rendering. The selected item's highlight (background colour) must fill the full container width. Multi-select lines are rendered as `raw: true` via `buildMultiSelectLine`, which renders each segment (indicator, checkbox, body) independently with composite styles to avoid ANSI nesting issues. Checkbox characters (■/□) use `styles.CheckboxChecked`/`styles.Checkbox` foreground composited with the line's background via `Inherit`. Every y/n confirmation goes through `renderYNPrompt` in `yn_prompt.go`.
+**Menu item styling:** all menu levels must use `buildItemLine` for consistent rendering. The selected item's highlight (background colour) must fill the full container width. Multi-select lines are rendered as `raw: true` via `buildMultiSelectLine`, which renders each segment (indicator, checkbox, body) independently with composite styles to avoid ANSI nesting issues. Checkbox characters (■/□) use `styles.CheckboxChecked`/`styles.Checkbox` foreground composited with the line's background via `Inherit`. Every y/n confirmation goes through `renderYNPrompt` in `yn_prompt.go`, which draws the question beside three-row bordered yes / no buttons (so callers must reserve `ynPromptRows` rows).
 
 **Find by content** (`pane:find-pane-by-content`, `window:find-window-by-content`; `internal/contentsearch`, `internal/menu/find.go`, `internal/ui/find.go`): these nodes are marked `ContentSearch`, so the typed text is a search query run against captured pane text (`menu.FindPanes` / `FindWindows`) instead of a fuzzy filter over listed items. Searches are single-flight and re-synced from `finishUpdate` (`findSyncCmd`); `alt+a` toggles viewport vs full-scrollback capture; viewport results re-run on pane-list updates. The tick-box row is a pre-styled `Subtitle` rendered in the bottom bar (`subtitleInBottomBar`), like extract's selectors.
+
+**Mouse** (`mouse.go`): `View()` rebuilds `m.hit` (a `hitMap`) on every render, recording where the list rows, tree arrows, dropdown rows, find tick box, form input and preview panel landed, so handlers test clicks against what is on screen instead of re-deriving the layout; anything new that should be clickable records its cells there from its renderer. A click moves the cursor, a second click on the same row within `doubleClickWindow` is `handleEnterKey` (on the command level it fills the prompt, as tab does). While a y/n prompt is showing, the view asks for `MouseModeAllMotion` (for button hover) and clicks outside the buttons are ignored; otherwise it stays on `MouseModeCellMotion`. Tests send SGR mouse reports with `SendText` (see `mouse_integration_test.go`).
 
 **Live data:** any level that shows tmux state must rebuild from backend updates rather than freezing a snapshot when opened; re-anchor the cursor by tmux id (see `window_move.go`, `restore_refresh.go`). Forms and submenus launched directly via `--root-menu` must quit on `Esc`, not pop back to the root.
 
@@ -144,7 +146,8 @@ The UI maintains a `stack []*level` where each level holds the current items, cu
 | `model.go` | `Model` struct, `Init`/`Update`, handler dispatch via `reflect.Type` map, `Mode` enum |
 | `navigation.go` | cursor movement, enter/escape handling, level stack management |
 | `input.go` | text filter input, backspace, filter cursor |
-| `view.go` | `View()` rendering, side-by-side preview layout, viewport logic, mouse handling |
+| `view.go` | `View()` rendering, side-by-side preview layout, viewport logic |
+| `mouse.go` | mouse input: the `hitMap` rebuilt by every `View()`, click / double-click / wheel / hover handling |
 | `commands.go` | backend event handling, menu loading commands |
 | `backend.go` | `waitForBackendEvent`, backend update dispatch; simple live levels rebuild via the `menu.LiveLevels` table (`internal/menu/live.go`) |
 | `prompt.go` | filter / command prompt rendering |
@@ -156,7 +159,7 @@ The UI maintains a `stack []*level` where each level holds the current items, cu
 | `plugin_install.go` | per-plugin progress display for install/update operations |
 | `resurrect.go`, `resurrect_view.go`, `restore_refresh.go` | `ModeResurrect` save/restore progress UI and snapshot picker refresh |
 | `extract.go`, `extract_mode.go`, `extract_selector.go` | extract level: token categories, grab areas, Ctrl-F/Ctrl-G selector popups with auto-dismiss |
-| `delete_confirm.go`, `yn_prompt.go` | multi-select delete confirmation; the single shared y/n prompt renderer |
+| `delete_confirm.go`, `yn_prompt.go` | multi-select delete confirmation; the single shared y/n prompt renderer and its button hit-testing (`locateYNButtons`) |
 | `pane_title.go`, `scrollbar.go`, `gradient.go` | small rendering helpers |
 | `harness.go` | `Harness` for driving the model in tests without a program loop |
 

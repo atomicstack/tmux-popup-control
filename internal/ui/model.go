@@ -159,6 +159,12 @@ type Model struct {
 	deferredAction     *menu.Node
 	deferredRename     *menu.Node
 
+	// hit maps the last rendered frame for the mouse; lastClick and ynHover
+	// are the double-click and button-hover state (see mouse.go).
+	hit       hitMap
+	lastClick clickRecord
+	ynHover   ynChoice
+
 	confirmState              *deleteConfirmState
 	pendingDeleteFilter       string
 	pendingDeleteFilterCursor int
@@ -362,7 +368,7 @@ func (m *Model) handlerFor(msg tea.Msg) msgHandler {
 		return m.handlePreviewLoadedMsg
 	case layoutAppliedMsg:
 		return m.handleLayoutAppliedMsg
-	case tea.MouseWheelMsg:
+	case tea.MouseWheelMsg, tea.MouseClickMsg, tea.MouseMotionMsg:
 		return m.handleMouseMsg
 	case menu.PluginConfirmPrompt:
 		return m.handlePluginConfirmPromptMsg
