@@ -335,15 +335,15 @@ make release VERSION=0.7.0 # release a specific version tag
 | `--trace` | `TMUX_POPUP_CONTROL_TRACE` | | enable verbose JSON trace logging |
 | `--debug-to-sqlite` | | | write structured debug runs, events, and spans to `<binary>.debug.sqlite3` next to the executable; debug-only, compiled in only with `make build TAGS=sqlitedebug` (release binaries exit with an error if it is set) |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_ICON` | `@tmux-popup-control-autosave-icon` | icon `@tmux-popup-control-autosave-saving` holds while a save is in progress (default `💾`) |
-| | | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes, read live by tmux; `0` or unset disables autosave |
+| | `TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES` | `@tmux-popup-control-autosave-interval-minutes` | automatic save interval in minutes, read live by tmux; `0` or unset disables autosave |
 | | `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` | `@tmux-popup-control-autosave-max` | maximum number of retained autosaves; manual saves are never pruned |
 | | `TMUX_POPUP_CONTROL_CLIENT` | | explicit client ID override |
 | | `TMUX_POPUP_CONTROL_COLOR_PROFILE` | | force colour profile (`ansi256`, etc.) |
 | | `TMUX_POPUP_CONTROL_PANE_FILTER` | `@tmux-popup-control-pane-filter` | tmux filter expression for pane list |
 | | `TMUX_POPUP_CONTROL_PANE_FORMAT` | `@tmux-popup-control-pane-format` | custom tmux format string for pane labels |
-| | | `@tmux-popup-control-popup-border-lines` | border lines for the popup pane (`new-pane -B`, see `pane-border-lines`); unset uses tmux's default |
-| | | `@tmux-popup-control-popup-border-style` | border style for the popup pane (`new-pane -S`/`-R`); unset uses `pane-border-style`/`pane-active-border-style` |
-| | | `@tmux-popup-control-popup-style` | content style for the popup pane (`new-pane -s`); unset uses `window-style` |
+| | `TMUX_POPUP_CONTROL_POPUP_BORDER_LINES` | `@tmux-popup-control-popup-border-lines` | border lines for the popup pane (`new-pane -B`, see `pane-border-lines`); unset uses tmux's default |
+| | `TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE` | `@tmux-popup-control-popup-border-style` | border style for the popup pane (`new-pane -S`/`-R`); unset uses `pane-border-style`/`pane-active-border-style` |
+| | `TMUX_POPUP_CONTROL_POPUP_STYLE` | `@tmux-popup-control-popup-style` | content style for the popup pane (`new-pane -s`); unset uses `window-style` |
 | | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` | `@tmux-popup-control-restore-pane-contents` | enable pane content capture during save |
 | | `TMUX_POPUP_CONTROL_RESURRECT_FROM` | | snapshot name to restore from in CLI subcommand |
 | | `TMUX_POPUP_CONTROL_RESURRECT_NAME` | | snapshot name for save/restore CLI subcommands |
@@ -354,6 +354,18 @@ make release VERSION=0.7.0 # release a specific version tag
 | | `TMUX_POPUP_CONTROL_TREE_STYLE` | `@tmux-popup-control-tree-style` | default style for trees |
 | | `TMUX_POPUP_CONTROL_WINDOW_FILTER` | `@tmux-popup-control-window-filter` | tmux filter expression for window list |
 | | `TMUX_POPUP_CONTROL_WINDOW_FORMAT` | `@tmux-popup-control-window-format` | custom tmux format string for window labels |
+
+The autosave interval and the three popup styling settings are consumed by
+tmux itself, which only reads options. Their env vars are therefore applied by
+`main.tmux`: when one is set in the tmux server's environment, `main.tmux`
+copies it into the option each time it is sourced, overriding the value from
+`tmux.conf`. On a running server, change the option directly, or use
+`tmux set-environment -g` and re-source `main.tmux`.
+
+```sh
+# a throwaway server with autosave off
+TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES=0 tmux -L test
+```
 
 ### Keybindings
 

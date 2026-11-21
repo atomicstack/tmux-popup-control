@@ -221,7 +221,7 @@ CLI flags and env vars are both supported (flag wins). Key env vars:
 | `TMUX_POPUP_CONTROL_SESSION_STORAGE_DIR` | Resurrect snapshot directory |
 | `TMUX_POPUP_CONTROL_RESURRECT_NAME` / `RESURRECT_FROM` | Snapshot name for save / restore subcommands |
 | `TMUX_POPUP_CONTROL_RESTORE_PANE_CONTENTS` | Save and replay pane contents |
-| `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` / `AUTOSAVE_ICON` | Autosave retention and indicator icon (also `@tmux-popup-control-autosave-*`); the interval is the `@tmux-popup-control-autosave-interval-minutes` option only, since tmux's monitor reads it |
+| `TMUX_POPUP_CONTROL_AUTOSAVE_MAX` / `AUTOSAVE_ICON` | Autosave retention and indicator icon (also `@tmux-popup-control-autosave-*`); tmux's monitor reads the interval from the `@tmux-popup-control-autosave-interval-minutes` option, so `TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES` and the `TMUX_POPUP_CONTROL_POPUP_*` styling env vars are copied into their options by `main.tmux` (`env_option`) when it is sourced |
 | `TMUX_POPUP_CONTROL_SESSION_FORMAT` / `WINDOW_FORMAT` / `WINDOW_FILTER` | Custom tmux formats for session/window labels |
 | `TMUX_POPUP_CONTROL_SWITCH_CURRENT` | Include current session/window/pane in switch menus |
 

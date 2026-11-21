@@ -28,6 +28,18 @@ key() {
   echo "${value:-$default}"
 }
 
+# env_option prints a set-option line copying an env var into the tmux option
+# of the same setting, when the env var is set. These settings are consumed by
+# tmux itself (the autosave monitor, the stored launcher), which can only read
+# options, so the env var is applied here, each time this file is sourced, and
+# wins over a value from tmux.conf.
+env_option() {
+  local env_name="$1" option="$2"
+  local value="${!env_name}"
+  [[ -z "$value" ]] && return 0
+  printf "set-option -gq @tmux-popup-control-%s '%s'\n" "$option" "${value//\'/\'\\\'\'}"
+}
+
 LAUNCH_KEY="$(key TMUX_POPUP_CONTROL_LAUNCH_KEY launch-key Space)"
 KEY_COMMAND_MENU="$(key TMUX_POPUP_CONTROL_KEY_COMMAND_MENU key-command-menu :)"
 KEY_SESSION_TREE="$(key TMUX_POPUP_CONTROL_KEY_SESSION_TREE key-session-tree s)"
@@ -81,6 +93,10 @@ bind() {
 {
   printf 'set-option -gq @tmux-popup-control-binary-path "%s"\n' "$BINARY_PATH"
   printf 'set-option -gq @tmux-popup-control-launch %s\n' "'$LAUNCH'"
+  env_option TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES autosave-interval-minutes
+  env_option TMUX_POPUP_CONTROL_POPUP_BORDER_LINES popup-border-lines
+  env_option TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE popup-border-style
+  env_option TMUX_POPUP_CONTROL_POPUP_STYLE popup-style
   bind "$LAUNCH_KEY" "Launches $BINARY_NAME" ""
   bind "$KEY_COMMAND_MENU" "Launches $BINARY_NAME's command menu" "--root-menu command"
   bind "$KEY_SESSION_TREE" "Launches $BINARY_NAME's session tree" "--root-menu session:tree"

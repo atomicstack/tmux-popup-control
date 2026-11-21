@@ -140,3 +140,46 @@ func TestAutosaveMonitorHookIntegration(t *testing.T) {
 		t.Fatalf("status indicator left set: %q", got)
 	}
 }
+
+// TestMainTmuxEnvVarsOverrideOptionsIntegration checks that the settings tmux
+// itself consumes (the autosave interval read by the monitor hook, the popup
+// styling read by the launcher) can be driven by env vars: main.tmux copies a
+// set env var into its option, overriding whatever tmux.conf put there, and
+// leaves options alone when the env var is unset.
+func TestMainTmuxEnvVarsOverrideOptionsIntegration(t *testing.T) {
+	socket, cleanup, logDir := StartIsolatedTmuxServer(t)
+	defer cleanup()
+	t.Cleanup(func() { AssertNoServerCrash(t, logDir) })
+
+	run := func(args ...string) {
+		t.Helper()
+		if out, err := TmuxCommand(socket, args...).CombinedOutput(); err != nil {
+			t.Fatalf("tmux %v: %v\n%s", args, err, out)
+		}
+	}
+	// what tmux.conf would have set
+	run("set-option", "-g", "@tmux-popup-control-autosave-interval-minutes", "5")
+	run("set-option", "-g", "@tmux-popup-control-popup-style", "bg=blue")
+	run("set-option", "-g", "@tmux-popup-control-autosave-max", "7")
+
+	// a value that needs quoting on its way through the sourced file
+	const borderStyle = `fg=#ff0000,bg=default it's "$x"`
+	run("set-environment", "-g", "TMUX_POPUP_CONTROL_AUTOSAVE_INTERVAL_MINUTES", "0")
+	run("set-environment", "-g", "TMUX_POPUP_CONTROL_POPUP_STYLE", "bg=colour235")
+	run("set-environment", "-g", "TMUX_POPUP_CONTROL_POPUP_BORDER_STYLE", borderStyle)
+	run("set-environment", "-g", "TMUX_POPUP_CONTROL_POPUP_BORDER_LINES", "double")
+
+	installPlugin(t, socket)
+
+	for option, want := range map[string]string{
+		"@tmux-popup-control-autosave-interval-minutes": "0",
+		"@tmux-popup-control-popup-style":               "bg=colour235",
+		"@tmux-popup-control-popup-border-style":        borderStyle,
+		"@tmux-popup-control-popup-border-lines":        "double",
+		"@tmux-popup-control-autosave-max":              "7", // no env var set: untouched
+	} {
+		if got := showGlobal(t, socket, option); got != want {
+			t.Errorf("%s = %q, want %q", option, got, want)
+		}
+	}
+}
